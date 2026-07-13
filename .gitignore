@@ -25,3 +25,6 @@ Thumbs.db
 _handoff/_skeleton.html
 _handoff/**/tg.html
 _handoff/**/*.tsv
+
+# derived port intermediates
+_port/
