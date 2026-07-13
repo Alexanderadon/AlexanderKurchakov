@@ -1,7 +1,22 @@
-import { useEffect } from "react";
+// Композиция страницы: провайдеры UI-префов/маскота/фильтра + секции.
+// Разметка — настоящий JSX (без dangerouslySetInnerHTML), интерактивность — типизированные хуки.
+import { useRef } from "react";
 import type { Route } from "./+types/home";
-import { SITE_MARKUP } from "../site-markup";
-import { initSite } from "../site-script";
+import { PrefsProvider } from "~/lib/prefs";
+import { MascotProvider } from "~/lib/mascot";
+import { WorksProvider } from "~/lib/works-context";
+import { useReveal } from "~/hooks/useReveal";
+import { useCustomCursor } from "~/hooks/useCustomCursor";
+import { useMagneticLinks } from "~/hooks/useMagneticLinks";
+import { Ambient } from "~/components/Ambient";
+import { Header } from "~/components/Header";
+import { Hero } from "~/components/Hero";
+import { Marquee } from "~/components/Marquee";
+import { Works } from "~/components/Works";
+import { About } from "~/components/About";
+import { SiteFooter } from "~/components/SiteFooter";
+import { Mascot } from "~/components/Mascot";
+import { ExperimentPanel } from "~/components/ExperimentPanel";
 
 export function meta(_: Route.MetaArgs) {
   return [
@@ -21,7 +36,37 @@ export function meta(_: Route.MetaArgs) {
   ];
 }
 
+function Page() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useReveal(rootRef);
+  useCustomCursor(rootRef);
+  useMagneticLinks(rootRef);
+
+  return (
+    <div ref={rootRef}>
+      <Ambient />
+      <Header />
+      <main id="top">
+        <Hero />
+        <Marquee />
+        <Works />
+        <About />
+      </main>
+      <SiteFooter />
+      <Mascot />
+      <ExperimentPanel />
+    </div>
+  );
+}
+
 export default function Home() {
-  useEffect(() => initSite(), []);
-  return <div dangerouslySetInnerHTML={{ __html: SITE_MARKUP }} />;
+  return (
+    <PrefsProvider>
+      <MascotProvider>
+        <WorksProvider>
+          <Page />
+        </WorksProvider>
+      </MascotProvider>
+    </PrefsProvider>
+  );
 }
