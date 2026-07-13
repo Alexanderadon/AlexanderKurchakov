@@ -9,7 +9,8 @@
 - Запуск: `npm install && npm run dev` → http://localhost:5173. Сборка: `npm run build` (→ статический `build/client/index.html`).
 - Дизайн 1:1 из макета: `app/app.css` (токены/палитры), `app/site-markup.ts` (разметка), `app/site-script.ts` (интерактивность). Медиа/шрифты — файлами в `public/`.
 - Проверено: typecheck + build проходят; ассеты грузятся; вёрстка без переполнений; весь контент в статическом HTML. Скриншот в Claude-preview невозможен (рендерер не проигрывает анимации/IO — не баг, проверка через DOM/computed-style).
-- **Осталось**: реальное фото (`public/photo/avatar.jpg` — сейчас стилизованный аватар); лого-кейсы (карточка `/04` в site-markup.ts); i18n RU/KZ/EN; деплой Vercel + домен.
+- **🌐 ЗАДЕПЛОЕНО**: живой прод **https://portfolio-nu-ochre-2f9g25e8gc.vercel.app** (Vercel-аккаунт alexanderadon, проект `portfolio`, scope `fistin103-3986s-projects`). Редеплой: `npx vercel@latest deploy --prod --yes` из E:\portfolio (нужен CLI ≥47; локальный 34 устарел — потому `@latest`). Статика (ssr:false+prerender), домен .vercel.app.
+- **Осталось**: реальное фото (`public/photo/avatar.jpg` — сейчас стилизованный аватар; вставленное в чат фото недоступно как файл — нужен сам файл от Александра); лого-кейсы (карточка `/04` в site-markup.ts); i18n RU/KZ/EN; кастомный домен (по желанию).
 
 Ниже — исходный контекст передачи (сохранён как есть).
 
