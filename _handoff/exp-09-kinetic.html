@@ -1,0 +1,608 @@
+<title>Эксперимент 9 «Кинетик»</title>
+<style>
+:where(*, *::before, *::after){box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#131210; --ink2:#1B1916; --paper:#EFE9DD; --mut:#9A9184; --acc:#E8472B;
+  --line:rgba(239,233,221,.14);
+  --ease:cubic-bezier(.22,1,.36,1);
+  --sans:system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+  --serif:Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
+}
+html{scroll-behavior:smooth}
+body{background:var(--ink);color:var(--paper);font-family:var(--sans);line-height:1.45;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+:where(a){color:inherit;text-decoration:none}
+:where(button){font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:where(a,button,[tabindex]):focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+::selection{background:var(--acc);color:var(--ink)}
+
+/* ---------- фактура: грейн + глоу ---------- */
+.grain{position:fixed;inset:-40px;z-index:900;pointer-events:none;opacity:.055;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23n)'/%3E%3C/svg%3E")}
+.glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:0}
+.glow-a{width:46vw;height:46vw;right:-14vw;top:-10vw;background:radial-gradient(circle,rgba(232,71,43,.20),transparent 65%)}
+.glow-b{width:38vw;height:38vw;left:-16vw;bottom:-14vw;background:radial-gradient(circle,rgba(232,71,43,.10),transparent 65%)}
+
+/* ---------- кастомный курсор ---------- */
+.cur{position:fixed;left:0;top:0;width:44px;height:44px;z-index:1000;pointer-events:none;opacity:0;transform:translate(-50%,-50%);transition:opacity .3s}
+.cur.on{opacity:1}
+.cur i{display:block;width:100%;height:100%;border-radius:50%;border:1.5px solid var(--acc);background:var(--acc);transform:scale(.227);transition:transform .25s var(--ease),background-color .25s var(--ease)}
+.cur.big i{transform:scale(1);background-color:transparent}
+@media (hover:none), (prefers-reduced-motion:reduce){.cur{display:none}}
+
+/* ---------- каркас ---------- */
+.wrap{width:min(1560px,100% - clamp(32px,6vw,128px));margin-inline:auto;position:relative;z-index:1}
+
+/* ---------- шапка ---------- */
+.hdr{position:sticky;top:0;z-index:800;background:rgba(19,18,16,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.hdr-in{display:flex;align-items:center;gap:clamp(14px,2.5vw,36px);padding:14px 0}
+.seal{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:2px solid var(--acc);border-radius:9px;
+  color:var(--acc);font-family:var(--serif);font-weight:700;font-size:15px;letter-spacing:.04em;transform:rotate(-6deg);transition:transform .4s var(--ease)}
+.seal:hover{transform:rotate(0deg) scale(1.06)}
+.brand{display:flex;align-items:center;gap:12px;font-weight:650;letter-spacing:.01em}
+.nav{display:flex;gap:clamp(12px,2vw,28px);margin-left:auto;font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;text-transform:uppercase}
+.nav a{color:var(--mut);padding:6px 2px;position:relative;transition:color .3s}
+.nav a::after{content:"";position:absolute;left:0;bottom:0;height:1.5px;width:100%;background:var(--acc);transform:scaleX(0);transform-origin:left;transition:transform .35s var(--ease)}
+.nav a:hover{color:var(--paper)}
+.nav a:hover::after{transform:scaleX(1)}
+.langs{display:flex;gap:4px;font-family:var(--mono);font-size:12px}
+.langs button{color:var(--mut);padding:5px 7px;border-radius:6px;transition:color .3s}
+.langs button:hover{color:var(--paper)}
+.langs .act{color:var(--ink);background:var(--paper)}
+@media (max-width:760px){.nav{display:none}}
+
+/* ---------- хиро ---------- */
+.hero{padding-top:clamp(56px,12vh,140px);position:relative}
+.hero-meta{display:flex;flex-wrap:wrap;gap:10px 28px;align-items:baseline;font-family:var(--mono);font-size:13px;color:var(--mut);letter-spacing:.05em}
+.hero-meta .dot{color:var(--acc)}
+.hero-contacts{display:flex;gap:22px;margin-left:auto}
+.hero-contacts a{color:var(--mut);border-bottom:1px solid transparent;transition:color .3s,border-color .3s;padding-bottom:2px}
+.hero-contacts a:hover{color:var(--paper);border-color:var(--acc)}
+.name-wrap{position:relative;margin-top:clamp(28px,6vh,72px)}
+.name{display:flex;justify-content:space-between;font-size:clamp(48px,10vw,150px);font-weight:800;line-height:.94;letter-spacing:-.015em;text-transform:uppercase;user-select:none}
+.name span{color:transparent;-webkit-text-stroke:1.6px var(--paper);transition:color .5s var(--ease),-webkit-text-stroke-color .5s var(--ease)}
+.name span:hover{color:var(--paper);-webkit-text-stroke-color:var(--paper)}
+@supports not (-webkit-text-stroke:1px #000){.name span{color:var(--paper)}}
+.role{margin-top:clamp(16px,3vh,30px);font-size:clamp(24px,3.4vw,46px);font-weight:650;letter-spacing:-.01em;max-width:14em}
+.role em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--acc);letter-spacing:0}
+.role .amp{font-family:var(--serif);font-style:italic;color:var(--mut);font-weight:400}
+.hero-char{position:absolute;right:1vw;bottom:18%;width:clamp(140px,15vw,260px);pointer-events:none;z-index:-1}
+.hero-char::before{content:"";position:absolute;inset:-22%;border-radius:50%;background:radial-gradient(circle at 50% 62%,rgba(232,71,43,.32),rgba(232,71,43,.08) 48%,transparent 70%);filter:blur(26px);z-index:-1}
+.hero-char svg{display:block;width:100%;height:auto}
+@media (max-width:760px){.hero-char{width:112px;right:0}.name-wrap{margin-top:112px}}
+
+/* ---------- маркиза ---------- */
+.mq{overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:clamp(48px,9vh,110px);position:relative;z-index:1;background:var(--ink)}
+.mq-track{display:flex;width:max-content;will-change:transform;animation:mq 34s linear infinite}
+.mq span{white-space:nowrap;padding:15px 0;font-family:var(--mono);font-size:13.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
+.mq b{color:var(--acc);font-weight:400;padding:0 .9em}
+@keyframes mq{to{transform:translateX(-50%)}}
+
+/* ---------- секции ---------- */
+.sec{padding-top:clamp(70px,13vh,150px)}
+.sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:clamp(26px,4vh,48px)}
+.sec-idx{font-family:var(--mono);font-size:13px;color:var(--acc);letter-spacing:.1em}
+.sec-ttl{font-size:clamp(30px,4.4vw,58px);font-weight:800;text-transform:uppercase;letter-spacing:-.01em}
+.sec-note{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--mut);letter-spacing:.08em}
+@media (max-width:760px){.sec-note{display:none}}
+
+/* ---------- фильтры ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:clamp(20px,3vh,36px)}
+.chip{font-family:var(--mono);font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);
+  border:1px solid var(--line);border-radius:999px;padding:9px 18px;transition:color .3s,border-color .3s,background .3s,transform .3s var(--ease)}
+.chip:hover{color:var(--paper);border-color:var(--mut);transform:translateY(-2px)}
+.chip.act{color:var(--ink);background:var(--paper);border-color:var(--paper)}
+
+/* ---------- индекс работ ---------- */
+.index{border-bottom:1px solid var(--line)}
+.row{display:grid;grid-template-columns:minmax(52px,72px) 1fr auto;align-items:baseline;gap:clamp(10px,2vw,28px);
+  border-top:1px solid var(--line);padding:clamp(18px,3vh,34px) 0;cursor:pointer;
+  transition:opacity .45s var(--ease),transform .45s var(--ease)}
+.row.hid{opacity:0;transform:translateY(14px)}
+.row .idx{font-family:var(--mono);font-size:13px;color:var(--mut);transition:color .35s}
+.row .ttl{font-size:clamp(28px,5vw,64px);font-weight:750;letter-spacing:-.02em;line-height:1.04;
+  transition:transform .45s var(--ease),color .45s var(--ease)}
+.row .ttl small{display:block;font-size:clamp(13px,1.2vw,16px);font-weight:400;color:var(--mut);letter-spacing:.02em;margin-top:8px;font-family:var(--mono)}
+.row .cat{display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);transition:color .35s}
+.row .zi{font-family:var(--serif);font-size:19px;color:var(--mut);opacity:.75;transition:color .35s,opacity .35s,transform .45s var(--ease)}
+.row:hover .ttl,.row:focus-visible .ttl{transform:translateX(8px);color:var(--acc)}
+.row:hover .idx{color:var(--acc)}
+.row:hover .zi{color:var(--acc);opacity:1;transform:rotate(8deg)}
+.row-pre{display:none;grid-column:1/-1;max-width:520px;margin-top:14px;border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+.row.open .row-pre{display:block}
+.row-pre svg{display:block;width:100%;height:auto}
+@media (max-width:760px){.row{grid-template-columns:44px 1fr}.row .cat{grid-column:2;justify-content:flex-start}}
+
+/* ---------- плавающее превью ---------- */
+.fly{position:fixed;left:0;top:0;width:min(360px,34vw);z-index:700;pointer-events:none;will-change:transform}
+.fly-in{border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55);opacity:0;transform:scale(.9) rotate(-2deg);
+  transition:opacity .32s var(--ease),transform .32s var(--ease);will-change:transform,opacity}
+.fly.show .fly-in{opacity:1;transform:scale(1) rotate(0deg)}
+.fly svg{display:block;width:100%;height:auto}
+@media (hover:none), (prefers-reduced-motion:reduce){.fly{display:none}}
+
+/* ---------- обо мне ---------- */
+.about-grid{display:grid;grid-template-columns:minmax(280px,560px) 1fr;gap:clamp(28px,5vw,90px);align-items:end}
+.about-txt{font-size:clamp(16px,1.5vw,20px);color:var(--paper);max-width:34em}
+.about-txt p+p{margin-top:1em;color:var(--mut)}
+.facts{display:flex;align-items:flex-end;gap:clamp(22px,4vw,64px);flex-wrap:wrap}
+.fact b{display:block;font-size:clamp(58px,8vw,128px);font-weight:800;line-height:.95;letter-spacing:-.02em;
+  color:transparent;-webkit-text-stroke:1.6px var(--paper);transition:color .5s var(--ease)}
+.fact:hover b{color:var(--paper)}
+@supports not (-webkit-text-stroke:1px #000){.fact b{color:var(--paper)}}
+.fact i{display:block;font-style:normal;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-top:10px}
+.about-char{width:clamp(150px,15vw,250px);align-self:flex-end;pointer-events:none;margin-left:auto}
+.about-char svg{display:block;width:100%;height:auto}
+@media (max-width:900px){.about-grid{grid-template-columns:1fr}.about-char{margin-left:0}}
+
+/* ---------- футер ---------- */
+.ftr{margin-top:clamp(70px,13vh,150px);border-top:1px solid var(--line);padding:clamp(28px,4vh,48px) 0 clamp(34px,5vh,60px)}
+.ftr-in{display:flex;flex-wrap:wrap;gap:16px 40px;align-items:baseline;font-family:var(--mono);font-size:12.5px;color:var(--mut);letter-spacing:.06em}
+.ftr a{color:var(--paper);border-bottom:1px solid var(--line);transition:border-color .3s,color .3s;padding-bottom:2px}
+.ftr a:hover{color:var(--acc);border-color:var(--acc)}
+.ftr .tri{margin-left:auto;text-align:right}
+.ftr .tri b{color:var(--acc);font-weight:400;padding:0 .6em}
+@media (max-width:760px){.ftr .tri{margin-left:0;text-align:left}}
+
+/* ---------- reveal-каскад (только при работающем JS — иначе контент виден сразу) ---------- */
+:root.js .rv{opacity:0;transform:translateY(26px);transition:opacity .8s var(--ease),transform .8s var(--ease);transition-delay:var(--d,0s)}
+:root.js .rv.in{opacity:1;transform:none}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .rv{opacity:1!important;transform:none!important}
+  .mq-track{animation:none!important}
+}
+</style>
+<script>document.documentElement.classList.add('js')</script>
+
+<div class="grain" aria-hidden="true"></div>
+<div class="glow glow-a" aria-hidden="true"></div>
+<div class="glow glow-b" aria-hidden="true"></div>
+<div class="cur" id="cur" aria-hidden="true"><i></i></div>
+
+<header class="hdr">
+  <div class="wrap hdr-in">
+    <a class="brand" href="#top"><span class="seal">АЛ</span><span>Александр</span></a>
+    <nav class="nav" aria-label="Разделы">
+      <a href="#works" data-goto="all">Работы</a>
+      <a href="#works" data-goto="games">Игры</a>
+      <a href="#works" data-goto="video">Видео</a>
+      <a href="#about">Обо мне</a>
+    </nav>
+    <div class="langs" role="group" aria-label="Язык">
+      <button type="button">KZ</button>
+      <button type="button" class="act" aria-current="true">RU</button>
+      <button type="button">EN</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero wrap">
+  <div class="hero-meta rv" style="--d:.05s">
+    <span>из Алматы <span class="dot">·</span> сайты, игры, айдентика, видео</span>
+    <div class="hero-contacts">
+      <a href="#">telegram</a><a href="#">email</a><a href="#">youtube</a>
+    </div>
+  </div>
+  <div class="name-wrap rv" style="--d:.15s">
+    <div class="hero-char" aria-hidden="true">
+<svg viewBox="0 0 507 543" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M446.735 538H78.5104L85.9282 526.293C94.4083 512.909 93.5461 495.637 83.7754 483.164C80.3098 478.741 75.893 475.154 70.8522 472.669L39.3621 457.151C32.3366 453.688 25.9367 449.08 20.4249 443.516L15.6598 438.705C5.62785 428.576 0 414.897 0 400.641C0 391.918 2.10998 383.324 6.14996 375.592L17.4761 353.916C18.1338 352.658 19.9978 352.876 20.3471 354.252L24.4282 370.332C27.1814 381.18 34.3756 390.367 44.2471 395.64L46.7416 396.973C56.6059 402.242 68.4182 402.379 78.4019 397.339C86.6074 393.197 92.8101 385.939 95.6225 377.188L96.5762 374.22C98.8654 367.097 99.2008 359.491 97.5472 352.194L94.0682 336.842C92.1822 328.52 89.2044 320.483 85.2121 312.942C80.7684 304.548 75.1139 296.853 68.4301 290.105L64.0513 285.684C54.6864 276.229 47.9537 264.492 44.5197 251.635C40.0384 234.856 41.4074 217.052 48.401 201.155L55.0296 186.088L55.0297 186.088C56.432 182.901 57.1332 181.307 57.8854 179.746C61.1961 172.877 65.2816 166.409 70.0623 160.469C71.1485 159.119 72.2864 157.801 74.5621 155.166L74.5624 155.165L80.2997 148.521L80.3001 148.52C83.706 144.576 85.409 142.604 87.1871 140.747C96.1434 131.393 106.831 123.868 118.657 118.589C121.005 117.541 123.436 116.603 128.298 114.726L128.298 114.726L128.298 114.726C129.557 114.24 130.186 113.997 130.467 113.972C132.013 113.835 133.119 115.436 132.445 116.834C132.322 117.088 131.872 117.591 130.973 118.596L130.973 118.596L115.847 135.509C105.522 147.054 98.4978 161.168 95.5127 176.366L92.6831 190.773C91.7279 195.637 92.0223 200.664 93.5389 205.382L94.068 207.029C97.6464 218.163 108.004 225.714 119.699 225.714C123.169 225.714 126.606 225.043 129.822 223.738L132.158 222.79C147.188 216.691 157.021 202.09 157.021 185.87V169.162C157.021 158.673 159.802 148.372 165.082 139.309L165.861 137.971C170.6 129.835 177.049 122.825 184.763 117.426L203.91 104.023C210.862 99.1565 216.415 92.5497 220.013 84.8637C225.356 73.4509 226.044 60.4061 221.931 48.4946L219.074 40.2181C216.068 31.5123 211.376 23.4844 205.265 16.5935L195.785 5.90294C194.524 4.48052 193.893 3.76931 193.782 3.25675C193.573 2.28632 194.107 1.30908 195.037 0.961353C195.528 0.777695 196.467 0.924433 198.345 1.21791L230.972 6.3156C242.338 8.0914 253.146 12.446 262.569 19.0456C282.701 33.1471 294.69 56.182 294.69 80.7619V96.595V121.664C294.69 132.91 301.273 143.114 311.518 147.751C319.09 151.178 327.777 151.146 335.323 147.664L338.341 146.271C346.865 142.338 353.509 135.223 356.851 126.45L357.05 125.928C360.657 116.459 360.254 105.929 355.934 96.7634L347.376 78.6082C346.664 77.0975 348.342 75.58 349.774 76.4401L387.181 98.9135C400.276 106.78 410.105 119.092 414.876 133.604C419.054 146.309 419.124 160.008 415.077 172.755L409.125 191.503C408.035 194.938 407.48 198.521 407.48 202.126V207.493C407.48 218.512 414.147 228.435 424.349 232.6L425.574 233.1C431.998 235.722 439.238 235.459 445.455 232.377C453.689 228.296 458.899 219.899 458.899 210.709V193.487C458.899 192.43 460.295 192.049 460.832 192.96L494.336 249.779C502.627 263.84 507 279.864 507 296.187C507 314.508 501.492 332.405 491.192 347.556L487.469 353.032C486.67 354.207 486.271 354.795 485.864 355.375C482.196 360.609 478.035 365.479 473.437 369.919C472.928 370.411 472.41 370.898 471.374 371.87L442.507 398.967C437.994 403.203 434.323 408.254 431.687 413.853L425.838 426.274C422.98 432.342 423.126 439.398 426.231 445.343L426.663 446.171C431.713 455.84 443.457 459.851 453.366 455.29C462.088 451.276 466.848 441.738 464.812 432.354L462.633 422.314C462.498 421.692 463.229 421.254 463.714 421.666L467.368 424.773C475.863 431.997 481.763 441.8 484.169 452.688C485.734 459.769 485.774 467.102 484.287 474.2L483.527 477.824C481.507 487.466 477.426 496.557 471.563 504.474L446.735 538Z" fill="url(#paint0_linear_184_2293)"/>
+<path d="M405 28.5C405 34.8513 399.851 40 393.5 40C387.149 40 382 34.8513 382 28.5C382 22.1487 387.149 17 393.5 17C399.851 17 405 22.1487 405 28.5Z" fill="url(#paint1_linear_184_2293)"/>
+<circle cx="459" cy="159" r="7" fill="url(#paint2_linear_184_2293)"/>
+<circle cx="161" cy="58" r="8" fill="url(#paint3_linear_184_2293)"/>
+<circle cx="21.5" cy="270.5" r="11.5" fill="url(#paint4_linear_184_2293)"/>
+<path d="M276.658 454.262C276.658 459.864 270.989 464.405 265.387 464.405C259.785 464.405 254.117 459.864 254.117 454.262C254.117 448.66 259.785 444.119 265.387 444.119C270.989 444.119 276.658 448.66 276.658 454.262Z" fill="#3291C5"/>
+<path d="M276.658 490.327C276.658 495.929 270.989 500.47 265.387 500.47C259.785 500.47 254.117 495.929 254.117 490.327C254.117 484.725 259.785 480.184 265.387 480.184C270.989 480.184 276.658 484.725 276.658 490.327Z" fill="#3291C5"/>
+<path d="M349.741 537.662H181.056C179.79 537.662 178.843 536.501 179.096 535.261L267.64 102.07L351.704 535.281C351.943 536.515 350.998 537.662 349.741 537.662Z" fill="#F9B280"/>
+<path d="M349.741 537.662H181.056C179.79 537.662 178.843 536.501 179.096 535.261L267.64 102.07L351.704 535.281C351.943 536.515 350.998 537.662 349.741 537.662Z" stroke="url(#paint5_linear_184_2293)" stroke-width="10"/>
+<path d="M319 367L352 537.5H181.404C180.154 537.5 179.21 536.365 179.437 535.136L207.5 383.5L267 448.5L319 367Z" fill="url(#paint6_linear_184_2293)"/>
+<path d="M267 448.5L352 537.5H181.404C180.154 537.5 179.21 536.365 179.437 535.136L207.5 383.5L267 448.5L319 367L352 537.5" stroke="url(#paint7_linear_184_2293)" stroke-width="10"/>
+<ellipse cx="409.082" cy="302.117" rx="56.9143" ry="52.9698" fill="#F3AA77"/>
+<path d="M409.082 254.147C438.098 254.147 460.997 275.956 460.997 302.117C460.997 328.278 438.098 350.086 409.082 350.086C380.066 350.086 357.168 328.277 357.168 302.117C357.168 275.956 380.066 254.147 409.082 254.147Z" stroke="url(#paint8_linear_184_2293)" stroke-width="10"/>
+<ellipse cx="105.914" cy="302.117" rx="56.9143" ry="52.9698" fill="#F3AA77"/>
+<path d="M105.914 254.147C134.93 254.147 157.829 275.956 157.829 302.117C157.829 328.278 134.93 350.086 105.914 350.086C76.8984 350.086 54 328.277 54 302.117C54 275.956 76.8984 254.147 105.914 254.147Z" stroke="url(#paint9_linear_184_2293)" stroke-width="10"/>
+<mask id="path-15-inside-1_184_2293" fill="white">
+<path d="M433.312 260.417C433.312 350.67 355.102 423.835 258.625 423.835C162.148 423.835 83.9375 350.67 83.9375 260.417C83.9375 170.164 162.148 97 258.625 97C355.102 97 433.312 170.164 433.312 260.417Z"/>
+</mask>
+<path d="M433.312 260.417C433.312 350.67 355.102 423.835 258.625 423.835C162.148 423.835 83.9375 350.67 83.9375 260.417C83.9375 170.164 162.148 97 258.625 97C355.102 97 433.312 170.164 433.312 260.417Z" fill="url(#paint10_radial_184_2293)"/>
+<path d="M433.312 260.417H423.312C423.312 344.53 350.218 413.835 258.625 413.835V423.835V433.835C359.986 433.835 443.312 356.811 443.312 260.417H433.312ZM258.625 423.835V413.835C167.032 413.835 93.9375 344.53 93.9375 260.417H83.9375H73.9375C73.9375 356.811 157.264 433.835 258.625 433.835V423.835ZM83.9375 260.417H93.9375C93.9375 176.305 167.032 107 258.625 107V97V87C157.264 87 73.9375 164.024 73.9375 260.417H83.9375ZM258.625 97V107C350.218 107 423.312 176.305 423.312 260.417H433.312H443.312C443.312 164.024 359.986 87 258.625 87V97Z" fill="#1A1A1A" mask="url(#path-15-inside-1_184_2293)"/>
+<path d="M404.562 259.18L289.294 298.909C289.176 298.949 289.157 299.108 289.262 299.176L299.406 305.679C307.065 310.588 315.508 314.148 324.369 316.205L330.09 317.533C338.276 319.434 346.791 319.417 354.969 317.483C366.985 314.643 377.682 307.81 385.31 298.101L387.016 295.931C390.406 291.615 393.213 286.872 395.364 281.823L404.868 259.509C404.951 259.313 404.763 259.111 404.562 259.18Z" fill="white" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M111.523 259.18L226.792 298.909C226.91 298.949 226.929 299.108 226.824 299.176L216.678 305.679C209.02 310.588 200.578 314.148 191.717 316.205L185.996 317.533C177.809 319.434 169.295 319.417 161.116 317.483C149.1 314.643 138.403 307.81 130.775 298.101L129.069 295.931C125.679 291.615 122.872 286.872 120.721 281.823L111.217 259.509C111.134 259.313 111.322 259.111 111.523 259.18Z" fill="white" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M271.515 390.504L221.499 382.501L237.661 376.055C249.445 371.355 262.017 368.941 274.704 368.941L344 368.939C324.365 386.76 297.698 394.694 271.515 390.504Z" fill="white" stroke="#1A1A1A" stroke-width="10"/>
+<defs>
+<linearGradient id="paint0_linear_184_2293" x1="253.5" y1="-7" x2="253.5" y2="538" gradientUnits="userSpaceOnUse"><stop stop-color="#D81919"/><stop offset="1" stop-color="#ED7B41"/></linearGradient>
+<linearGradient id="paint1_linear_184_2293" x1="376.5" y1="16.7007" x2="376.5" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#D81919"/><stop offset="1" stop-color="#ED7B41"/></linearGradient>
+<linearGradient id="paint2_linear_184_2293" x1="459" y1="151.818" x2="459" y2="166" gradientUnits="userSpaceOnUse"><stop stop-color="#D81919"/><stop offset="1" stop-color="#ED7B41"/></linearGradient>
+<linearGradient id="paint3_linear_184_2293" x1="161" y1="49.7918" x2="161" y2="66" gradientUnits="userSpaceOnUse"><stop stop-color="#D81919"/><stop offset="1" stop-color="#ED7B41"/></linearGradient>
+<linearGradient id="paint4_linear_184_2293" x1="21.5" y1="258.701" x2="21.5" y2="282" gradientUnits="userSpaceOnUse"><stop stop-color="#D81919"/><stop offset="1" stop-color="#ED7B41"/></linearGradient>
+<linearGradient id="paint5_linear_184_2293" x1="265.386" y1="102.07" x2="265.386" y2="537.662" gradientUnits="userSpaceOnUse"><stop stop-color="#1A1A1A"/><stop offset="1" stop-color="#1A1A1A" stop-opacity="0"/></linearGradient>
+<linearGradient id="paint6_linear_184_2293" x1="265.5" y1="364.781" x2="265.5" y2="537.5" gradientUnits="userSpaceOnUse"><stop stop-color="#1F34F1"/><stop offset="1" stop-color="#6D8EE4"/></linearGradient>
+<linearGradient id="paint7_linear_184_2293" x1="265.5" y1="367" x2="262.5" y2="577.5" gradientUnits="userSpaceOnUse"><stop stop-color="#1A1A1A"/><stop offset="1" stop-color="#1A1A1A" stop-opacity="0"/></linearGradient>
+<linearGradient id="paint8_linear_184_2293" x1="403" y1="301.999" x2="498" y2="301.999" gradientUnits="userSpaceOnUse"><stop stop-color="#1A1A1A"/><stop offset="1" stop-color="#A31B12"/></linearGradient>
+<linearGradient id="paint9_linear_184_2293" x1="-15" y1="301.999" x2="119" y2="301.999" gradientUnits="userSpaceOnUse"><stop stop-color="#A31B12"/><stop offset="1" stop-color="#1A1A1A"/></linearGradient>
+<radialGradient id="paint10_radial_184_2293" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(259 154.5) rotate(90.0798) scale(269.335 287.91)"><stop stop-color="#FDC59D"/><stop offset="0.151112" stop-color="#FFBB8B"/><stop offset="0.416752" stop-color="#F3AA77"/><stop offset="1" stop-color="#F3AA77"/></radialGradient>
+</defs>
+</svg>
+    </div>
+    <h1 class="name" aria-label="Александр">
+      <span>А</span><span>Л</span><span>Е</span><span>К</span><span>С</span><span>А</span><span>Н</span><span>Д</span><span>Р</span>
+    </h1>
+  </div>
+  <p class="role rv" style="--d:.28s">разработчик <span class="amp">&amp;</span> <em>дизайнер</em></p>
+</section>
+
+<div class="mq" aria-hidden="true">
+  <div class="mq-track">
+    <span>сайты <b>·</b> игры <b>·</b> айдентика <b>·</b> видео <b>·</b> шеберлік <b>·</b> 匠心 <b>·</b> мастерство <b>·</b> сайты <b>·</b> игры <b>·</b> айдентика <b>·</b> видео <b>·</b> шеберлік <b>·</b> 匠心 <b>·</b> мастерство <b>·</b>&nbsp;</span>
+    <span>сайты <b>·</b> игры <b>·</b> айдентика <b>·</b> видео <b>·</b> шеберлік <b>·</b> 匠心 <b>·</b> мастерство <b>·</b> сайты <b>·</b> игры <b>·</b> айдентика <b>·</b> видео <b>·</b> шеберлік <b>·</b> 匠心 <b>·</b> мастерство <b>·</b>&nbsp;</span>
+  </div>
+</div>
+
+<section class="sec wrap" id="works">
+  <div class="sec-head rv">
+    <span class="sec-idx">/01</span>
+    <h2 class="sec-ttl">Работы</h2>
+    <span class="sec-note">наведи на строку — увидишь превью</span>
+  </div>
+  <div class="chips rv" style="--d:.1s" role="group" aria-label="Фильтр работ">
+    <button class="chip act" data-f="all" aria-pressed="true">Все</button>
+    <button class="chip" data-f="sites" aria-pressed="false">Сайты</button>
+    <button class="chip" data-f="design" aria-pressed="false">Дизайн</button>
+    <button class="chip" data-f="games" aria-pressed="false">Игры</button>
+    <button class="chip" data-f="video" aria-pressed="false">Видео</button>
+    <button class="chip" data-f="logo" aria-pressed="false">Лого</button>
+  </div>
+
+  <div class="index rv" style="--d:.18s" id="index">
+
+    <article class="row" data-cat="sites" tabindex="0">
+      <span class="idx">/01</span>
+      <h3 class="ttl">KIDO<small>SaaS-каталог детских курсов · React · Supabase · Stripe</small></h3>
+      <span class="cat">Сайты <span class="zi" aria-hidden="true">站</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью KIDO">
+<rect width="400" height="300" fill="#EFE9DD"/>
+<rect x="26" y="24" width="348" height="252" rx="14" fill="#F8F3E6" stroke="#131210" stroke-width="2"/>
+<path d="M26 38C26 30.268 32.268 24 40 24H360C367.732 24 374 30.268 374 38V58H26V38Z" fill="#131210"/>
+<circle cx="46" cy="41" r="4" fill="#E8472B"/><circle cx="62" cy="41" r="4" fill="#877F72"/><circle cx="78" cy="41" r="4" fill="#EFE9DD"/>
+<rect x="120" y="33" width="160" height="16" rx="8" fill="#2A2723"/>
+<text x="48" y="92" font-family="Georgia,serif" font-style="italic" font-size="22" fill="#131210">kido</text>
+<circle cx="330" cy="86" r="15" fill="#E8472B"/><path d="M330 64V70M330 102V108M308 86H314M346 86H352" stroke="#E8472B" stroke-width="3" stroke-linecap="round"/>
+<rect x="46" y="112" width="96" height="104" rx="10" fill="#FFFFFF" stroke="#131210" stroke-width="2"/>
+<circle cx="70" cy="138" r="12" fill="#E8472B"/><rect x="58" y="162" width="72" height="7" rx="3.5" fill="#131210"/><rect x="58" y="176" width="52" height="7" rx="3.5" fill="#C9BFAC"/><rect x="58" y="194" width="40" height="12" rx="6" fill="#131210"/>
+<rect x="152" y="112" width="96" height="104" rx="10" fill="#E8472B"/>
+<circle cx="176" cy="138" r="12" fill="#EFE9DD"/><rect x="164" y="162" width="72" height="7" rx="3.5" fill="#EFE9DD"/><rect x="164" y="176" width="52" height="7" rx="3.5" fill="#F3A28F"/><rect x="164" y="194" width="40" height="12" rx="6" fill="#131210"/>
+<rect x="258" y="112" width="96" height="104" rx="10" fill="#FFFFFF" stroke="#131210" stroke-width="2"/>
+<circle cx="282" cy="138" r="12" fill="#131210"/><rect x="270" y="162" width="72" height="7" rx="3.5" fill="#131210"/><rect x="270" y="176" width="52" height="7" rx="3.5" fill="#C9BFAC"/><rect x="270" y="194" width="40" height="12" rx="6" fill="#E8472B"/>
+<text x="46" y="254" font-family="ui-monospace,monospace" font-size="12" fill="#877F72">React · Supabase · Stripe</text>
+<text x="354" y="254" font-family="ui-monospace,monospace" font-size="12" fill="#131210" text-anchor="end">/saas</text>
+</svg>
+      </div>
+    </article>
+
+    <article class="row" data-cat="games" tabindex="0">
+      <span class="idx">/02</span>
+      <h3 class="ttl">Трейлер игры<small>киношный монтаж геймплея · play 0:47</small></h3>
+      <span class="cat">Игры <span class="zi" aria-hidden="true">戏</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью трейлера">
+<rect width="400" height="300" fill="#15130F"/>
+<circle cx="300" cy="78" r="34" fill="#EFE9DD"/><circle cx="312" cy="70" r="8" fill="#DCD3C0"/><circle cx="292" cy="88" r="5" fill="#DCD3C0"/>
+<circle cx="70" cy="52" r="2" fill="#877F72"/><circle cx="130" cy="34" r="1.6" fill="#877F72"/><circle cx="205" cy="60" r="1.6" fill="#877F72"/><circle cx="356" cy="140" r="2" fill="#877F72"/>
+<path d="M0 220L90 128L170 208L246 140L330 224L400 176V300H0Z" fill="#221E19"/>
+<path d="M0 262L70 208L150 258L240 202L318 260L400 224V300H0Z" fill="#191612"/>
+<rect x="152" y="176" width="12" height="22" rx="3" fill="#0C0B09"/><circle cx="158" cy="170" r="7" fill="#0C0B09"/><path d="M164 182L180 168" stroke="#E8472B" stroke-width="3" stroke-linecap="round"/>
+<rect x="0" y="0" width="400" height="26" fill="#0C0B09"/><rect x="0" y="274" width="400" height="26" fill="#0C0B09"/>
+<circle cx="200" cy="152" r="27" fill="#E8472B"/><path d="M192 139L214 152L192 165Z" fill="#EFE9DD"/>
+<rect x="316" y="240" width="58" height="24" rx="12" fill="#0C0B09" stroke="#877F72"/>
+<text x="345" y="256" font-family="ui-monospace,monospace" font-size="12" fill="#EFE9DD" text-anchor="middle">0:47</text>
+<text x="26" y="256" font-family="ui-monospace,monospace" font-size="11" fill="#877F72" letter-spacing="3">TRAILER — 4K</text>
+</svg>
+      </div>
+    </article>
+
+    <article class="row" data-cat="design" tabindex="0">
+      <span class="idx">/03</span>
+      <h3 class="ttl">Fluffbox<small>Instagram-айдентика · сетка, шаблоны, маскот</small></h3>
+      <span class="cat">Дизайн <span class="zi" aria-hidden="true">图</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью Fluffbox">
+<rect width="400" height="300" fill="#EFE9DD"/>
+<rect x="62" y="30" width="86" height="86" rx="14" fill="#E8472B"/>
+<rect x="157" y="30" width="86" height="86" rx="14" fill="#131210"/>
+<rect x="252" y="30" width="86" height="86" rx="14" fill="#E2D8C6"/>
+<rect x="62" y="125" width="86" height="86" rx="14" fill="#E2D8C6"/>
+<rect x="157" y="125" width="86" height="86" rx="14" fill="#E8472B"/>
+<rect x="252" y="125" width="86" height="86" rx="14" fill="#131210"/>
+<ellipse cx="200" cy="172" rx="30" ry="24" fill="#EFE9DD"/><circle cx="176" cy="158" r="9" fill="#EFE9DD"/><circle cx="224" cy="158" r="9" fill="#EFE9DD"/><circle cx="182" cy="190" r="8" fill="#EFE9DD"/><circle cx="218" cy="190" r="8" fill="#EFE9DD"/>
+<circle cx="192" cy="170" r="3.4" fill="#131210"/><circle cx="208" cy="170" r="3.4" fill="#131210"/><path d="M195 181Q200 185 205 181" stroke="#131210" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+<rect x="184" y="56" width="32" height="32" rx="9" fill="none" stroke="#EFE9DD" stroke-width="3"/><circle cx="200" cy="72" r="7" fill="none" stroke="#EFE9DD" stroke-width="3"/><circle cx="209" cy="63" r="2" fill="#EFE9DD"/>
+<text x="105" y="80" font-family="Georgia,serif" font-style="italic" font-size="20" fill="#EFE9DD" text-anchor="middle">fluff</text>
+<circle cx="296" cy="72" r="18" fill="none" stroke="#877F72" stroke-width="2.5"/><path d="M296 60Q302 72 296 84Q290 72 296 60Z" fill="#877F72"/>
+<text x="105" y="176" font-family="ui-monospace,monospace" font-size="12" fill="#877F72" text-anchor="middle">grid 3×3</text>
+<circle cx="296" cy="168" r="16" fill="#E8472B"/><rect x="284" y="184" width="24" height="6" rx="3" fill="#EFE9DD"/>
+<text x="62" y="250" font-family="ui-monospace,monospace" font-size="12" fill="#877F72">fluffbox — identity for instagram</text>
+<text x="338" y="250" font-family="ui-monospace,monospace" font-size="12" fill="#131210" text-anchor="end">@fluffbox</text>
+</svg>
+      </div>
+    </article>
+
+    <article class="row" data-cat="logo" tabindex="0">
+      <span class="idx">/04</span>
+      <h3 class="ttl">QazSoft<small>логотип и фирменный стиль · гайдлайн</small></h3>
+      <span class="cat">Лого <span class="zi" aria-hidden="true">标</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью QazSoft">
+<rect width="400" height="300" fill="#1B1916"/>
+<circle cx="200" cy="126" r="62" fill="none" stroke="#EFE9DD" stroke-width="2"/>
+<circle cx="200" cy="126" r="38" fill="none" stroke="#E8472B" stroke-width="14"/>
+<rect x="224" y="150" width="34" height="14" rx="7" transform="rotate(45 224 150)" fill="#E8472B"/>
+<path d="M60 60C78 60 78 84 60 84C74 84 74 104 58 102" stroke="#877F72" stroke-width="3" fill="none" stroke-linecap="round"/>
+<path d="M340 60C322 60 322 84 340 84C326 84 326 104 342 102" stroke="#877F72" stroke-width="3" fill="none" stroke-linecap="round"/>
+<text x="200" y="232" font-family="ui-monospace,monospace" font-size="24" fill="#EFE9DD" text-anchor="middle" letter-spacing="10">QAZSOFT</text>
+<rect x="120" y="252" width="42" height="10" rx="5" fill="#E8472B"/><rect x="170" y="252" width="42" height="10" rx="5" fill="#EFE9DD"/><rect x="220" y="252" width="42" height="10" rx="5" fill="#877F72"/>
+<text x="30" y="36" font-family="ui-monospace,monospace" font-size="11" fill="#877F72" letter-spacing="2">LOGO / GUIDELINE</text>
+<text x="370" y="36" font-family="ui-monospace,monospace" font-size="11" fill="#877F72" text-anchor="end">v2.0</text>
+</svg>
+      </div>
+    </article>
+
+    <article class="row" data-cat="video" tabindex="0">
+      <span class="idx">/05</span>
+      <h3 class="ttl">Девлог #12<small>как я делал боёвку · play 12:04</small></h3>
+      <span class="cat">Видео <span class="zi" aria-hidden="true">影</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью девлога">
+<rect width="400" height="300" fill="#17140F"/>
+<rect x="26" y="26" width="120" height="16" rx="8" fill="none" stroke="#EFE9DD" stroke-width="2"/><rect x="30" y="30" width="82" height="8" rx="4" fill="#E8472B"/>
+<circle cx="352" cy="46" r="24" fill="none" stroke="#877F72" stroke-width="2"/><circle cx="358" cy="40" r="4" fill="#E8472B"/><circle cx="344" cy="54" r="3" fill="#877F72"/>
+<rect x="0" y="226" width="400" height="74" fill="#221E17"/>
+<rect x="128" y="168" width="22" height="46" rx="5" fill="#EFE9DD"/><circle cx="139" cy="156" r="12" fill="#EFE9DD"/><rect x="150" y="176" width="40" height="8" rx="4" transform="rotate(-24 150 176)" fill="#877F72"/>
+<path d="M188 132C216 140 228 168 224 196" stroke="#E8472B" stroke-width="6" fill="none" stroke-linecap="round"/>
+<path d="M206 122C238 134 250 172 244 204" stroke="#E8472B" stroke-width="3" fill="none" stroke-linecap="round" opacity=".5"/>
+<rect x="266" y="170" width="26" height="44" rx="5" fill="#4A4336"/><circle cx="279" cy="158" r="12" fill="#4A4336"/>
+<circle cx="200" cy="120" r="26" fill="#E8472B"/><path d="M193 108L213 120L193 132Z" fill="#EFE9DD"/>
+<circle cx="36" cy="262" r="5" fill="#E8472B"/><text x="50" y="267" font-family="ui-monospace,monospace" font-size="12" fill="#EFE9DD">REC — devlog #12 · боёвка</text>
+<rect x="312" y="250" width="62" height="24" rx="12" fill="#0C0B09" stroke="#877F72"/>
+<text x="343" y="266" font-family="ui-monospace,monospace" font-size="12" fill="#EFE9DD" text-anchor="middle">12:04</text>
+</svg>
+      </div>
+    </article>
+
+    <article class="row" data-cat="design" tabindex="0">
+      <span class="idx">/06</span>
+      <h3 class="ttl">Хэллоуин<small>серия постеров · принт и сторис</small></h3>
+      <span class="cat">Дизайн <span class="zi" aria-hidden="true">图</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью постеров">
+<rect width="400" height="300" fill="#E2D8C6"/>
+<rect x="52" y="44" width="130" height="212" rx="6" fill="#131210" transform="rotate(-5 52 44)"/>
+<rect x="236" y="36" width="130" height="212" rx="6" fill="#131210" transform="rotate(5 236 36)"/>
+<rect x="135" y="28" width="150" height="244" rx="6" fill="#131210"/>
+<circle cx="210" cy="96" r="38" fill="#E8472B"/>
+<path d="M182 74L194 82L188 68Z" fill="#131210"/><path d="M236 62L246 74L250 60Z" fill="#131210"/>
+<circle cx="210" cy="182" r="30" fill="#E8472B"/><rect x="206" y="146" width="8" height="12" rx="3" fill="#877F72"/>
+<path d="M196 176L206 182L196 186Z" fill="#131210"/><path d="M224 176L214 182L224 186Z" fill="#131210"/>
+<path d="M198 196Q210 204 222 196" stroke="#131210" stroke-width="3" fill="none" stroke-linecap="round"/>
+<rect x="152" y="226" width="76" height="9" rx="4.5" fill="#EFE9DD"/><rect x="152" y="242" width="52" height="7" rx="3.5" fill="#877F72"/>
+<text x="276" y="248" font-family="ui-monospace,monospace" font-size="11" fill="#EFE9DD" text-anchor="middle" transform="rotate(5 276 248)">31.10</text>
+<text x="108" y="252" font-family="ui-monospace,monospace" font-size="11" fill="#EFE9DD" text-anchor="middle" transform="rotate(-5 108 252)">x3</text>
+</svg>
+      </div>
+    </article>
+
+    <article class="row" data-cat="sites" tabindex="0">
+      <span class="idx">/07</span>
+      <h3 class="ttl">Лендинг веб-студии<small>дизайн + вёрстка · анимации на скролле</small></h3>
+      <span class="cat">Сайты <span class="zi" aria-hidden="true">站</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью лендинга">
+<rect width="400" height="300" fill="#EFE9DD"/>
+<rect x="30" y="26" width="52" height="12" rx="6" fill="#131210"/>
+<rect x="252" y="26" width="34" height="10" rx="5" fill="#C9BFAC"/><rect x="294" y="26" width="34" height="10" rx="5" fill="#C9BFAC"/><rect x="336" y="26" width="34" height="10" rx="5" fill="#E8472B"/>
+<rect x="30" y="68" width="300" height="26" rx="6" fill="#131210"/>
+<rect x="30" y="102" width="236" height="26" rx="6" fill="#131210"/>
+<rect x="276" y="102" width="94" height="26" rx="13" fill="#E8472B"/>
+<rect x="30" y="150" width="180" height="104" rx="10" fill="#131210"/>
+<path d="M30 254L210 150" stroke="#877F72" stroke-width="2"/><path d="M30 150L210 254" stroke="#877F72" stroke-width="2"/>
+<circle cx="120" cy="202" r="22" fill="#E8472B"/><path d="M114 192L131 202L114 212Z" fill="#EFE9DD"/>
+<rect x="228" y="150" width="66" height="8" rx="4" fill="#131210"/><rect x="228" y="166" width="52" height="6" rx="3" fill="#C9BFAC"/><rect x="228" y="178" width="58" height="6" rx="3" fill="#C9BFAC"/>
+<rect x="306" y="150" width="66" height="8" rx="4" fill="#131210"/><rect x="306" y="166" width="52" height="6" rx="3" fill="#C9BFAC"/><rect x="306" y="178" width="58" height="6" rx="3" fill="#C9BFAC"/>
+<rect x="228" y="204" width="144" height="50" rx="10" fill="none" stroke="#131210" stroke-width="2"/>
+<text x="300" y="234" font-family="ui-monospace,monospace" font-size="12" fill="#131210" text-anchor="middle">scroll ↓ 60fps</text>
+<text x="30" y="284" font-family="ui-monospace,monospace" font-size="11" fill="#877F72">studio landing — design &amp; build</text>
+</svg>
+      </div>
+    </article>
+
+    <article class="row" data-cat="games" tabindex="0">
+      <span class="idx">/08</span>
+      <h3 class="ttl">Прототип мини-игры<small>платформер · геймдизайн и код · play</small></h3>
+      <span class="cat">Игры <span class="zi" aria-hidden="true">戏</span></span>
+      <div class="row-pre">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Превью прототипа">
+<rect width="400" height="300" fill="#15130F"/>
+<rect x="0" y="252" width="400" height="48" fill="#221E17"/><rect x="0" y="252" width="400" height="6" fill="#3A342A"/>
+<rect x="96" y="192" width="96" height="14" rx="4" fill="#3A342A"/>
+<rect x="248" y="150" width="80" height="14" rx="4" fill="#3A342A"/>
+<rect x="126" y="158" width="30" height="30" rx="6" fill="#E8472B"/><circle cx="147" cy="169" r="3.6" fill="#EFE9DD"/><rect x="132" y="178" width="12" height="4" rx="2" fill="#EFE9DD"/>
+<circle cx="268" cy="132" r="8" fill="none" stroke="#EFE9DD" stroke-width="3"/><circle cx="296" cy="132" r="8" fill="none" stroke="#EFE9DD" stroke-width="3"/>
+<path d="M340 252L352 230L364 252Z" fill="#877F72"/><path d="M362 252L374 230L386 252Z" fill="#877F72"/>
+<rect x="26" y="24" width="88" height="20" rx="10" fill="#0C0B09" stroke="#877F72"/>
+<text x="70" y="38" font-family="ui-monospace,monospace" font-size="11" fill="#EFE9DD" text-anchor="middle">proto v0.3</text>
+<circle cx="200" cy="96" r="24" fill="#E8472B"/><path d="M194 86L212 96L194 106Z" fill="#EFE9DD"/>
+<text x="374" y="40" font-family="ui-monospace,monospace" font-size="11" fill="#877F72" text-anchor="end">☆ 128</text>
+</svg>
+      </div>
+    </article>
+
+  </div>
+</section>
+
+<div class="fly" id="fly" aria-hidden="true"><div class="fly-in" id="flyIn"></div></div>
+
+<section class="sec wrap" id="about">
+  <div class="sec-head rv">
+    <span class="sec-idx">/02</span>
+    <h2 class="sec-ttl">Обо мне</h2>
+    <span class="sec-note">Алматы · UTC+5</span>
+  </div>
+  <div class="about-grid">
+    <div class="about-txt rv" style="--d:.1s">
+      <p>Делаю сайты, игры, айдентику и видео — от идеи до релиза, один в двух ролях: разработчик и дизайнер.</p>
+      <p>Работаю из Алматы с командами и заказчиками на трёх языках. Люблю, когда интерфейс двигается так же аккуратно, как свёрстан.</p>
+    </div>
+    <div class="facts rv" style="--d:.2s">
+      <div class="fact"><b>5+</b><i>лет практики</i></div>
+      <div class="fact"><b>30+</b><i>проектов</i></div>
+      <div class="fact"><b>3</b><i>языка · RU KZ EN</i></div>
+      <div class="about-char" aria-hidden="true">
+<svg viewBox="0 0 441 568" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M322.901 562.975H154.216C152.95 562.975 152.003 561.814 152.256 560.574L240.8 127.383L324.864 560.594C325.104 561.828 324.158 562.975 322.901 562.975Z" fill="#4DB4ED" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M249.816 479.575C249.816 485.177 244.147 489.718 238.546 489.718C232.944 489.718 227.275 485.177 227.275 479.575C227.275 473.973 232.944 469.432 238.546 469.432C244.147 469.432 249.816 473.973 249.816 479.575Z" fill="#3291C5"/>
+<path d="M249.816 515.64C249.816 521.242 244.147 525.783 238.546 525.783C232.944 525.783 227.275 521.242 227.275 515.64C227.275 510.038 232.944 505.497 238.546 505.497C244.147 505.497 249.816 510.038 249.816 515.64Z" fill="#3291C5"/>
+<path d="M322.901 562.975H154.216C152.95 562.975 152.003 561.814 152.256 560.574L240.8 127.383L324.864 560.594C325.104 561.828 324.158 562.975 322.901 562.975Z" fill="#28282D"/>
+<path d="M322.901 562.975H154.216C152.95 562.975 152.003 561.814 152.256 560.574L240.8 127.383L324.864 560.594C325.104 561.828 324.158 562.975 322.901 562.975Z" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M249.816 479.575C249.816 485.177 244.147 489.718 238.546 489.718C232.944 489.718 227.275 485.177 227.275 479.575C227.275 473.973 232.944 469.432 238.546 469.432C244.147 469.432 249.816 473.973 249.816 479.575Z" fill="#3F3E43"/>
+<path d="M249.816 515.64C249.816 521.242 244.147 525.783 238.546 525.783C232.944 525.783 227.275 521.242 227.275 515.64C227.275 510.038 232.944 505.497 238.546 505.497C244.147 505.497 249.816 510.038 249.816 515.64Z" fill="#3F3E43"/>
+<ellipse cx="382.242" cy="327.43" rx="56.9143" ry="52.9698" fill="#F3AA77"/>
+<path d="M382.242 279.46C411.258 279.46 434.157 301.269 434.157 327.43C434.157 353.59 411.258 375.399 382.242 375.399C353.227 375.399 330.328 353.59 330.328 327.43C330.328 301.269 353.227 279.46 382.242 279.46Z" stroke="#1A1A1A" stroke-width="10"/>
+<ellipse cx="79.0745" cy="327.43" rx="56.9143" ry="52.9698" fill="#F3AA77"/>
+<path d="M79.0742 279.46C108.09 279.46 130.989 301.269 130.989 327.43C130.989 353.59 108.09 375.399 79.0742 375.399C50.0586 375.399 27.1602 353.59 27.1602 327.43C27.1602 301.269 50.0586 279.46 79.0742 279.46Z" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M39.6276 213.491L5.25498 211.347C4.25597 215.676 6.26722 220.14 10.1718 222.26L23.2872 229.38L49.2086 241.213L60.3849 244.542C108.091 258.749 156.864 269.092 206.231 275.472L217.618 276.585C249.148 279.667 280.921 279.294 312.37 275.472L336.555 269.894C358.921 264.736 379.799 254.495 397.568 239.966L403.941 234.755C409.792 229.971 414.993 224.443 419.411 218.31L427.308 207.349C432.812 199.71 435.774 190.533 435.774 181.118V178.821C435.774 173.877 434.707 168.992 432.646 164.498C430.089 158.923 426.086 154.134 421.053 150.628L417.846 148.395C411.15 143.731 403.389 140.824 395.276 139.943L387.823 139.134C381.451 138.441 375.017 138.537 368.668 139.418L365.553 139.851C358.675 140.805 351.911 142.45 345.362 144.76L333.47 148.954L277.843 171.318L211.346 195.599L175.54 205.823C151.735 210.921 127.459 213.491 103.115 213.491H84.106H39.6276Z" fill="#28282D" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M82.1099 195.946L74.6187 193.755C74.1108 193.606 73.7238 194.213 74.0725 194.611C80.3604 201.784 88.4714 207.123 97.5465 210.062L107.606 213.32L117.25 217.29C144.907 228.677 173.991 236.229 203.694 239.734L210.579 240.349C229.61 242.048 248.763 241.842 267.754 239.734L283.389 236.441C296.222 233.738 308.314 228.273 318.822 220.426L323.401 217.008C326.679 214.559 329.623 211.693 332.157 208.48L337.307 201.953C340.497 197.909 342.232 192.909 342.232 187.758V186.695C342.232 183.823 341.56 180.99 340.271 178.423C338.776 175.446 336.503 172.93 333.692 171.142L331.15 169.525C327.272 167.059 322.87 165.537 318.297 165.084L313.211 164.579C309.417 164.203 305.591 164.255 301.808 164.734L299.883 164.978C295.709 165.507 291.593 166.423 287.589 167.713L280.488 170L246.915 182.327L206.782 195.71L185.171 201.345C170.798 204.156 156.187 205.571 141.541 205.571H129.988L124.532 204.86C110.182 202.989 95.9991 200.009 82.1099 195.946Z" fill="#241F21"/>
+<ellipse cx="231.785" cy="285.73" rx="174.688" ry="163.417" fill="#F3AA77"/>
+<path d="M231.785 127.313C325.82 127.313 401.472 198.548 401.473 285.73C401.473 372.913 325.82 444.148 231.785 444.148C137.75 444.148 62.0977 372.913 62.0977 285.73C62.0979 198.548 137.75 127.313 231.785 127.313Z" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M307.601 238.865L214.193 292.241C212.31 293.316 210.259 291.018 211.529 289.26C216.938 281.771 224.714 270.72 227.84 264.88C231.03 258.923 234.283 250.466 236.353 244.723C237.037 242.826 234.855 241.282 233.267 242.524C188.818 277.281 131.967 292.092 76.2095 283.44L65.5499 281.786C64.4381 275.856 64.7171 269.749 66.3651 263.945L71.8126 244.76C75.1328 233.068 80.1571 221.927 86.7237 211.699L95.5124 198.009C102.546 187.052 111.182 177.212 121.133 168.816C135.016 157.103 151.194 148.421 168.629 143.33L180.169 139.96C197.212 134.983 214.876 132.456 232.631 132.456H238.631C257.962 132.456 277.175 135.838 295.347 142.428C311.093 148.138 325.909 156.209 339.241 166.348L340.84 167.565C352.97 176.79 363.649 187.781 372.521 200.172L378.905 209.087C387.416 220.974 393.275 234.55 396.086 248.898L397.706 257.168C400.838 273.16 398.776 289.735 391.821 304.472L374.482 298.897C352.532 291.839 333.695 277.413 321.16 258.061L308.936 239.189C308.648 238.744 308.061 238.602 307.601 238.865Z" fill="url(#paint0_linear_184_2141)" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M378.488 290.239H256.685C256.63 290.239 256.588 290.288 256.596 290.342L259.889 311.595C261.726 323.455 268.565 333.957 278.669 340.434C282.697 343.016 287.137 344.888 291.797 345.97L303.866 348.772C312.053 350.672 320.567 350.655 328.746 348.722C340.762 345.882 351.459 339.049 359.087 329.34L360.792 327.17C364.183 322.854 366.99 318.111 369.141 313.061L378.715 290.582C378.784 290.42 378.665 290.239 378.488 290.239Z" fill="white" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M85.6487 290.239H211.926C211.996 290.239 212.047 290.305 212.029 290.373L206.026 312.804C203.023 324.027 195.936 333.723 186.155 339.993C181.672 342.867 176.73 344.951 171.543 346.155L160.27 348.772C152.084 350.672 143.569 350.655 135.391 348.722C123.375 345.882 112.678 339.049 105.049 329.34L103.344 327.17C99.9534 322.854 97.1465 318.111 94.9959 313.061L85.4215 290.582C85.3522 290.42 85.4717 290.239 85.6487 290.239Z" fill="white" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M240.245 424.968L220.182 424.932C199.964 424.895 181.706 412.833 173.74 394.25L238.783 394.251L301.659 394.252C291.977 411.793 273.948 423.114 253.943 424.214L240.245 424.968Z" fill="white" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M12.6574 200.731L96.2642 169.956L100.101 125.194L103.938 107.928L120.143 50.0516C124.166 35.6842 132.439 22.8689 143.877 13.2882C146.966 10.2113 151.148 8.48367 155.508 8.48367H162.619C164.771 8.48367 166.917 8.68972 169.029 9.099L177.196 10.6816C185.982 12.384 195.071 11.5478 203.398 8.27074C210.567 5.44977 218.318 4.4306 225.972 5.30258L258.833 9.04618L277.808 11.2782C288.883 12.5808 299.205 17.5446 307.137 25.3819C312.29 30.4742 316.277 36.6247 318.821 43.4085L323.058 54.7083C325.328 60.7602 327.033 67.0087 328.153 73.3742L341.105 146.982L314.959 156.527L263.163 176.35L222.877 191.058L180.033 205.126L172.281 206.982C117.522 220.093 60.6228 221.58 5.25391 211.346C5.25391 206.606 8.20929 202.369 12.6574 200.731Z" fill="url(#paint1_linear_184_2141)"/>
+<path d="M341.105 146.982L271.796 148.534L208.17 150.772L203.439 151.026C167.08 152.981 131.093 159.337 96.2642 169.956L12.6574 200.731C8.20929 202.369 5.25391 206.606 5.25391 211.346C60.6228 221.58 117.522 220.093 172.281 206.982L180.033 205.126L222.877 191.058L263.163 176.35L314.959 156.527L355.245 141.819L341.105 146.982ZM96.2642 169.956L100.101 125.194L103.938 107.928L120.143 50.0516C124.166 35.6842 132.439 22.8689 143.877 13.2882C146.966 10.2113 151.148 8.48367 155.508 8.48367H162.619C164.771 8.48367 166.917 8.68972 169.029 9.099L177.196 10.6816C185.982 12.384 195.071 11.5478 203.398 8.27074C210.567 5.44977 218.318 4.4306 225.972 5.30258L258.833 9.04618L277.808 11.2782C288.883 12.5808 299.205 17.5446 307.137 25.3819C312.29 30.4742 316.277 36.6247 318.821 43.4085L323.058 54.7083C325.328 60.7602 327.033 67.0087 328.153 73.3742L341.105 146.982" stroke="#1A1A1A" stroke-width="10"/>
+<path d="M250.381 149.362L175.434 152.743L135.425 159.505L96.543 169.648L100.066 127.476L122.559 123.029C138.237 119.93 154.18 118.369 170.161 118.369C191.616 118.369 212.933 115.134 234.212 112.392C256.213 109.558 284.954 108.626 304.477 118.369C314.667 123.454 327.041 134.262 334.483 141.234C337.04 143.63 335.368 147.776 331.865 147.841L250.381 149.362Z" fill="#3F3E43" stroke="#1A1A1A" stroke-width="10"/>
+<defs>
+<linearGradient id="paint0_linear_184_2141" x1="107.813" y1="167.957" x2="403.091" y2="325.176" gradientUnits="userSpaceOnUse"><stop stop-color="#242328"/><stop offset="0.468839" stop-color="#333237"/><stop offset="1" stop-color="#242328"/></linearGradient>
+<linearGradient id="paint1_linear_184_2141" x1="103.868" y1="23.1339" x2="409.289" y2="232.195" gradientUnits="userSpaceOnUse"><stop stop-color="#222226"/><stop offset="0.411544" stop-color="#222226"/><stop offset="1" stop-color="#37373D"/></linearGradient>
+</defs>
+</svg>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="ftr">
+  <div class="wrap ftr-in">
+    <span><a href="#">telegram</a> · <a href="#">email</a> · <a href="#">youtube</a></span>
+    <span>© 2026 Александр · Алматы</span>
+    <span class="tri">Алматыдан<b>·</b>из Алматы<b>·</b>来自阿拉木图</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  var rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var mx = innerWidth/2, my = innerHeight/2;
+  addEventListener('mousemove', function(e){ mx = e.clientX; my = e.clientY; }, {passive:true});
+
+  /* ---- кастомный курсор ---- */
+  var cur = document.getElementById('cur');
+  if (fine && !rm) {
+    var cx = mx, cy = my, seen = false;
+    addEventListener('mousemove', function(){ if(!seen){seen=true;cur.classList.add('on');} }, {passive:true});
+    document.addEventListener('mouseover', function(e){
+      cur.classList.toggle('big', !!e.target.closest('a,button,.row'));
+    });
+    (function loopCur(){
+      cx += (mx - cx) * .28; cy += (my - cy) * .28;
+      cur.style.transform = 'translate3d(' + cx + 'px,' + cy + 'px,0) translate(-50%,-50%)';
+      requestAnimationFrame(loopCur);
+    })();
+  }
+
+  /* ---- reveal-каскад ---- */
+  var rvs = document.querySelectorAll('.rv');
+  if (rm || !('IntersectionObserver' in window)) {
+    rvs.forEach(function(el){ el.classList.add('in'); });
+  } else {
+    var io = new IntersectionObserver(function(es){
+      es.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, {threshold:.12});
+    rvs.forEach(function(el){ io.observe(el); });
+  }
+
+  /* ---- плавающее превью (lerp за курсором) ---- */
+  var fly = document.getElementById('fly'), flyIn = document.getElementById('flyIn');
+  var rows = Array.prototype.slice.call(document.querySelectorAll('.row'));
+  if (fine && !rm) {
+    var fx = mx, fy = my, active = null;
+    rows.forEach(function(row){
+      row.addEventListener('mouseenter', function(){
+        var pre = row.querySelector('.row-pre');
+        if (!pre) return;
+        flyIn.innerHTML = pre.innerHTML;
+        active = row; fly.classList.add('show');
+      });
+      row.addEventListener('mouseleave', function(){
+        if (active === row) { active = null; fly.classList.remove('show'); }
+      });
+    });
+    (function loopFly(){
+      var w = fly.offsetWidth || 340, h = fly.offsetHeight || 255;
+      var tx = Math.min(Math.max(mx + 30, 12), innerWidth - w - 12);
+      var ty = Math.min(Math.max(my - h - 26, 12), innerHeight - h - 12);
+      fx += (tx - fx) * .13; fy += (ty - fy) * .13;
+      fly.style.transform = 'translate3d(' + fx + 'px,' + fy + 'px,0)';
+      requestAnimationFrame(loopFly);
+    })();
+  }
+
+  /* ---- тач/клавиатура: статичное превью под строкой ---- */
+  function toggleRow(row){
+    var was = row.classList.contains('open');
+    rows.forEach(function(r){ r.classList.remove('open'); });
+    if (!was) row.classList.add('open');
+  }
+  rows.forEach(function(row){
+    if (!fine) row.addEventListener('click', function(){ toggleRow(row); });
+    row.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRow(row); }
+    });
+  });
+
+  /* ---- фильтры (таймер скрытия хранится на карточке) ---- */
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
+  function applyFilter(f){
+    chips.forEach(function(c){
+      var on = c.dataset.f === f;
+      c.classList.toggle('act', on);
+      c.setAttribute('aria-pressed', String(on));
+    });
+    rows.forEach(function(row){
+      var show = (f === 'all') || (row.dataset.cat === f);
+      if (row._hideT) { clearTimeout(row._hideT); row._hideT = null; }
+      if (show) {
+        row.style.display = '';
+        requestAnimationFrame(function(){ requestAnimationFrame(function(){ row.classList.remove('hid'); }); });
+      } else {
+        row.classList.add('hid');
+        row.classList.remove('open');
+        row._hideT = setTimeout(function(){ row.style.display = 'none'; row._hideT = null; }, rm ? 0 : 460);
+      }
+    });
+    fly.classList.remove('show');
+  }
+  chips.forEach(function(c){ c.addEventListener('click', function(){ applyFilter(c.dataset.f); }); });
+
+  /* ---- шапка: Игры/Видео сразу включают фильтр ---- */
+  document.querySelectorAll('[data-goto]').forEach(function(a){
+    a.addEventListener('click', function(){ applyFilter(a.dataset.goto); });
+  });
+})();
+</script>

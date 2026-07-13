@@ -1,0 +1,27 @@
+# deps
+node_modules/
+.pnp
+.pnp.js
+
+# build
+/build/
+/dist/
+.react-router/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# temp reference artifacts
+_handoff/_skeleton.html
+_handoff/**/tg.html
+_handoff/**/*.tsv
