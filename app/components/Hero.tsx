@@ -2,6 +2,7 @@
 // класс .play-in ставится после маунта (client) при отсутствии reduced-motion.
 import { useEffect, useState } from "react";
 import { ENSP } from "~/lib/chars";
+import { useLang } from "~/lib/i18n";
 import { cssVars } from "~/lib/style";
 import { prefersReducedMotion } from "~/lib/media";
 import { NowPreview } from "./previews/NowPreview";
@@ -10,6 +11,7 @@ import { MountainsPreview } from "./previews/MountainsPreview";
 const NAME = "АЛЕКСАНДР";
 
 export function Hero() {
+  const { t } = useLang();
   const [playIn, setPlayIn] = useState(false);
   useEffect(() => {
     if (!prefersReducedMotion()) setPlayIn(true);
@@ -22,9 +24,10 @@ export function Hero() {
           <div className="hero-top">
             <span className="lab">
               <b>/00</b>
-              {ENSP}портфолио — 2026
+              {ENSP}
+              {t.hero.portfolio}
             </span>
-            <span className="lab">Алматы, Казахстан</span>
+            <span className="lab">{t.hero.location}</span>
           </div>
           <h1 id="nm" className={playIn ? "play-in" : undefined} aria-label={NAME}>
             {NAME.split("").map((ch, i) => (
@@ -43,13 +46,14 @@ export function Hero() {
         <div className="tile td t-now rv">
           <span className="lab">
             <b>●</b>
-            {ENSP}сейчас в работе
+            {ENSP}
+            {t.hero.now}
           </span>
           <div className="now-pv">
             <NowPreview />
           </div>
-          <div className="now-name">KIDO — SaaS-платформа детских курсов</div>
-          <span className="now-line">fix(booking): validation i18n · сегодня</span>
+          <div className="now-name">{t.hero.nowName}</div>
+          <span className="now-line">{t.hero.nowLine}</span>
           <div
             className="now-bar"
             role="img"
@@ -61,24 +65,22 @@ export function Hero() {
         </div>
 
         <div className="tile tl t-role rv">
-          <span className="lab">/ роль</span>
+          <span className="lab">{t.hero.roleLabel}</span>
           <p className="role">
-            разработчик <em>&amp; дизайнер</em>
+            {t.hero.roleA} <em>{t.hero.roleB}</em>
           </p>
-          <p className="sub">
-            frontend из Алматы · React, Next.js, Web3 — плюс айдентика, игры и
-            видео
-          </p>
+          <p className="sub">{t.hero.roleSub}</p>
         </div>
 
         <div className="tile td t-loc rv">
           <span className="lab">
             <b>◆</b>
-            {ENSP}база
+            {ENSP}
+            {t.hero.base}
           </span>
           <MountainsPreview />
           <div>
-            <div className="loc-big">Алматы</div>
+            <div className="loc-big">{t.hero.city}</div>
             <span className="lab">43.238°N · 76.889°E</span>
           </div>
         </div>
@@ -86,7 +88,8 @@ export function Hero() {
         <div className="tile td t-cont rv">
           <span className="lab">
             <b>/</b>
-            {ENSP}контакты
+            {ENSP}
+            {t.hero.contacts}
           </span>
           <ul>
             <li>
@@ -111,15 +114,15 @@ export function Hero() {
         </div>
 
         <div className="tile td t-fact rv">
-          <span className="lab">выпущено</span>
+          <span className="lab">{t.hero.released}</span>
           <div>
             <div className="num">30+</div>
-            <p className="cap">проектов — от лендингов до игровых прототипов</p>
+            <p className="cap">{t.hero.releasedCap}</p>
           </div>
         </div>
 
         <div className="tile td t-seal rv">
-          <span className="lab">печать</span>
+          <span className="lab">{t.hero.seal}</span>
           <div className="seal-big" aria-hidden="true">
             АК
           </div>

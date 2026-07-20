@@ -1,21 +1,15 @@
 // Панель «эксперимент» (.expl): палитра / шрифты / тумблер маскота.
-// Открытие/закрытие + Escape. aria-pressed производны от префов.
+// Открытие/закрытие + Escape. aria-pressed производны от префов; подписи — из словаря.
 import { useEffect, useRef, useState } from "react";
+import { useLang } from "~/lib/i18n";
 import { usePrefs } from "~/lib/prefs";
 import type { Fonts, Palette } from "~/lib/prefs";
 
-const PALETTES: { pal: Palette; label: string }[] = [
-  { pal: "ugol", label: "уголь" },
-  { pal: "graphite", label: "графит" },
-  { pal: "midnight", label: "полночь" },
-];
-
-const FONT_PAIRS: { fp: Fonts; label: string }[] = [
-  { fp: "brand", label: "фирменная" },
-  { fp: "strict", label: "строгая" },
-];
+const PALETTES: Palette[] = ["ugol", "graphite", "midnight"];
+const FONT_PAIRS: Fonts[] = ["brand", "strict"];
 
 export function ExperimentPanel() {
+  const { t } = useLang();
   const { palette, fonts, mascotOn, setPalette, setFonts, toggleMascot } =
     usePrefs();
   const [open, setOpen] = useState(false);
@@ -36,37 +30,37 @@ export function ExperimentPanel() {
   return (
     <div className="expl" id="expl">
       <div className="exp-body" id="expBody" hidden={!open}>
-        <span className="exp-t">эксперимент</span>
+        <span className="exp-t">{t.experiment.title}</span>
         <div className="exp-row" role="group" aria-label="Палитра">
-          <span>палитра</span>
-          {PALETTES.map(({ pal, label }) => (
+          <span>{t.experiment.palette}</span>
+          {PALETTES.map((pal) => (
             <button
               key={pal}
               data-pal={pal}
               aria-pressed={palette === pal}
               onClick={() => setPalette(pal)}
             >
-              {label}
+              {t.experiment.palettes[pal]}
             </button>
           ))}
         </div>
         <div className="exp-row" role="group" aria-label="Шрифтовая пара">
-          <span>шрифты</span>
-          {FONT_PAIRS.map(({ fp, label }) => (
+          <span>{t.experiment.fonts}</span>
+          {FONT_PAIRS.map((fp) => (
             <button
               key={fp}
               data-fp={fp}
               aria-pressed={fonts === fp}
               onClick={() => setFonts(fp)}
             >
-              {label}
+              {t.experiment.fontPairs[fp]}
             </button>
           ))}
         </div>
         <div className="exp-row">
-          <span>маскот</span>
+          <span>{t.experiment.mascot}</span>
           <button id="mToggle" aria-pressed={mascotOn} onClick={toggleMascot}>
-            {mascotOn ? "вкл" : "выкл"}
+            {mascotOn ? t.experiment.on : t.experiment.off}
           </button>
         </div>
       </div>

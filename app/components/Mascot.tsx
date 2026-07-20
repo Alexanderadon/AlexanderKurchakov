@@ -5,6 +5,8 @@
 // foreignObject-детали глаз, и стилизуются правилом CSS `.m-fig svg`.
 import { useCallback, useEffect, useRef } from "react";
 import type { ComponentType, SVGProps } from "react";
+import type { Dict } from "~/lib/i18n";
+import { useLang } from "~/lib/i18n";
 import { usePrefs } from "~/lib/prefs";
 import { useMascotRef } from "~/lib/mascot";
 import type { FigureName } from "~/lib/mascot";
@@ -20,17 +22,23 @@ const FIGURES: { name: FigureName; Fig: ComponentType<SVGProps<SVGSVGElement>> }
   { name: "tall", Fig: Char05 },
 ];
 
-const SECTIONS: [string, FigureName, string][] = [
-  ["hero", "fire", "сәлем! я тут гид"],
-  ["works", "buddy", "это все мои работы"],
-  ["about", "dark", "немного обо мне"],
+// Реплики — в словаре (t.mascot); здесь только соответствие секция → фигура → ключ.
+type SectionKey = keyof Dict["mascot"]["sections"];
+const SECTIONS: [string, FigureName, SectionKey][] = [
+  ["hero", "fire", "hero"],
+  ["works", "buddy", "works"],
+  ["about", "dark", "about"],
 ];
-const QUIPS = ["ойбай!", "код и кисть", "шеберлік!", "你好!"];
-const GREETING = "сәлем! я тут гид";
 
 export function Mascot() {
   const { mascotOn } = usePrefs();
   const handleRef = useMascotRef();
+
+  // Актуальный словарь в ref: обработчики и IntersectionObserver-колбэки
+  // читают его синхронно, не пересоздаваясь при смене языка.
+  const { t } = useLang();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   // Держим актуальное mOn в ref (обработчики/наблюдатели читают его синхронно).
   const mOnRef = useRef(mascotOn);
@@ -121,7 +129,7 @@ export function Mascot() {
     const fig = figRefs.current;
     if (mascotOn) {
       curMRef.current = null;
-      setM(wantMRef.current, GREETING);
+      setM(wantMRef.current, tRef.current.mascot.sections.hero);
     } else {
       bubbleRef.current?.classList.remove("show");
       (Object.keys(fig) as FigureName[]).forEach((k) =>
@@ -142,7 +150,7 @@ export function Mascot() {
       storedOff = false;
     }
     if (mOnRef.current && !storedOff && !curMRef.current)
-      setM(wantMRef.current, GREETING);
+      setM(wantMRef.current, tRef.current.mascot.sections.hero);
 
     const cleanups: Array<() => void> = [];
     if ("IntersectionObserver" in window) {
@@ -152,7 +160,7 @@ export function Mascot() {
             if (!e.isIntersecting) return;
             const id = (e.target as HTMLElement).id;
             const m = SECTIONS.find((x) => x[0] === id);
-            if (m) setM(m[1], m[2]);
+            if (m) setM(m[1], tRef.current.mascot.sections[m[2]]);
           });
         },
         { rootMargin: "-42% 0px -42% 0px", threshold: 0 },
@@ -166,7 +174,7 @@ export function Mascot() {
       const fio = new IntersectionObserver(
         (entries) => {
           entries.forEach((e) => {
-            if (e.isIntersecting) setM("tall", "пиши — не стесняйся");
+            if (e.isIntersecting) setM("tall", tRef.current.mascot.footerPhrase);
           });
         },
         { threshold: 0.85 },
@@ -197,7 +205,8 @@ export function Mascot() {
         520,
       );
     }
-    say(QUIPS[Math.floor(Math.random() * QUIPS.length)]);
+    const quips = tRef.current.mascot.quips;
+    say(quips[Math.floor(Math.random() * quips.length)]);
   };
 
   return (

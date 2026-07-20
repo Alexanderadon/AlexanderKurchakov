@@ -3,6 +3,7 @@ import { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 import type { FilterCategory } from "~/data/works";
 import { PILLS } from "~/data/works";
+import { useLang } from "./i18n";
 import { useMascot } from "./mascot";
 
 interface WorksValue {
@@ -14,6 +15,7 @@ const WorksContext = createContext<WorksValue | null>(null);
 
 export function WorksProvider({ children }: { children: ReactNode }) {
   const [category, setCategoryState] = useState<FilterCategory>("all");
+  const { t, lang } = useLang();
   const { say } = useMascot();
 
   const setCategory = (
@@ -22,8 +24,8 @@ export function WorksProvider({ children }: { children: ReactNode }) {
   ): void => {
     setCategoryState(cat);
     if (!opts?.silent) {
-      const label = PILLS.find((p) => p.cat === cat)?.label ?? "";
-      say("показываю: " + label.toLowerCase());
+      const label = PILLS.find((p) => p.cat === cat)?.label;
+      say(t.mascot.showing + (label ? label[lang].toLowerCase() : ""));
     }
   };
 

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FilterCategory, WorkItem } from "~/data/works";
 import { WORKS, PILLS } from "~/data/works";
 import { ENSP } from "~/lib/chars";
+import { useLang } from "~/lib/i18n";
 import { usePrefs } from "~/lib/prefs";
 import { useWorks } from "~/lib/works-context";
 import { useMascot } from "~/lib/mascot";
@@ -24,6 +25,7 @@ function moveInd(marker: HTMLElement | null, btn: HTMLElement | null): void {
 }
 
 export function Works() {
+  const { t, lang } = useLang();
   const { category, setCategory } = useWorks();
   const { setFigure } = useMascot();
   const { fonts } = usePrefs();
@@ -95,7 +97,7 @@ export function Works() {
       cancelled = true;
       window.removeEventListener("resize", position);
     };
-  }, [category, view, fonts]);
+  }, [category, view, fonts, lang]);
 
   // кроссфейд сетка ↔ список (пропускаем первый рендер)
   useEffect(() => {
@@ -172,8 +174,8 @@ export function Works() {
   const setView = (v: "grid" | "list"): void => {
     if (v === view) return;
     setViewState(v);
-    if (v === "list") setFigure("wide", "редкий гость! это индекс");
-    else setFigure("buddy", "и снова плитки");
+    if (v === "list") setFigure("wide", t.mascot.listView);
+    else setFigure("buddy", t.mascot.gridView);
   };
 
   const onFlyEnter = (i: number): void => {
@@ -197,9 +199,10 @@ export function Works() {
           <div className="h2wrap">
             <span className="lab">
               <b>/01</b>
-              {ENSP}избранное 2021–2026
+              {ENSP}
+              {t.works.label}
             </span>
-            <h2>Работы</h2>
+            <h2>{t.works.title}</h2>
           </div>
           <div className="ctrls">
             <div
@@ -217,7 +220,7 @@ export function Works() {
                   aria-pressed={category === p.cat}
                   onClick={() => setCategory(p.cat)}
                 >
-                  {p.label}
+                  {p.label[lang]}
                 </button>
               ))}
             </div>
@@ -234,14 +237,14 @@ export function Works() {
                 aria-pressed={view === "grid"}
                 onClick={() => setView("grid")}
               >
-                сетка
+                {t.works.grid}
               </button>
               <button
                 data-view="list"
                 aria-pressed={view === "list"}
                 onClick={() => setView("list")}
               >
-                список
+                {t.works.list}
               </button>
             </div>
           </div>

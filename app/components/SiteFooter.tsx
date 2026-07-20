@@ -1,5 +1,8 @@
-// Футер (#contact): ссылки, орнамент, копирайт.
+// Футер (#contact): ссылки, орнамент, копирайт. Названия соцсетей не переводятся.
+import { useLang } from "~/lib/i18n";
+
 export function SiteFooter() {
+  const { t } = useLang();
   return (
     <footer id="contact">
       <div className="fwrap">
@@ -20,8 +23,8 @@ export function SiteFooter() {
           <i />
         </div>
         <div className="copy">
-          © 2026 Александр Курчаков · Алматы
-          <span className="mono">шеберлік · 匠心 · мастерство</span>
+          {t.footer.copy}
+          <span className="mono">{t.footer.motif}</span>
         </div>
       </div>
     </footer>

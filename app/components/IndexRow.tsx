@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import type { WorkItem } from "~/data/works";
+import { useLang } from "~/lib/i18n";
 import { PreviewClone } from "./previews";
 
 export function IndexRow({
@@ -28,6 +29,7 @@ export function IndexRow({
   onFlyEnter: (i: number) => void;
   onFlyLeave: (i: number) => void;
 }) {
+  const { lang } = useLang();
   const [displayNone, setDisplayNone] = useState(false);
   const [hidden, setHidden] = useState(false);
   const hideTimer = useRef<number>(0);
@@ -90,10 +92,10 @@ export function IndexRow({
     >
       <span className="ridx">{item.index}</span>
       <h3 className="rttl">
-        {item.listTitle}
-        <small>{item.listSub}</small>
+        {item.listTitle[lang]}
+        <small>{item.listSub[lang]}</small>
       </h3>
-      <span className="rcat">{item.listCat}</span>
+      <span className="rcat">{item.listCat[lang]}</span>
       <div className="row-pre">{open && <PreviewClone item={item} />}</div>
     </article>
   );
