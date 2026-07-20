@@ -1,12 +1,21 @@
 // Бегущая строка (.mq-tile). Две одинаковые дорожки для бесшовной анимации.
+// Слова — из словаря (культурный мотив «шеберлік · 匠心» присутствует во всех языках).
 // Средние точки окружены обычными пробелами, хвост — неразрывный пробел (&nbsp;).
-const NBSP = " ";
+import { Fragment } from "react";
+import { useLang } from "~/lib/i18n";
+
+const NBSP = " ";
 
 function Line() {
+  const { t } = useLang();
   return (
     <span>
-      сайты <b>·</b> игры <b>·</b> айдентика <b>·</b> видео <b>·</b> шеберлік <b>·</b> 匠心 <b>·</b> мастерство <b>·</b>
-      {NBSP}
+      {t.marquee.map((word, i) => (
+        <Fragment key={i}>
+          {word} <b>·</b>
+          {i === t.marquee.length - 1 ? NBSP : " "}
+        </Fragment>
+      ))}
     </span>
   );
 }

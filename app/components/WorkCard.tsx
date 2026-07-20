@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import type { WorkItem } from "~/data/works";
 import { ARROW, PLAY } from "~/lib/chars";
+import { useLang } from "~/lib/i18n";
 import { prefersReducedMotion } from "~/lib/media";
 import { PreviewArt } from "./previews";
 
@@ -16,7 +17,8 @@ const MEDIA_STYLE: CSSProperties = {
   display: "block",
 };
 
-const SND_IDLE = PLAY + " смотреть";
+// Статус подписи звука: idle → «смотреть», off/on → «звук выкл/вкл» (текст — из словаря).
+type SndState = "idle" | "off" | "on";
 
 function rootClass(item: WorkItem): string {
   return [
@@ -38,12 +40,19 @@ export function WorkCard({
   visible: boolean;
   rm: boolean;
 }) {
+  const { t, lang } = useLang();
   const cardRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideTimer = useRef<number>(0);
   const rafIds = useRef<number[]>([]);
   const firstVisible = useRef(true);
-  const [sndText, setSndText] = useState(SND_IDLE);
+  const [snd, setSnd] = useState<SndState>("idle");
+  const sndText =
+    snd === "idle"
+      ? PLAY + " " + t.video.watch
+      : snd === "off"
+        ? t.video.sndOff
+        : t.video.sndOn;
 
   // Показ/скрытие при фильтрации — таймер на элементе, без гонок (как toggleItem).
   useEffect(() => {
@@ -87,9 +96,7 @@ export function WorkCard({
     v.muted = true; // React не всегда рендерит атрибут muted — гарантируем свойство
     const RM = prefersReducedMotion();
     const syncSnd = (): void =>
-      setSndText(
-        v.paused ? SND_IDLE : v.muted ? "звук выкл" : "звук вкл",
-      );
+      setSnd(v.paused ? "idle" : v.muted ? "off" : "on");
     const onPlay = (): void => {
       if (item.dataSkip && v.currentTime < item.dataSkip)
         v.currentTime = item.dataSkip;
@@ -133,7 +140,7 @@ export function WorkCard({
     } else {
       v.muted = !v.muted;
     }
-    setSndText(v.paused ? SND_IDLE : v.muted ? "звук выкл" : "звук вкл");
+    setSnd(v.paused ? "idle" : v.muted ? "off" : "on");
   };
 
   const onCardClick = (e: MouseEvent<HTMLElement>): void => {
@@ -218,11 +225,11 @@ export function WorkCard({
       <div className="wm">
         <div className="row">
           <span className="wi">{item.index}</span>
-          <h3>{item.title}</h3>
+          <h3>{item.title[lang]}</h3>
         </div>
         <span className="tag">
           <span className={"dot " + item.dot} />
-          {item.tag}
+          {item.tag[lang]}
         </span>
       </div>
     </article>

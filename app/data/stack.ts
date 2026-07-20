@@ -1,6 +1,10 @@
 // Группы стека (секция «Обо мне» → плитка «/ инструменты»). Источник — прежний site-markup.ts.
+// Названия групп — Localized ({ru,kz,en}); сами навыки-чипы не переводятся.
+import type { Localized } from "~/lib/i18n";
+import { L, same } from "~/lib/i18n";
+
 export interface StackGroup {
-  title: string;
+  title: Localized;
   items: string[];
 }
 
@@ -15,7 +19,7 @@ export const KEY_STACK: string[] = [
 
 export const STACK: StackGroup[] = [
   {
-    title: "frontend",
+    title: same("frontend"),
     items: [
       "React",
       "Next.js",
@@ -44,15 +48,15 @@ export const STACK: StackGroup[] = [
     ],
   },
   {
-    title: "тестирование",
+    title: L("тестирование", "тестілеу", "testing"),
     items: ["Jest", "Vitest", "React Testing Library"],
   },
   {
-    title: "вёрстка и стили",
+    title: L("вёрстка и стили", "беттеу және стильдер", "markup & styles"),
     items: ["HTML5", "CSS3", "SCSS", "Sass", "Less", "BEM", "Bootstrap"],
   },
   {
-    title: "backend & api",
+    title: same("backend & api"),
     items: [
       "Node.js",
       "Express.js",
@@ -67,11 +71,11 @@ export const STACK: StackGroup[] = [
     ],
   },
   {
-    title: "платёжные системы",
+    title: L("платёжные системы", "төлем жүйелері", "payments"),
     items: ["Stripe"],
   },
   {
-    title: "базы данных и BaaS",
+    title: L("базы данных и BaaS", "дерекқорлар және BaaS", "databases & BaaS"),
     items: [
       "Supabase",
       "PostgreSQL",
@@ -82,11 +86,11 @@ export const STACK: StackGroup[] = [
     ],
   },
   {
-    title: "сборка и пакеты",
+    title: L("сборка и пакеты", "құрастыру және пакеттер", "build & packages"),
     items: ["Vite", "Webpack", "Gulp", "Turborepo", "pnpm", "NPM", "Yarn"],
   },
   {
-    title: "инструменты",
+    title: L("инструменты", "құралдар", "tools"),
     items: [
       "Docker",
       "GitHub Actions",
@@ -104,7 +108,7 @@ export const STACK: StackGroup[] = [
     ],
   },
   {
-    title: "AI-инструменты",
+    title: L("AI-инструменты", "AI-құралдар", "AI tools"),
     items: [
       "Claude (Sonnet/Opus)",
       "ChatGPT",
@@ -117,15 +121,15 @@ export const STACK: StackGroup[] = [
     ],
   },
   {
-    title: "CMS",
+    title: same("CMS"),
     items: ["WordPress", "Carbon Fields", "OctoberCMS"],
   },
   {
-    title: "дизайн",
+    title: L("дизайн", "дизайн", "design"),
     items: ["Figma", "FigJam", "Photoshop", "UI/UX", "UML"],
   },
   {
-    title: "процессы",
+    title: L("процессы", "процестер", "process"),
     items: ["Scrumban", "Jira", "Notion", "Bitrix24"],
   },
 ];

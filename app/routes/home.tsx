@@ -2,6 +2,7 @@
 // Разметка — настоящий JSX (без dangerouslySetInnerHTML), интерактивность — типизированные хуки.
 import { useRef } from "react";
 import type { Route } from "./+types/home";
+import { LangProvider } from "~/lib/i18n";
 import { PrefsProvider } from "~/lib/prefs";
 import { MascotProvider } from "~/lib/mascot";
 import { WorksProvider } from "~/lib/works-context";
@@ -61,12 +62,14 @@ function Page() {
 
 export default function Home() {
   return (
-    <PrefsProvider>
-      <MascotProvider>
-        <WorksProvider>
-          <Page />
-        </WorksProvider>
-      </MascotProvider>
-    </PrefsProvider>
+    <LangProvider>
+      <PrefsProvider>
+        <MascotProvider>
+          <WorksProvider>
+            <Page />
+          </WorksProvider>
+        </MascotProvider>
+      </PrefsProvider>
+    </LangProvider>
   );
 }

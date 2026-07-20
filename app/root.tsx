@@ -15,9 +15,10 @@ export const links: Route.LinksFunction = () => [
   { rel: "preload", href: "/fonts/onest-400-cyrillic.woff2", as: "font", type: "font/woff2", crossOrigin: "anonymous" },
 ];
 
-// Восстанавливает выбор палитры/шрифтов из localStorage и ставит класс .js
+// Восстанавливает выбор палитры/шрифтов/языка из localStorage и ставит класс .js
 // на <html> ДО отрисовки — чтобы не мигало и чтобы сработал reveal-гейт.
-const BOOT = `(function(d){d.classList.add("js");try{var p=localStorage.getItem("bento2:palette");if(p==="graphite"||p==="midnight")d.setAttribute("data-palette",p);var f=localStorage.getItem("bento2:fonts");if(f==="strict")d.setAttribute("data-fonts",f)}catch(e){}})(document.documentElement)`;
+// Язык: RU → lang="ru" (дефолт в разметке), KZ → "kk", EN → "en".
+const BOOT = `(function(d){d.classList.add("js");try{var p=localStorage.getItem("bento2:palette");if(p==="graphite"||p==="midnight")d.setAttribute("data-palette",p);var f=localStorage.getItem("bento2:fonts");if(f==="strict")d.setAttribute("data-fonts",f);var l=localStorage.getItem("bento2:lang");if(l==="kz")d.lang="kk";else if(l==="en")d.lang="en"}catch(e){}})(document.documentElement)`;
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
