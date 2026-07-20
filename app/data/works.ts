@@ -29,6 +29,7 @@ export interface WorkItem {
   // изображение
   imgSrc?: string;
   imgAlt?: string;
+  imgPos?: string; // object-position, если центр-кроп режет важное (напр. "left center")
   // ссылка-обёртка .wlink
   linkHref?: string;
   linkAria?: Localized;
@@ -77,6 +78,7 @@ export const WORKS: WorkItem[] = [
     dot: "b",
     imgSrc: "/img/works/kido-card.jpg",
     imgAlt: "KIDO — живой сайт: каталог детских курсов",
+    imgPos: "left center",
     listTitle: same("KIDO"),
     listSub: L(
       "SaaS-каталог детских курсов · React Router 7 · Supabase · Stripe",
@@ -405,6 +407,7 @@ export const WORKS: WorkItem[] = [
     ),
     dot: "f",
     imgSrc: "/img/works/profi-card.jpg",
+    imgPos: "left center",
     imgAlt:
       "Мастера — обложка проекта на Behance: макет платформы поиска специалистов, 16 страниц за 2 дня",
     linkHref:

@@ -183,7 +183,11 @@ export function WorkCard({
             src={item.imgSrc}
             alt={item.imgAlt}
             loading="lazy"
-            style={MEDIA_STYLE}
+            style={
+              item.imgPos
+                ? { ...MEDIA_STYLE, objectPosition: item.imgPos }
+                : MEDIA_STYLE
+            }
           />
         )}
         {isVideo && (
