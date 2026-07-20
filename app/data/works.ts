@@ -1,4 +1,4 @@
-// Типизированные данные 13 работ + фильтры. Источник истины — прежний site-markup.ts.
+// Типизированные данные 17 работ + фильтры. Источник истины — прежний site-markup.ts.
 // Переводимые строки — Localized ({ru,kz,en}); имена собственные и техтермины
 // не переводятся (helper `same`). Категории карточек (без "all") и фильтра (с "all").
 import type { Localized } from "~/lib/i18n";
@@ -451,5 +451,141 @@ export const WORKS: WorkItem[] = [
       "the site you're viewing · React Router · i18n RU/KZ/EN · 2026",
     ),
     listCat: CAT_SITES,
+  },
+  {
+    index: "/14",
+    cat: "sites",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Воздух Алматы — мониторинг качества воздуха",
+      "Алматы ауасы — ауа сапасының мониторингі",
+      "Almaty Air — air quality monitoring",
+    ),
+    tag: L(
+      "Сайты · Next.js · Supabase · Leaflet · PWA · 2026",
+      "Сайттар · Next.js · Supabase · Leaflet · PWA · 2026",
+      "Sites · Next.js · Supabase · Leaflet · PWA · 2026",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/almaty-air-card.jpg",
+    imgAlt:
+      "Воздух Алматы — дашборд качества воздуха: карта районов города с индексами загрязнения и показателями PM2.5",
+    imgPos: "center top",
+    linkHref: "https://almaty-air-two.vercel.app",
+    linkAria: L(
+      "Открыть живой сайт «Воздух Алматы»",
+      "«Алматы ауасы» тірі сайтын ашу",
+      "Open the live Almaty Air website",
+    ),
+    listTitle: L("Воздух Алматы", "Алматы ауасы", "Almaty Air"),
+    listSub: L(
+      "PWA-дашборд качества воздуха · карта районов · 2026",
+      "ауа сапасының PWA-дашборды · аудандар картасы · 2026",
+      "air quality PWA dashboard · district map · 2026",
+    ),
+    listCat: CAT_SITES,
+  },
+  {
+    index: "/15",
+    cat: "sites",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Qazaqstan Rugby — сайт федерации регби",
+      "Qazaqstan Rugby — регби федерациясының сайты",
+      "Qazaqstan Rugby — rugby federation website",
+    ),
+    tag: L(
+      "Сайты · WordPress-тема · TypeScript · 2021–2022",
+      "Сайттар · WordPress тақырыбы · TypeScript · 2021–2022",
+      "Sites · WordPress theme · TypeScript · 2021–2022",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/rugby-card.jpg",
+    imgAlt:
+      "Qazaqstan Rugby — главная страница сайта федерации регби: клубы, матчи и новости",
+    imgPos: "center top",
+    linkHref: "https://alexanderadon.github.io/dist/",
+    linkAria: L(
+      "Открыть демо сайта Qazaqstan Rugby",
+      "Qazaqstan Rugby сайтының демосын ашу",
+      "Open the Qazaqstan Rugby website demo",
+    ),
+    listTitle: same("Qazaqstan Rugby"),
+    listSub: L(
+      "сайт федерации: клубы, матчи, новости · 2022",
+      "федерация сайты: клубтар, матчтар, жаңалықтар · 2022",
+      "federation website: clubs, matches, news · 2022",
+    ),
+    listCat: CAT_SITES,
+  },
+  {
+    index: "/16",
+    cat: "sites",
+    wide: false,
+    kind: "img",
+    title: L(
+      "PO|ANIME — аниме-портал на October CMS",
+      "PO|ANIME — October CMS-тегі аниме-порталы",
+      "PO|ANIME — anime portal on October CMS",
+    ),
+    tag: L(
+      "Сайты · October CMS · PHP · 2021",
+      "Сайттар · October CMS · PHP · 2021",
+      "Sites · October CMS · PHP · 2021",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/poanime-card.jpg",
+    imgAlt:
+      "PO|ANIME — главная страница аниме-портала на October CMS: витрина тайтлов, блог и магазин",
+    imgPos: "center top",
+    linkHref: "https://alexanderadon.github.io/site-12/assets/",
+    linkAria: L(
+      "Открыть демо PO|ANIME",
+      "PO|ANIME демосын ашу",
+      "Open the PO|ANIME demo",
+    ),
+    listTitle: same("PO|ANIME"),
+    listSub: L(
+      "аниме-портал: витрина, блог, магазин · 2021",
+      "аниме-портал: витрина, блог, дүкен · 2021",
+      "anime portal: showcase, blog, store · 2021",
+    ),
+    listCat: CAT_SITES,
+  },
+  {
+    index: "/17",
+    cat: "design",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Wooder — лендинг мебельного бренда",
+      "Wooder — жиһаз брендінің лендингі",
+      "Wooder — furniture brand landing",
+    ),
+    tag: L(
+      "Дизайн · вёрстка · HTML/Less · 2021",
+      "Дизайн · вёрстка · HTML/Less · 2021",
+      "Design · markup · HTML/Less · 2021",
+    ),
+    dot: "f",
+    imgSrc: "/img/works/wooder-card.jpg",
+    imgAlt:
+      "Wooder — первый экран лендинга мебельного бренда: деревянная мебель и навигация",
+    imgPos: "center top",
+    linkHref: "https://alexanderadon.github.io/Wooder__site/",
+    linkAria: L(
+      "Открыть демо Wooder",
+      "Wooder демосын ашу",
+      "Open the Wooder demo",
+    ),
+    listTitle: same("Wooder"),
+    listSub: L(
+      "адаптивная вёрстка лендинга · HTML/Less · 2021",
+      "лендингтің адаптивті вёрсткасы · HTML/Less · 2021",
+      "responsive landing page markup · HTML/Less · 2021",
+    ),
+    listCat: CAT_DESIGN,
   },
 ];
