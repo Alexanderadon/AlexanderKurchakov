@@ -1,14 +1,12 @@
 // Резолвер инлайн-SVG-превью карточек + клон превью для .fly / .row-pre.
 import type { ComponentType } from "react";
 import type { PreviewKey, WorkItem } from "~/data/works";
-import { KidoPreview } from "./KidoPreview";
 import { LogofolioPreview } from "./LogofolioPreview";
 import { CanvasPreview } from "./CanvasPreview";
 import { SneakersPreview } from "./SneakersPreview";
 import { MucklikerPreview } from "./MucklikerPreview";
 
 const PREVIEWS: Record<PreviewKey, ComponentType> = {
-  kido: KidoPreview,
   logofolio: LogofolioPreview,
   canvas: CanvasPreview,
   sneakers: SneakersPreview,

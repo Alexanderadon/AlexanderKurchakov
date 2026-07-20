@@ -171,7 +171,7 @@ export function WorkCard({
           href={item.linkHref}
           target="_blank"
           rel="noopener"
-          aria-label={item.linkAria}
+          aria-label={item.linkAria?.[lang]}
         />
       )}
       <div className="pv">
