@@ -1,4 +1,4 @@
-// Типизированные данные 10 работ + фильтры. Источник истины — прежний site-markup.ts.
+// Типизированные данные 13 работ + фильтры. Источник истины — прежний site-markup.ts.
 // Переводимые строки — Localized ({ru,kz,en}); имена собственные и техтермины
 // не переводятся (helper `same`). Категории карточек (без "all") и фильтра (с "all").
 import type { Localized } from "~/lib/i18n";
@@ -8,7 +8,7 @@ export type Category = "sites" | "design" | "games" | "video" | "logo";
 export type FilterCategory = "all" | Category;
 
 // Ключ инлайн-SVG-превью карточки (резолвится в WorkCard → components/previews).
-export type PreviewKey = "kido" | "logofolio" | "canvas" | "sneakers" | "muckliker";
+export type PreviewKey = "logofolio" | "canvas" | "sneakers" | "muckliker";
 
 export interface WorkItem {
   index: string; // "/01"
@@ -31,7 +31,7 @@ export interface WorkItem {
   imgAlt?: string;
   // ссылка-обёртка .wlink
   linkHref?: string;
-  linkAria?: string;
+  linkAria?: Localized;
   // список (.index)
   listTitle: Localized;
   listSub: Localized;
@@ -63,8 +63,7 @@ export const WORKS: WorkItem[] = [
     index: "/01",
     cat: "sites",
     wide: true,
-    kind: "svg",
-    preview: "kido",
+    kind: "img",
     title: L(
       "KIDO — SaaS-каталог детских курсов",
       "KIDO — балалар курстарының SaaS-каталогы",
@@ -76,6 +75,8 @@ export const WORKS: WorkItem[] = [
       "Sites · React Router 7 · Supabase · Stripe · 2026",
     ),
     dot: "b",
+    imgSrc: "/img/works/kido-card.jpg",
+    imgAlt: "KIDO — живой сайт: каталог детских курсов",
     listTitle: same("KIDO"),
     listSub: L(
       "SaaS-каталог детских курсов · React Router 7 · Supabase · Stripe",
@@ -197,7 +198,11 @@ export const WORKS: WorkItem[] = [
     imgAlt:
       "Апорт — интерфейс приложения: шапка, категории и карточки блюд с ценами",
     linkHref: "https://resto-miniapp.vercel.app",
-    linkAria: "Открыть живое демо «Апорт»",
+    linkAria: L(
+      "Открыть живое демо «Апорт»",
+      "«Апорт» тірі демосын ашу",
+      "Open the live Aport demo",
+    ),
     listTitle: L("Апорт", "Апорт", "Aport"),
     listSub: L(
       "Telegram Mini App для ресторанов · Next.js 16 · Stripe · 2026",
@@ -227,7 +232,11 @@ export const WORKS: WorkItem[] = [
       "POLOGO — дизайн сайта стримингового сервиса, обложка проекта на Behance",
     linkHref:
       "https://www.behance.net/gallery/172883541/POLOGO-Streaming-Service-Website",
-    linkAria: "Открыть проект POLOGO на Behance",
+    linkAria: L(
+      "Открыть проект POLOGO на Behance",
+      "POLOGO жобасын Behance-те ашу",
+      "Open the POLOGO project on Behance",
+    ),
     listTitle: same("POLOGO"),
     listSub: L(
       "сайт стримингового сервиса · Figma · Behance · 2023",
@@ -254,7 +263,11 @@ export const WORKS: WorkItem[] = [
     ),
     dot: "f",
     linkHref: "https://github.com/Alexanderadon/Alexanderadon.github.io",
-    linkAria: "Открыть репозиторий мини-игр на Canvas на GitHub",
+    linkAria: L(
+      "Открыть репозиторий мини-игр на Canvas на GitHub",
+      "Canvas мини-ойындар репозиторийін GitHub-та ашу",
+      "Open the Canvas mini-games repository on GitHub",
+    ),
     listTitle: L("Мини-игры на Canvas", "Canvas мини-ойындары", "Canvas mini-games"),
     listSub: L(
       "Snake · RedKiller · aim-тренажёр · JavaScript",
@@ -281,7 +294,11 @@ export const WORKS: WorkItem[] = [
     ),
     dot: "b",
     linkHref: "https://github.com/Alexanderadon/react-shop",
-    linkAria: "Открыть репозиторий Sneakers на GitHub",
+    linkAria: L(
+      "Открыть репозиторий Sneakers на GitHub",
+      "Sneakers репозиторийін GitHub-та ашу",
+      "Open the Sneakers repository on GitHub",
+    ),
     listTitle: same("Sneakers"),
     listSub: L(
       "SPA-магазин · React 18 · Router 6 · MockAPI · 2024",
@@ -343,5 +360,93 @@ export const WORKS: WorkItem[] = [
       "promo video · motion · Instagram · 2024",
     ),
     listCat: CAT_VIDEO,
+  },
+  {
+    index: "/11",
+    cat: "sites",
+    wide: true,
+    kind: "img",
+    title: L(
+      "sitereel — ссылка → видео сайта",
+      "sitereel — сілтеме → сайт бейнесі",
+      "sitereel — link → website video",
+    ),
+    tag: L(
+      "Сайты · Next.js 16 · Puppeteer · FFmpeg · 2026",
+      "Сайттар · Next.js 16 · Puppeteer · FFmpeg · 2026",
+      "Sites · Next.js 16 · Puppeteer · FFmpeg · 2026",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/sitereel-card.jpg",
+    imgAlt:
+      "sitereel — интерфейс генератора: поле для ссылки на сайт, форматы 9:16 / 1:1 / 16:9 и кнопка «Сделать видео»",
+    listTitle: same("sitereel"),
+    listSub: L(
+      "генератор скролл-видео сайтов · Next.js · 2026",
+      "сайттардың скролл-бейне генераторы · Next.js · 2026",
+      "website scroll-video generator · Next.js · 2026",
+    ),
+    listCat: CAT_SITES,
+  },
+  {
+    index: "/12",
+    cat: "design",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Мастера — платформа специалистов",
+      "Мастера — мамандар платформасы",
+      "Mastera — specialists platform",
+    ),
+    tag: L(
+      "Дизайн · UI/UX · 16 страниц · Behance · 2023",
+      "Дизайн · UI/UX · 16 бет · Behance · 2023",
+      "Design · UI/UX · 16 pages · Behance · 2023",
+    ),
+    dot: "f",
+    imgSrc: "/img/works/profi-card.jpg",
+    imgAlt:
+      "Мастера — обложка проекта на Behance: макет платформы поиска специалистов, 16 страниц за 2 дня",
+    linkHref:
+      "https://www.behance.net/gallery/177150195/sajt-veb-sajt-sajt-dlja-profi-UIUX",
+    linkAria: L(
+      "Открыть проект Мастера на Behance",
+      "Мастера жобасын Behance-те ашу",
+      "Open the Mastera project on Behance",
+    ),
+    listTitle: L("Мастера", "Мастера", "Mastera"),
+    listSub: L(
+      "платформа специалистов · UI/UX · 16 страниц · Behance · 2023",
+      "мамандар платформасы · UI/UX · 16 бет · Behance · 2023",
+      "specialists platform · UI/UX · 16 pages · Behance · 2023",
+    ),
+    listCat: CAT_DESIGN,
+  },
+  {
+    index: "/13",
+    cat: "sites",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Это портфолио — сайт, который ты смотришь",
+      "Осы портфолио — қарап отырған сайтың",
+      "This portfolio — the site you're viewing",
+    ),
+    tag: L(
+      "Сайты · React Router · i18n RU/KZ/EN · маскоты · 2026",
+      "Сайттар · React Router · i18n RU/KZ/EN · маскоттар · 2026",
+      "Sites · React Router · i18n RU/KZ/EN · mascots · 2026",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/portfolio-card.jpg",
+    imgAlt:
+      "Скриншот этого портфолио: тёмная главная с заголовком «Александр», карточкой роли и виджетом «сейчас в работе»",
+    listTitle: L("Это портфолио", "Осы портфолио", "This portfolio"),
+    listSub: L(
+      "сайт, который ты смотришь · React Router · i18n RU/KZ/EN · 2026",
+      "қарап отырған сайтың · React Router · i18n RU/KZ/EN · 2026",
+      "the site you're viewing · React Router · i18n RU/KZ/EN · 2026",
+    ),
+    listCat: CAT_SITES,
   },
 ];
