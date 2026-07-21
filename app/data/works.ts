@@ -1,4 +1,4 @@
-// Типизированные данные 24 работ + фильтры. Источник истины — прежний site-markup.ts.
+// Типизированные данные 23 работ + фильтры. Источник истины — прежний site-markup.ts.
 // Переводимые строки — Localized ({ru,kz,en}); имена собственные и техтермины
 // не переводятся (helper `same`). Категории карточек (без "all") и фильтра (с "all").
 import type { Localized } from "~/lib/i18n";
@@ -26,6 +26,7 @@ export interface WorkItem {
   videoAria?: string;
   reelHref?: string;
   reelAria?: string;
+  badge?: string; // бейдж видео-карточки; по умолчанию «reel»
   // изображение
   imgSrc?: string;
   imgAlt?: string;
@@ -593,7 +594,7 @@ export const WORKS: WorkItem[] = [
   {
     index: "/18",
     cat: "sites",
-    wide: false,
+    wide: true,
     kind: "img",
     title: L(
       "Fatalia — арт-бук тёмного фэнтези",
@@ -627,7 +628,7 @@ export const WORKS: WorkItem[] = [
   {
     index: "/19",
     cat: "sites",
-    wide: false,
+    wide: true,
     kind: "img",
     title: L(
       "МАСТЕРА — маркетплейс услуг на React",
@@ -711,74 +712,6 @@ export const WORKS: WorkItem[] = [
   {
     index: "/22",
     cat: "design",
-    wide: true,
-    kind: "img",
-    title: L(
-      "Магазин продуктов — дизайн в Figma",
-      "Азық-түлік дүкені — Figma-дағы дизайн",
-      "Grocery store — Figma design",
-    ),
-    tag: L(
-      "Дизайн · Figma · e-commerce · 12 макетов · доставка по Алматы · 2021",
-      "Дизайн · Figma · e-commerce · 12 макет · Алматы бойынша жеткізу · 2021",
-      "Design · Figma · e-commerce · 12 mockups · delivery in Almaty · 2021",
-    ),
-    dot: "f",
-    imgSrc: "/img/works/figma-shop-card.jpg",
-    imgAlt:
-      "Магазин продуктов — Figma-макеты интернет-магазина с доставкой по Алматы: главная и каталог",
-    imgPos: "center top",
-    linkHref: "https://www.figma.com/file/sgvVY4bqYlDKaKsvTLjVzv",
-    linkAria: L(
-      "Открыть макеты магазина в Figma",
-      "Дүкен макеттерін Figma-да ашу",
-      "Open the store mockups in Figma",
-    ),
-    listTitle: L("Магазин продуктов", "Азық-түлік дүкені", "Grocery store"),
-    listSub: L(
-      "UI интернет-магазина с доставкой: каталог, карточка, блог · Figma · 2021",
-      "жеткізуі бар интернет-дүкеннің UI-ы: каталог, карточка, блог · Figma · 2021",
-      "online store UI with delivery: catalog, product page, blog · Figma · 2021",
-    ),
-    listCat: CAT_DESIGN,
-  },
-  {
-    index: "/23",
-    cat: "design",
-    wide: false,
-    kind: "img",
-    title: L(
-      "Дизайн блога — Figma-макеты",
-      "Блог дизайны — Figma-макеттер",
-      "Blog design — Figma mockups",
-    ),
-    tag: L(
-      "Дизайн · Figma · 7 макетов · адаптив · 2021",
-      "Дизайн · Figma · 7 макет · адаптив · 2021",
-      "Design · Figma · 7 mockups · responsive · 2021",
-    ),
-    dot: "f",
-    imgSrc: "/img/works/figma-blog-card.jpg",
-    imgAlt:
-      "Дизайн блога — Figma-макеты личного блога (/20): тёмная главная с постами",
-    imgPos: "center top",
-    linkHref: "https://www.figma.com/file/nWDCgisHHJmbJ7ujLkFExV",
-    linkAria: L(
-      "Открыть макеты блога в Figma",
-      "Блог макеттерін Figma-да ашу",
-      "Open the blog mockups in Figma",
-    ),
-    listTitle: L("Дизайн блога", "Блог дизайны", "Blog design"),
-    listSub: L(
-      "дизайн личного блога: desktop, tablet, mobile, 404 · Figma · 2021",
-      "жеке блог дизайны: desktop, tablet, mobile, 404 · Figma · 2021",
-      "personal blog design: desktop, tablet, mobile, 404 · Figma · 2021",
-    ),
-    listCat: CAT_DESIGN,
-  },
-  {
-    index: "/24",
-    cat: "design",
     wide: false,
     kind: "img",
     title: L(
@@ -803,5 +736,36 @@ export const WORKS: WorkItem[] = [
       "studio promo posters: discounts, welcome, cubic mascots · 2024",
     ),
     listCat: CAT_DESIGN,
+  },
+  {
+    index: "/23",
+    cat: "sites",
+    wide: false,
+    kind: "video",
+    title: L(
+      "TengeStack — зарплаты в IT Казахстана",
+      "TengeStack — Қазақстан IT жалақылары",
+      "TengeStack — IT salaries in Kazakhstan",
+    ),
+    tag: L(
+      "Сайты · Next.js · данные hh.kz · дашборд · 2026",
+      "Сайттар · Next.js · hh.kz деректері · дашборд · 2026",
+      "Sites · Next.js · hh.kz data · dashboard · 2026",
+    ),
+    dot: "b",
+    videoSrc: "/video/tengestack.mp4",
+    poster: "/img/works/tengestack-poster.jpg",
+    videoAria:
+      "Демо TengeStack — живой дашборд зарплат IT-рынка Казахстана по данным hh.kz",
+    reelHref: "https://workhh.vercel.app",
+    reelAria: "Открыть живой сайт TengeStack (workhh.vercel.app)",
+    badge: "demo",
+    listTitle: same("TengeStack"),
+    listSub: L(
+      "живой дашборд зарплат IT-рынка КЗ по hh.kz · Next.js · 2026",
+      "hh.kz бойынша ҚР IT жалақы дашборды · Next.js · 2026",
+      "live KZ IT salary dashboard from hh.kz data · Next.js · 2026",
+    ),
+    listCat: CAT_SITES,
   },
 ];

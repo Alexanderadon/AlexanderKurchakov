@@ -204,7 +204,7 @@ export function WorkCard({
               aria-label={item.videoAria}
               style={MEDIA_STYLE}
             />
-            <span className="tc mono">reel</span>
+            <span className="tc mono">{item.badge ?? "reel"}</span>
             <span className="snd mono" aria-hidden="true">
               {sndText}
             </span>
