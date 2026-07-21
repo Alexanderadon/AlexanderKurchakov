@@ -8,7 +8,7 @@ export type Category = "sites" | "design" | "games" | "video" | "logo";
 export type FilterCategory = "all" | Category;
 
 // Ключ инлайн-SVG-превью карточки (резолвится в WorkCard → components/previews).
-export type PreviewKey = "logofolio" | "canvas" | "sneakers" | "muckliker";
+export type PreviewKey = "canvas" | "sneakers" | "muckliker";
 
 export interface WorkItem {
   index: string; // "/01"
@@ -155,28 +155,30 @@ export const WORKS: WorkItem[] = [
     index: "/04",
     cat: "logo",
     wide: false,
-    kind: "svg",
-    preview: "logofolio",
+    kind: "img",
     title: L(
       "Логотипы и фирстили — фриланс",
       "Логотиптер мен фирмалық стильдер — фриланс",
       "Logos & brand identities — freelance",
     ),
     tag: L(
-      "Лого · 2019–2021 · подборка скоро",
-      "Лого · 2019–2021 · топтама жақында",
-      "Logo · 2019–2021 · collection soon",
+      "Лого · монограмма A/T · 3 версии · 2021",
+      "Лого · A/T монограммасы · 3 нұсқа · 2021",
+      "Logo · A/T monogram · 3 versions · 2021",
     ),
     dot: "b",
+    imgSrc: "/img/works/logofolio-card.jpg",
+    imgAlt: "Монограмма A/T — три цветовые версии логотипа",
+    imgPos: "left center",
     listTitle: L(
       "Логотипы и фирстили",
       "Логотиптер мен фирмалық стильдер",
       "Logos & brand identities",
     ),
     listSub: L(
-      "фриланс 2019–2021 · подборка скоро",
-      "фриланс 2019–2021 · топтама жақында",
-      "freelance 2019–2021 · collection soon",
+      "монограмма A/T: белая, чёрная, красная версии · 2021",
+      "A/T монограммасы: ақ, қара, қызыл нұсқалар · 2021",
+      "A/T monogram: white, black, red versions · 2021",
     ),
     listCat: CAT_LOGO,
   },
@@ -585,6 +587,124 @@ export const WORKS: WorkItem[] = [
       "адаптивная вёрстка лендинга · HTML/Less · 2021",
       "лендингтің адаптивті вёрсткасы · HTML/Less · 2021",
       "responsive landing page markup · HTML/Less · 2021",
+    ),
+    listCat: CAT_DESIGN,
+  },
+  {
+    index: "/18",
+    cat: "sites",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Fatalia — арт-бук тёмного фэнтези",
+      "Fatalia — қараңғы фэнтези арт-кітабы",
+      "Fatalia — dark fantasy art book",
+    ),
+    tag: L(
+      "Сайты · Next.js 15 · 25 персонажей · 2026",
+      "Сайттар · Next.js 15 · 25 кейіпкер · 2026",
+      "Sites · Next.js 15 · 25 characters · 2026",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/fatalia-card.jpg",
+    imgAlt:
+      "Fatalia — цифровой арт-бук тёмного фэнтези: персонажи, лор и мир проекта",
+    imgPos: "center top",
+    linkHref: "https://fatalia.vercel.app",
+    linkAria: L(
+      "Открыть живой сайт Fatalia",
+      "Fatalia тірі сайтын ашу",
+      "Open the live Fatalia website",
+    ),
+    listTitle: same("Fatalia"),
+    listSub: L(
+      "цифровой арт-бук: персонажи, лор, мир · Next.js 15 · 2026",
+      "цифрлық арт-кітап: кейіпкерлер, лор, әлем · Next.js 15 · 2026",
+      "digital art book: characters, lore, world · Next.js 15 · 2026",
+    ),
+    listCat: CAT_SITES,
+  },
+  {
+    index: "/19",
+    cat: "sites",
+    wide: false,
+    kind: "img",
+    title: L(
+      "МАСТЕРА — маркетплейс услуг на React",
+      "МАСТЕРА — React-тегі қызметтер маркетплейсі",
+      "MASTERA — services marketplace in React",
+    ),
+    tag: L(
+      "Сайты · React 18 · Redux Toolkit · Firebase · 16 страниц · 2023",
+      "Сайттар · React 18 · Redux Toolkit · Firebase · 16 бет · 2023",
+      "Sites · React 18 · Redux Toolkit · Firebase · 16 pages · 2023",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/mastera-card.jpg",
+    imgAlt:
+      "МАСТЕРА — маркетплейс услуг на React, реализация дизайна «Мастера» (/12): заказы, специалисты, профили",
+    imgPos: "center top",
+    listTitle: L("МАСТЕРА", "МАСТЕРА", "MASTERA"),
+    listSub: L(
+      "маркетплейс услуг: заказы, специалисты, профили · React · 2023",
+      "қызметтер маркетплейсі: тапсырыстар, мамандар, профильдер · React · 2023",
+      "services marketplace: orders, specialists, profiles · React · 2023",
+    ),
+    listCat: CAT_SITES,
+  },
+  {
+    index: "/20",
+    cat: "sites",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Личный блог — своя вёрстка и WordPress-тема",
+      "Жеке блог — өз вёрсткам және WordPress тақырыбы",
+      "Personal blog — custom markup & WordPress theme",
+    ),
+    tag: L(
+      "Сайты · Gulp · WordPress · 2020–2021",
+      "Сайттар · Gulp · WordPress · 2020–2021",
+      "Sites · Gulp · WordPress · 2020–2021",
+    ),
+    dot: "b",
+    imgSrc: "/img/works/blog-card.jpg",
+    imgAlt:
+      "Личный блог front-end разработчика: тёмная тема, посты и сторис",
+    imgPos: "center top",
+    listTitle: L("Личный блог", "Жеке блог", "Personal blog"),
+    listSub: L(
+      "блог front-end разработчика: тёмная тема, сторис · 2021",
+      "front-end әзірлеушісінің блогы: қараңғы тақырып, сторис · 2021",
+      "front-end developer blog: dark theme, stories · 2021",
+    ),
+    listCat: CAT_SITES,
+  },
+  {
+    index: "/21",
+    cat: "design",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Инфографика для маркетплейсов",
+      "Маркетплейстерге арналған инфографика",
+      "Marketplace product infographics",
+    ),
+    tag: L(
+      "Дизайн · Kaspi · Ozon · WB · серия из 10 · 2025",
+      "Дизайн · Kaspi · Ozon · WB · 10 карточкадан тұратын серия · 2025",
+      "Design · Kaspi · Ozon · WB · series of 10 · 2025",
+    ),
+    dot: "f",
+    imgSrc: "/img/works/infografica-card.jpg",
+    imgAlt:
+      "Инфографика для маркетплейсов: продающие карточки товаров — аэрогриль, стайлер, пылесос",
+    imgPos: "center top",
+    listTitle: L("Инфографика", "Инфографика", "Infographics"),
+    listSub: L(
+      "продающие карточки товаров: аэрогрили, стайлер, пылесос · 2025",
+      "сатушы тауар карточкалары: аэрогрильдер, стайлер, шаңсорғыш · 2025",
+      "selling product cards: air fryers, styler, vacuum cleaner · 2025",
     ),
     listCat: CAT_DESIGN,
   },

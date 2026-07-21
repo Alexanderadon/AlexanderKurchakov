@@ -30,3 +30,5 @@ _handoff/**/*.tsv
 _port/
 
 .vercel
+
+.cache/
