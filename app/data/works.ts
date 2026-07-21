@@ -1,4 +1,4 @@
-// Типизированные данные 17 работ + фильтры. Источник истины — прежний site-markup.ts.
+// Типизированные данные 24 работ + фильтры. Источник истины — прежний site-markup.ts.
 // Переводимые строки — Localized ({ru,kz,en}); имена собственные и техтермины
 // не переводятся (helper `same`). Категории карточек (без "all") и фильтра (с "all").
 import type { Localized } from "~/lib/i18n";
@@ -658,25 +658,25 @@ export const WORKS: WorkItem[] = [
     wide: false,
     kind: "img",
     title: L(
-      "Личный блог — своя вёрстка и WordPress-тема",
-      "Жеке блог — өз вёрсткам және WordPress тақырыбы",
-      "Personal blog — custom markup & WordPress theme",
+      "Личный блог — WordPress со своей темой",
+      "Жеке блог — өз тақырыбымен WordPress",
+      "Personal blog — WordPress with a custom theme",
     ),
     tag: L(
-      "Сайты · Gulp · WordPress · 2020–2021",
-      "Сайттар · Gulp · WordPress · 2020–2021",
-      "Sites · Gulp · WordPress · 2020–2021",
+      "Сайты · WordPress · Carbon Fields · своя тема · 2020–2022",
+      "Сайттар · WordPress · Carbon Fields · өз тақырыбым · 2020–2022",
+      "Sites · WordPress · Carbon Fields · custom theme · 2020–2022",
     ),
     dot: "b",
     imgSrc: "/img/works/blog-card.jpg",
     imgAlt:
-      "Личный блог front-end разработчика: тёмная тема, посты и сторис",
+      "Личный блог — живой WordPress: лента микропостов и карточка работы KzRugby",
     imgPos: "center top",
     listTitle: L("Личный блог", "Жеке блог", "Personal blog"),
     listSub: L(
-      "блог front-end разработчика: тёмная тема, сторис · 2021",
-      "front-end әзірлеушісінің блогы: қараңғы тақырып, сторис · 2021",
-      "front-end developer blog: dark theme, stories · 2021",
+      "живой WordPress-блог: своя тема, посты, микроблог · 2020–2022",
+      "тірі WordPress-блог: өз тақырыбым, посттар, микроблог · 2020–2022",
+      "live WordPress blog: custom theme, posts, microblog · 2020–2022",
     ),
     listCat: CAT_SITES,
   },
@@ -705,6 +705,102 @@ export const WORKS: WorkItem[] = [
       "продающие карточки товаров: аэрогрили, стайлер, пылесос · 2025",
       "сатушы тауар карточкалары: аэрогрильдер, стайлер, шаңсорғыш · 2025",
       "selling product cards: air fryers, styler, vacuum cleaner · 2025",
+    ),
+    listCat: CAT_DESIGN,
+  },
+  {
+    index: "/22",
+    cat: "design",
+    wide: true,
+    kind: "img",
+    title: L(
+      "Магазин продуктов — дизайн в Figma",
+      "Азық-түлік дүкені — Figma-дағы дизайн",
+      "Grocery store — Figma design",
+    ),
+    tag: L(
+      "Дизайн · Figma · e-commerce · 12 макетов · доставка по Алматы · 2021",
+      "Дизайн · Figma · e-commerce · 12 макет · Алматы бойынша жеткізу · 2021",
+      "Design · Figma · e-commerce · 12 mockups · delivery in Almaty · 2021",
+    ),
+    dot: "f",
+    imgSrc: "/img/works/figma-shop-card.jpg",
+    imgAlt:
+      "Магазин продуктов — Figma-макеты интернет-магазина с доставкой по Алматы: главная и каталог",
+    imgPos: "center top",
+    linkHref: "https://www.figma.com/file/sgvVY4bqYlDKaKsvTLjVzv",
+    linkAria: L(
+      "Открыть макеты магазина в Figma",
+      "Дүкен макеттерін Figma-да ашу",
+      "Open the store mockups in Figma",
+    ),
+    listTitle: L("Магазин продуктов", "Азық-түлік дүкені", "Grocery store"),
+    listSub: L(
+      "UI интернет-магазина с доставкой: каталог, карточка, блог · Figma · 2021",
+      "жеткізуі бар интернет-дүкеннің UI-ы: каталог, карточка, блог · Figma · 2021",
+      "online store UI with delivery: catalog, product page, blog · Figma · 2021",
+    ),
+    listCat: CAT_DESIGN,
+  },
+  {
+    index: "/23",
+    cat: "design",
+    wide: false,
+    kind: "img",
+    title: L(
+      "Дизайн блога — Figma-макеты",
+      "Блог дизайны — Figma-макеттер",
+      "Blog design — Figma mockups",
+    ),
+    tag: L(
+      "Дизайн · Figma · 7 макетов · адаптив · 2021",
+      "Дизайн · Figma · 7 макет · адаптив · 2021",
+      "Design · Figma · 7 mockups · responsive · 2021",
+    ),
+    dot: "f",
+    imgSrc: "/img/works/figma-blog-card.jpg",
+    imgAlt:
+      "Дизайн блога — Figma-макеты личного блога (/20): тёмная главная с постами",
+    imgPos: "center top",
+    linkHref: "https://www.figma.com/file/nWDCgisHHJmbJ7ujLkFExV",
+    linkAria: L(
+      "Открыть макеты блога в Figma",
+      "Блог макеттерін Figma-да ашу",
+      "Open the blog mockups in Figma",
+    ),
+    listTitle: L("Дизайн блога", "Блог дизайны", "Blog design"),
+    listSub: L(
+      "дизайн личного блога: desktop, tablet, mobile, 404 · Figma · 2021",
+      "жеке блог дизайны: desktop, tablet, mobile, 404 · Figma · 2021",
+      "personal blog design: desktop, tablet, mobile, 404 · Figma · 2021",
+    ),
+    listCat: CAT_DESIGN,
+  },
+  {
+    index: "/24",
+    cat: "design",
+    wide: false,
+    kind: "img",
+    title: L(
+      "QazSoft — SMM-постеры с маскотами",
+      "QazSoft — маскоттары бар SMM-постерлер",
+      "QazSoft — SMM posters with mascots",
+    ),
+    tag: L(
+      "Дизайн · SMM · Instagram · маскоты · 2024",
+      "Дизайн · SMM · Instagram · маскоттар · 2024",
+      "Design · SMM · Instagram · mascots · 2024",
+    ),
+    dot: "f",
+    imgSrc: "/img/works/qazsoft-posters-card.jpg",
+    imgAlt:
+      "QazSoft — тёмный промо-постер со скидкой 10% и огненным кубическим маскотом",
+    imgPos: "center top",
+    listTitle: L("QazSoft — SMM-постеры", "QazSoft — SMM-постерлер", "QazSoft — SMM posters"),
+    listSub: L(
+      "промо-постеры студии: скидки, приветствие, кубические маскоты · 2024",
+      "студияның промо-постерлері: жеңілдіктер, сәлемдесу, кубтық маскоттар · 2024",
+      "studio promo posters: discounts, welcome, cubic mascots · 2024",
     ),
     listCat: CAT_DESIGN,
   },
