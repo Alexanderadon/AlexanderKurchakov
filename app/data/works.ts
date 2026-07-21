@@ -369,7 +369,7 @@ export const WORKS: WorkItem[] = [
   {
     index: "/11",
     cat: "sites",
-    wide: true,
+    wide: false,
     kind: "img",
     title: L(
       "sitereel — ссылка → видео сайта",
@@ -740,7 +740,7 @@ export const WORKS: WorkItem[] = [
   {
     index: "/23",
     cat: "sites",
-    wide: false,
+    wide: true,
     kind: "video",
     title: L(
       "TengeStack — зарплаты в IT Казахстана",
