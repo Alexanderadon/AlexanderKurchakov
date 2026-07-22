@@ -47,9 +47,6 @@ function Page() {
   return (
     <div ref={rootRef}>
       <Ambient />
-      {/* бумажное зерно + угольная виньетка (откат — git revert коммита backdrop) */}
-      <div className="vign" aria-hidden="true" />
-      <div className="pgrain" aria-hidden="true" />
       <Header />
       <main id="top">
         <Hero />
