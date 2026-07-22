@@ -415,8 +415,8 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .js .hands-layer{display:block;position:fixed;inset:0;pointer-events:none;z-index:62;overflow:hidden}
 .hgrip{position:absolute;will-change:transform}
 .hgrip canvas{display:block;width:100%;height:auto;filter:drop-shadow(0 8px 20px rgba(0,0,0,.55))}
-.hgrip--l{width:min(44vw,430px);top:28vh}
-.hgrip--r{width:min(44vw,430px);top:46vh}
+.hgrip--l{width:min(46vw,540px);top:26vh}
+.hgrip--r{width:min(46vw,540px);top:44vh}
 .hgrip--l canvas{-webkit-mask-image:linear-gradient(to left,#000 55%,transparent 92%);mask-image:linear-gradient(to left,#000 55%,transparent 92%)}
 .hgrip--r canvas{-webkit-mask-image:linear-gradient(to right,#000 55%,transparent 92%);mask-image:linear-gradient(to right,#000 55%,transparent 92%)}
 .hgrip-sh{position:fixed;width:120px;height:60px;margin:-30px 0 0 -60px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),transparent 70%);opacity:0;pointer-events:none;transition:opacity .3s;z-index:61}
