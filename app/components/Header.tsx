@@ -1,9 +1,11 @@
-// Шапка: печать, навигация (data-goto → фильтр + скролл к работам), переключатель языка.
+// Шапка: печать, навигация (data-goto → фильтр + скролл к работам),
+// тумблер рук, переключатель языка.
 import type { MouseEvent } from "react";
 import type { FilterCategory } from "~/data/works";
 import type { Lang } from "~/lib/i18n";
 import { useLang } from "~/lib/i18n";
 import { useWorks } from "~/lib/works-context";
+import { usePrefs } from "~/lib/prefs";
 import { prefersReducedMotion } from "~/lib/media";
 
 const LANGS: { code: Lang; label: string }[] = [
@@ -15,6 +17,7 @@ const LANGS: { code: Lang; label: string }[] = [
 export function Header() {
   const { lang, setLang, t } = useLang();
   const { setCategory } = useWorks();
+  const { handsOn, toggleHands } = usePrefs();
 
   const goto =
     (cat: FilterCategory) => (e: MouseEvent<HTMLAnchorElement>): void => {
@@ -48,6 +51,15 @@ export function Header() {
             {t.header.nav.about}
           </a>
         </nav>
+        <button
+          className="htog"
+          aria-pressed={handsOn}
+          onClick={toggleHands}
+          title={t.experiment.hands + ": " + (handsOn ? t.experiment.on : t.experiment.off)}
+        >
+          <span aria-hidden="true">✋</span>
+          <span className="htog-t">{t.experiment.hands}</span>
+        </button>
         <div className="langs" role="group" aria-label="Язык">
           {LANGS.map(({ code, label }) => (
             <button
