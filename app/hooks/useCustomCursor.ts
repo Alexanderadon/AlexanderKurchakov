@@ -16,6 +16,8 @@ export function useCustomCursor(rootRef: RefObject<HTMLElement | null>): void {
     ring.className = "cur-r";
     document.body.appendChild(dot);
     document.body.appendChild(ring);
+    // системная стрелка мешает кастомному курсору — прячем на время его жизни
+    document.documentElement.classList.add('cur-on');
 
     let mx = window.innerWidth / 2;
     let my = window.innerHeight / 2;
@@ -55,6 +57,7 @@ export function useCustomCursor(rootRef: RefObject<HTMLElement | null>): void {
     });
 
     return () => {
+      document.documentElement.classList.remove('cur-on');
       window.removeEventListener("mousemove", onMove);
       cancelAnimationFrame(rafId);
       targets.forEach((t) => {

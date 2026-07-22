@@ -431,3 +431,14 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .htog[aria-pressed="false"] .htog-t{text-decoration:line-through}
 .htog:hover{border-color:rgba(255,255,255,.22)}
 @media(max-width:760px){.htog .htog-t{display:none}.htog{padding:6px 8px}}
+
+/* ============ скрытие системного курсора при активном кастомном ============ */
+.cur-on, .cur-on *{cursor:none!important}
+
+/* ============ dot grid: чертёжная сетка, проявляется у курсора ============ */
+.dgrid{position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:radial-gradient(rgba(240,238,233,.42) 1px,transparent 1.4px);
+  background-size:26px 26px;opacity:.55;
+  -webkit-mask-image:radial-gradient(250px 250px at var(--gx,-500px) var(--gy,-500px),#000 0%,rgba(0,0,0,.35) 55%,transparent 78%);
+  mask-image:radial-gradient(250px 250px at var(--gx,-500px) var(--gy,-500px),#000 0%,rgba(0,0,0,.35) 55%,transparent 78%)}
+@media(pointer:coarse){.dgrid{display:none}}
