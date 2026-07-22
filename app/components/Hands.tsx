@@ -93,18 +93,6 @@ function HandsLayer() {
     const lastIdx = [-1, -1];
     const norm = [false, false];
     const tipYpx = [0, 0];
-    const stamped = [false, false]; // след пальцев уже оставлен в этом сжатии
-
-    // «память касания»: тающий смаз в точке, где пальцы сжали страницу
-    function stampSmudge(x: number, y: number, s: number): void {
-      const el = document.createElement("div");
-      el.className = "fsmudge";
-      el.style.left = `${x}px`;
-      el.style.top = `${y + 10}px`;
-      el.style.transform = `rotate(${s ? -14 : 14}deg)`;
-      document.body.appendChild(el);
-      el.addEventListener("animationend", () => el.remove());
-    }
     let cur = window.scrollY;
     let vel = 0;
     let still = 0;
@@ -171,12 +159,6 @@ function HandsLayer() {
         shs[s].style.left = `${tx}px`;
         shs[s].style.top = `${ty + 16}px`;
         shs[s].style.opacity = overCard ? (g * 0.8).toFixed(2) : "0";
-        if (g > 0.75 && !stamped[s]) {
-          stamped[s] = true;
-          if (overCard) stampSmudge(tx, ty, s);
-        } else if (g < 0.3) {
-          stamped[s] = false;
-        }
         tipYpx[s] = ty;
       }
       raf = requestAnimationFrame(loop);
