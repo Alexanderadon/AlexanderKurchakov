@@ -414,7 +414,7 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .hands-layer{display:none}
 .js .hands-layer{display:block;position:fixed;inset:0;pointer-events:none;z-index:62;overflow:hidden}
 .hgrip{position:absolute;will-change:transform}
-.hgrip canvas{display:block;width:100%;height:auto;filter:drop-shadow(0 8px 20px rgba(0,0,0,.55))}
+.hgrip canvas{display:block;width:100%;height:auto}
 .hgrip--l{width:clamp(300px,27vw,560px);top:clamp(110px,26vh,320px)}
 .hgrip--r{width:clamp(300px,27vw,560px);top:clamp(300px,44vh,600px)}
 .hgrip--l canvas{-webkit-mask-image:linear-gradient(to left,#000 55%,transparent 92%);mask-image:linear-gradient(to left,#000 55%,transparent 92%)}
