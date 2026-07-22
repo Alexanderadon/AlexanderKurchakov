@@ -10,9 +10,11 @@ interface PrefsValue {
   palette: Palette;
   fonts: Fonts;
   mascotOn: boolean;
+  handsOn: boolean;
   setPalette: (p: Palette) => void;
   setFonts: (f: Fonts) => void;
   toggleMascot: () => void;
+  toggleHands: () => void;
 }
 
 const PrefsContext = createContext<PrefsValue | null>(null);
@@ -32,6 +34,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
   const [palette, setPaletteState] = useState<Palette>("ugol");
   const [fonts, setFontsState] = useState<Fonts>("brand");
   const [mascotOn, setMascotOn] = useState(true);
+  const [handsOn, setHandsOn] = useState(true);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -40,6 +43,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     if (root.getAttribute("data-fonts") === "strict") setFontsState("strict");
     try {
       if (localStorage.getItem("bento2:mascot") === "off") setMascotOn(false);
+      if (localStorage.getItem("bento2:hands") === "off") setHandsOn(false);
     } catch {
       /* игнорируем */
     }
@@ -69,9 +73,26 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const toggleHands = (): void => {
+    setHandsOn((on) => {
+      const next = !on;
+      store("hands", next ? "" : "off");
+      return next;
+    });
+  };
+
   return (
     <PrefsContext.Provider
-      value={{ palette, fonts, mascotOn, setPalette, setFonts, toggleMascot }}
+      value={{
+        palette,
+        fonts,
+        mascotOn,
+        handsOn,
+        setPalette,
+        setFonts,
+        toggleMascot,
+        toggleHands,
+      }}
     >
       {children}
     </PrefsContext.Provider>

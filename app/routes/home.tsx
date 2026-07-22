@@ -17,6 +17,7 @@ import { Works } from "~/components/Works";
 import { About } from "~/components/About";
 import { SiteFooter } from "~/components/SiteFooter";
 import { Mascot } from "~/components/Mascot";
+import { Hands } from "~/components/Hands";
 import { ExperimentPanel } from "~/components/ExperimentPanel";
 
 export function meta(_: Route.MetaArgs) {
@@ -55,6 +56,7 @@ function Page() {
       </main>
       <SiteFooter />
       <Mascot />
+      <Hands />
       <ExperimentPanel />
     </div>
   );

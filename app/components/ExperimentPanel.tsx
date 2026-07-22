@@ -10,8 +10,16 @@ const FONT_PAIRS: Fonts[] = ["brand", "strict"];
 
 export function ExperimentPanel() {
   const { t } = useLang();
-  const { palette, fonts, mascotOn, setPalette, setFonts, toggleMascot } =
-    usePrefs();
+  const {
+    palette,
+    fonts,
+    mascotOn,
+    handsOn,
+    setPalette,
+    setFonts,
+    toggleMascot,
+    toggleHands,
+  } = usePrefs();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -61,6 +69,12 @@ export function ExperimentPanel() {
           <span>{t.experiment.mascot}</span>
           <button id="mToggle" aria-pressed={mascotOn} onClick={toggleMascot}>
             {mascotOn ? t.experiment.on : t.experiment.off}
+          </button>
+        </div>
+        <div className="exp-row">
+          <span>{t.experiment.hands}</span>
+          <button id="hToggle" aria-pressed={handsOn} onClick={toggleHands}>
+            {handsOn ? t.experiment.on : t.experiment.off}
           </button>
         </div>
       </div>
