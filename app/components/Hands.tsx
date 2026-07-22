@@ -10,7 +10,7 @@ import { prefersReducedMotion } from "~/lib/media";
 const N = 16;
 const FRAME_W = 720;
 const FRAME_H = 739;
-const OVER = 34; // заход кончика пальца на контент, px
+
 
 interface HandCfg {
   tipX: number; // кончик среднего пальца в долях плитки (автозамер по маске)
@@ -72,12 +72,14 @@ function HandsLayer() {
       const cs = getComputedStyle(main);
       const cLeft = rect.left + parseFloat(cs.paddingLeft);
       const cRight = rect.right - parseFloat(cs.paddingRight);
+      // на телефоне заход и клиренс меньше — руки не съедают контент
+      const over = window.innerWidth < 640 ? 20 : 34;
       const clr = Math.min(190, window.innerWidth * 0.28);
       const wL = elL.offsetWidth;
       const wR = elR.offsetWidth;
-      const lL = Math.max(cLeft + OVER - CFG[0].tipX * wL, clr - CFG[0].tipX * wL);
+      const lL = Math.max(cLeft + over - CFG[0].tipX * wL, clr - CFG[0].tipX * wL);
       const lR = Math.min(
-        cRight - OVER - CFG[1].tipX * wR,
+        cRight - over - CFG[1].tipX * wR,
         window.innerWidth - clr - CFG[1].tipX * wR,
       );
       elL.style.left = `${Math.round(lL)}px`;
