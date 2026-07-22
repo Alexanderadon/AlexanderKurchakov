@@ -434,11 +434,13 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 
 /* ============ backdrop: зерно + угольная виньетка + следы пальцев ============ */
 /* весь блок — один коммит, откат: git revert */
-.pgrain{position:fixed;inset:0;z-index:95;pointer-events:none;background-image:var(--noise);opacity:.05;mix-blend-mode:overlay}
-.vign{position:fixed;inset:0;z-index:64;pointer-events:none;background:radial-gradient(115% 92% at 50% 44%,transparent 58%,rgba(5,5,6,.5) 100%)}
-.vign::after{content:"";position:absolute;inset:0;background-image:var(--noise);opacity:.16;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(110% 88% at 50% 45%,transparent 52%,#000 100%);mask-image:radial-gradient(110% 88% at 50% 45%,transparent 52%,#000 100%)}
-@media(max-width:640px){.vign{background:radial-gradient(115% 92% at 50% 44%,transparent 64%,rgba(5,5,6,.34) 100%)}}
-.fsmudge{position:fixed;width:96px;height:54px;margin:-27px 0 0 -48px;border-radius:50%;pointer-events:none;z-index:56;
-  background:radial-gradient(closest-side,rgba(240,238,233,.09),transparent 72%);
-  animation:smudgeOut 3s var(--ez) forwards}
+.pgrain{position:fixed;left:-50%;top:-50%;width:200%;height:200%;z-index:95;pointer-events:none;background-image:var(--noise);opacity:.06;mix-blend-mode:overlay;animation:grainJump 1.2s steps(9) infinite}
+@keyframes grainJump{0%{transform:translate3d(0,0,0)}11%{transform:translate3d(-37px,23px,0)}22%{transform:translate3d(29px,-41px,0)}33%{transform:translate3d(-53px,-17px,0)}44%{transform:translate3d(43px,31px,0)}55%{transform:translate3d(-19px,47px,0)}66%{transform:translate3d(51px,-29px,0)}77%{transform:translate3d(-31px,-49px,0)}88%{transform:translate3d(23px,43px,0)}100%{transform:translate3d(0,0,0)}}
+@media(prefers-reduced-motion:reduce){.pgrain{animation:none}}
+.vign{position:fixed;inset:0;z-index:64;pointer-events:none;background:radial-gradient(115% 92% at 50% 44%,transparent 50%,rgba(4,4,5,.62) 100%)}
+.vign::after{content:"";position:absolute;inset:0;background-image:var(--noise);opacity:.24;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(110% 88% at 50% 45%,transparent 52%,#000 100%);mask-image:radial-gradient(110% 88% at 50% 45%,transparent 52%,#000 100%)}
+@media(max-width:640px){.vign{background:radial-gradient(115% 92% at 50% 44%,transparent 58%,rgba(4,4,5,.44) 100%)}}
+.fsmudge{position:fixed;width:130px;height:70px;margin:-35px 0 0 -65px;border-radius:50%;pointer-events:none;z-index:56;
+  background:radial-gradient(closest-side,rgba(240,238,233,.16),transparent 72%);
+  animation:smudgeOut 3.5s var(--ez) forwards}
 @keyframes smudgeOut{from{opacity:1;transform:scale(.7)}30%{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.15)}}
