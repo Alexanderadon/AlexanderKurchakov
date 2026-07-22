@@ -437,6 +437,10 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 
 /* ============ dot grid: чертёжная сетка, проявляется у курсора ============ */
 .dgrid{position:fixed;inset:0;z-index:-1;pointer-events:none;
+  /* вертикальное затухание: сетка не светится под хедером и футером */
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 92px,#000 calc(100% - 220px),transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 92px,#000 calc(100% - 220px),transparent 100%)}
+.dgrid::after{content:"";position:absolute;inset:0;
   background-image:radial-gradient(rgba(240,238,233,.42) 1px,transparent 1.4px);
   background-size:26px 26px;opacity:.55;
   -webkit-mask-image:radial-gradient(250px 250px at var(--gx,-500px) var(--gy,-500px),#000 0%,rgba(0,0,0,.35) 55%,transparent 78%);
