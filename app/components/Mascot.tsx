@@ -107,6 +107,10 @@ export function Mascot() {
       figTimers.current.push(
         window.setTimeout(() => next.classList.remove("jump"), 460),
       );
+      // старые id уже отработали — не даём массиву расти бесконечно
+      if (figTimers.current.length > 16) {
+        figTimers.current.splice(0, figTimers.current.length - 8);
+      }
       say(phrase);
     },
     [say],

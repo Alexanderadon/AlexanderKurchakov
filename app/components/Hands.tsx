@@ -64,6 +64,22 @@ function HandsLayer() {
     );
     const cards = Array.from(document.querySelectorAll<HTMLElement>(".work"));
 
+    // Никаких чтений layout внутри кадра: базовая геометрия рук кэшируется в
+    // layout(), карточки — пачкой в doc-координатах раз в секунду (refreshCards).
+    const base = [
+      { left: 0, top: 0, w: 0, h: 0 },
+      { left: 0, top: 0, w: 0, h: 0 },
+    ];
+    let cardRects: { l: number; t: number; r: number; b: number }[] = [];
+
+    function refreshCards(): void {
+      const sy = window.scrollY;
+      cardRects = cards.map((c) => {
+        const q = c.getBoundingClientRect();
+        return { l: q.left, t: q.top + sy, r: q.right, b: q.bottom + sy };
+      });
+    }
+
     // руки держат контент по бокам: кончик на крае main (с учётом его паддинга),
     // но не ближе TIPCLR к краю экрана — пальцы никогда не обрезаются
     function layout(): void {
@@ -84,6 +100,10 @@ function HandsLayer() {
       );
       elL.style.left = `${Math.round(lL)}px`;
       elR.style.left = `${Math.round(lR)}px`;
+      // offset* не включают transform — это чистая база для арифметики кадра
+      base[0] = { left: Math.round(lL), top: elL.offsetTop, w: wL, h: elL.offsetHeight };
+      base[1] = { left: Math.round(lR), top: elR.offsetTop, w: wR, h: elR.offsetHeight };
+      refreshCards();
     }
     layout();
     window.addEventListener("resize", layout);
@@ -98,8 +118,11 @@ function HandsLayer() {
     let still = 0;
     let lag = 0;
     let raf = 0;
+    let frame = 0;
 
     function loop(t: number): void {
+      // карточки могли перестроиться (фильтр/шрифты) — обновляем пачкой раз в ~1с
+      if (++frame % 60 === 0) refreshCards();
       const y = window.scrollY;
       vel += (y - cur - vel) * 0.14;
       cur += (y - cur) * 0.1;
@@ -147,28 +170,32 @@ function HandsLayer() {
           Math.sin(t * 0.0009 + s * 1.7) * 1.1 +
           grip[s] * (s ? -1.5 : 1.5);
         els[s].style.transform = `translate3d(${inX}px,${-lag + bob}px,0) rotate(${rot}deg)`;
-        // контактная тень — только когда палец над карточкой
-        const r = els[s].getBoundingClientRect();
-        const tx = r.left + r.width * cfg.tipX;
-        const ty = r.top + r.height * cfg.tipY;
+        // контактная тень — только когда палец над карточкой; позиция кончика
+        // считается арифметикой из кэша (ноль чтений layout в кадре)
+        const bs = base[s];
+        const tx = bs.left + inX + bs.w * cfg.tipX;
+        const ty = bs.top + (bob - lag) + bs.h * cfg.tipY;
         const g = Math.max(0, grip[s]);
-        const overCard = cards.some((c) => {
-          const q = c.getBoundingClientRect();
-          return tx > q.left && tx < q.right && ty > q.top && ty < q.bottom;
-        });
-        shs[s].style.left = `${tx}px`;
-        shs[s].style.top = `${ty + 16}px`;
+        const tyDoc = ty + y;
+        const overCard = cardRects.some(
+          (q) => tx > q.l && tx < q.r && tyDoc > q.t && tyDoc < q.b,
+        );
+        shs[s].style.transform = `translate3d(${tx}px,${ty + 16}px,0)`;
         shs[s].style.opacity = overCard ? (g * 0.8).toFixed(2) : "0";
         tipYpx[s] = ty;
       }
       raf = requestAnimationFrame(loop);
     }
 
-    // старт после декода первого кадра каждой руки
+    // старт после декода первого кадра каждой руки; если кадры не загрузились
+    // за ~16с — сдаёмся, а не крутим таймер вечно
+    let bootTicks = 0;
     const boot = window.setInterval(() => {
       if (imgs[0][0].complete && imgs[1][0].complete) {
         window.clearInterval(boot);
         raf = requestAnimationFrame(loop);
+      } else if (++bootTicks > 400) {
+        window.clearInterval(boot);
       }
     }, 40);
 

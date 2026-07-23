@@ -155,19 +155,26 @@ export function Works() {
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     let raf = 0;
+    let idleT = 0;
+    // без активного превью цикл дремлет (проверка 5 раз/с вместо 60)
     const loop = (): void => {
       if (flyIndexRef.current != null && flyRef.current) {
         const t = flyTarget();
         flyPos.current.x += (t[0] - flyPos.current.x) * 0.13;
         flyPos.current.y += (t[1] - flyPos.current.y) * 0.13;
         flyRef.current.style.transform = `translate3d(${flyPos.current.x}px,${flyPos.current.y}px,0)`;
+        raf = requestAnimationFrame(loop);
+      } else {
+        idleT = window.setTimeout(() => {
+          raf = requestAnimationFrame(loop);
+        }, 200);
       }
-      raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => {
       window.removeEventListener("mousemove", onMove);
       cancelAnimationFrame(raf);
+      clearTimeout(idleT);
     };
   }, [flyEnabled]);
 

@@ -419,7 +419,7 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .hgrip--r{width:clamp(300px,27vw,560px);top:clamp(300px,44vh,600px)}
 .hgrip--l canvas{-webkit-mask-image:linear-gradient(to left,#000 55%,transparent 92%);mask-image:linear-gradient(to left,#000 55%,transparent 92%)}
 .hgrip--r canvas{-webkit-mask-image:linear-gradient(to right,#000 55%,transparent 92%);mask-image:linear-gradient(to right,#000 55%,transparent 92%)}
-.hgrip-sh{position:fixed;width:120px;height:60px;margin:-30px 0 0 -60px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),transparent 70%);opacity:0;pointer-events:none;transition:opacity .3s;z-index:61}
+.hgrip-sh{position:fixed;left:0;top:0;width:120px;height:60px;margin:-30px 0 0 -60px;will-change:transform,opacity;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),transparent 70%);opacity:0;pointer-events:none;transition:opacity .3s;z-index:61}
 @media(max-width:1023px){.hgrip--l,.hgrip--r{width:clamp(240px,34vw,330px)}}
 @media(max-width:640px){.hgrip--l{width:46vw;top:20vh}.hgrip--r{width:46vw;top:52vh}.hgrip-sh{width:80px;height:40px;margin:-20px 0 0 -40px}}
 @media(max-height:480px){.hands-layer,.hgrip-sh{display:none!important}}

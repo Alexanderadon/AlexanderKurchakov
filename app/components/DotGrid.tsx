@@ -17,6 +17,24 @@ export function DotGrid() {
     let raf = 0;
     let live = false;
 
+    let running = false;
+
+    // цикл засыпает при сходимости: обновление --gx/--gy инвалидирует
+    // полноэкранную маску, гонять её на неподвижной мыши — греть GPU впустую
+    const loop = (): void => {
+      const dx = mx - gx;
+      const dy = my - gy;
+      if (Math.abs(dx) < 0.2 && Math.abs(dy) < 0.2) {
+        running = false;
+        return;
+      }
+      gx += dx * 0.14;
+      gy += dy * 0.14;
+      el.style.setProperty("--gx", `${gx.toFixed(1)}px`);
+      el.style.setProperty("--gy", `${gy.toFixed(1)}px`);
+      raf = requestAnimationFrame(loop);
+    };
+
     const onMove = (e: MouseEvent): void => {
       mx = e.clientX;
       my = e.clientY;
@@ -25,17 +43,12 @@ export function DotGrid() {
         gx = mx;
         gy = my;
       }
+      if (!running) {
+        running = true;
+        raf = requestAnimationFrame(loop);
+      }
     };
     window.addEventListener("mousemove", onMove, { passive: true });
-
-    const loop = (): void => {
-      gx += (mx - gx) * 0.14;
-      gy += (my - gy) * 0.14;
-      el.style.setProperty("--gx", `${gx.toFixed(1)}px`);
-      el.style.setProperty("--gy", `${gy.toFixed(1)}px`);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(raf);
