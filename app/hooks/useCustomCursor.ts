@@ -34,17 +34,28 @@ export function useCustomCursor(rootRef: RefObject<HTMLElement | null>): void {
         dot.style.opacity = "1";
         ring.style.opacity = "1";
       }
+      if (!ringRunning) {
+        ringRunning = true;
+        rafId = requestAnimationFrame(loop);
+      }
     };
     window.addEventListener("mousemove", onMove, { passive: true });
 
     let rafId = 0;
+    let ringRunning = false;
+    // кольцо догоняет точку и цикл засыпает; будится на mousemove
     const loop = (): void => {
-      rx += (mx - rx) * 0.16;
-      ry += (my - ry) * 0.16;
+      const dx = mx - rx;
+      const dy = my - ry;
+      if (Math.abs(dx) < 0.15 && Math.abs(dy) < 0.15) {
+        ringRunning = false;
+        return;
+      }
+      rx += dx * 0.16;
+      ry += dy * 0.16;
       ring.style.transform = `translate3d(${rx}px,${ry}px,0) translate(-50%,-50%)`;
       rafId = requestAnimationFrame(loop);
     };
-    rafId = requestAnimationFrame(loop);
 
     const targets = Array.from(
       root.querySelectorAll<HTMLElement>("a,button,.work,.irow"),
