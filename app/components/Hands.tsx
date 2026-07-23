@@ -169,7 +169,11 @@ function HandsLayer() {
           (s ? -2 : 2) +
           Math.sin(t * 0.0009 + s * 1.7) * 1.1 +
           grip[s] * (s ? -1.5 : 1.5);
-        els[s].style.transform = `translate3d(${inX}px,${-lag + bob}px,0) rotate(${rot}deg)`;
+        // стили пишем 30 раз/сек (дыхание ±5px этого не замечает) —
+        // вдвое меньше композитинга; при скролле — каждый кадр
+        if (frame % 2 === 0 || speed > 2) {
+          els[s].style.transform = `translate3d(${inX}px,${-lag + bob}px,0) rotate(${rot}deg)`;
+        }
         // контактная тень — только когда палец над карточкой; позиция кончика
         // считается арифметикой из кэша (ноль чтений layout в кадре)
         const bs = base[s];
@@ -180,8 +184,10 @@ function HandsLayer() {
         const overCard = cardRects.some(
           (q) => tx > q.l && tx < q.r && tyDoc > q.t && tyDoc < q.b,
         );
-        shs[s].style.transform = `translate3d(${tx}px,${ty + 16}px,0)`;
-        shs[s].style.opacity = overCard ? (g * 0.8).toFixed(2) : "0";
+        if (frame % 2 === 0 || speed > 2) {
+          shs[s].style.transform = `translate3d(${tx}px,${ty + 16}px,0)`;
+          shs[s].style.opacity = overCard ? (g * 0.8).toFixed(2) : "0";
+        }
         tipYpx[s] = ty;
       }
       raf = requestAnimationFrame(loop);
