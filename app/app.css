@@ -449,7 +449,9 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
     radial-gradient(80% 90% at 0% 55%,rgba(255,255,255,.035),transparent 60%),
     radial-gradient(120% 80% at 50% 115%,rgba(255,255,255,.04),transparent 65%)}
 .cinebg-glow{position:absolute;aspect-ratio:1;transform:translate(-50%,-50%);will-change:transform;
-  background:radial-gradient(closest-side,var(--clight),transparent 68%);opacity:var(--cglow);
+  background:radial-gradient(closest-side,var(--clight),transparent 70%);
+  background:radial-gradient(closest-side,var(--clight),color-mix(in srgb,var(--clight) 52%,transparent) 34%,color-mix(in srgb,var(--clight) 16%,transparent) 60%,transparent 84%);
+  opacity:var(--cglow);
   animation-duration:calc(34s*var(--cspd));animation-timing-function:ease-in-out;
   animation-iteration-count:infinite;animation-direction:alternate}
 .cinebg-glow:nth-child(3){animation-duration:calc(26s*var(--cspd))}
