@@ -41,10 +41,13 @@ void main(){
   // потолок: 30% экрана, выше поднимается только там, где тронули
   float ceilY=0.42+mi*0.38;
   float vert=smoothstep(ceilY,ceilY-0.30,uv.y);vert*=smoothstep(-0.14,0.06,uv.y)*0.35+0.65;
-  float a=(0.42+0.58*f)*vert*0.40;
+  vec2 lv=(uv-vec2(0.44,0.26))*vec2(0.85,1.7);
+  float lit=exp(-dot(lv,lv)*3.2);
+  float a=(0.42+0.58*f)*vert*0.40*(0.72+lit*1.05);
   a*=1.0-mi*0.5;
   a+=(h(gl_FragCoord.xy)-0.5)*0.006;
-  gl_FragColor=vec4(0.88,0.89,0.92,max(0.0,a));
+  vec3 col=mix(vec3(0.78,0.82,0.89),vec3(0.97,0.93,0.85),lit*0.75);
+  gl_FragColor=vec4(col,max(0.0,a));
 }`;
 
 function compile(gl: WebGLRenderingContext, type: number, src: string) {

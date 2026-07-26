@@ -4,6 +4,7 @@
 // Только CSS/transform, без картинок, canvas и библиотек.
 import type { CSSProperties } from "react";
 import { Fog } from "./Fog";
+import { Gothic } from "./Gothic";
 
 export interface Light {
   x: string; // положение левого края, CSS-значение
@@ -22,6 +23,7 @@ export interface BackgroundProps {
   lightColor?: string;
   texture?: boolean;
   geometryOpacity?: number;
+  gothicOpacity?: number;
   vignetteOpacity?: number;
   lights?: Light[];
   animationSpeed?: number;
@@ -35,7 +37,7 @@ const DEFAULT_LIGHTS: Light[] = [
   },
   {
     x: "68%", y: "-26%", w: "clamp(750px,36vw,1600px)", h: "clamp(1400px,140vh,2300px)",
-    rot: 15, blur: "620px", opacity: 0.08, drift: ["-11px", "13px"], seconds: 34,
+    rot: 15, blur: "620px", opacity: 0.06, drift: ["-11px", "13px"], seconds: 34,
   },
   {
     x: "12%", y: "76%", w: "clamp(1200px,86vw,2500px)", h: "clamp(500px,46vh,900px)",
@@ -45,9 +47,10 @@ const DEFAULT_LIGHTS: Light[] = [
 
 export function Background({
   backgroundColor = "#040405",
-  lightColor = "#EFECE6",
+  lightColor = "#F2E8D8",
   texture = true,
-  geometryOpacity = 0.11,
+  geometryOpacity = 0.07,
+  gothicOpacity = 0.16,
   vignetteOpacity = 0.8,
   lights = DEFAULT_LIGHTS,
   animationSpeed = 1,
@@ -56,6 +59,7 @@ export function Background({
     "--cbg": backgroundColor,
     "--clight": lightColor,
     "--cgeo": geometryOpacity,
+    "--cgoth": gothicOpacity,
     "--cvig": vignetteOpacity,
   } as CSSProperties;
 
@@ -69,6 +73,7 @@ export function Background({
             <i /><i /><i /><i /><i /><i /><i /><i /><i />
             <b /><b /><b /><b /><b /><b /><b /><b />
           </div>
+          <Gothic />
           <div className="cinebg-fade" />
         </>
       )}

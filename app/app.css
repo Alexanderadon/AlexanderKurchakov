@@ -486,6 +486,7 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .cinebg-geo i:nth-child(8){right:14%;top:82%;width:20vw;height:20vw}
 .cinebg-geo i:nth-child(9){left:10%;top:90%;width:34vw;height:22vw;border-radius:0}
 /* шафт: вытянутое пятно света, мягко гаснущее по длине; размытие снимает границы */
+.cinebg-shaft:nth-of-type(2){background:radial-gradient(ellipse 48% 46% at 50% 50%,#C9D6E4,transparent 78%)}
 .cinebg-shaft{position:fixed;will-change:transform;
   background:radial-gradient(ellipse 48% 46% at 50% 50%,var(--clight),transparent 78%);
   animation-name:cine-drift;animation-timing-function:ease-in-out;
@@ -499,3 +500,14 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 
 /* туман — шейдер (Fog.tsx): рендер в 0.32 экрана, растягивается CSS */
 .fogshader{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* готический каркас: арки, аркады, розетки — тонкой линией по всей странице */
+.cinebg-goth{position:absolute;inset:0;opacity:var(--cgoth)}
+.cinebg-goth svg{position:absolute;overflow:visible}
+.cinebg-goth path,.cinebg-goth circle{fill:none;stroke:#fff;stroke-width:1;vector-effect:non-scaling-stroke}
+.gf-1{right:6%;top:3%;width:min(30vw,520px)}
+.gf-2{left:5%;top:24%;width:min(42vw,660px)}
+.gf-3{right:11%;top:46%;width:min(20vw,320px)}
+.gf-4{left:12%;top:68%;width:min(46vw,760px)}
+.gf-5{right:14%;top:88%;width:min(22vw,360px)}
+@media(max-width:900px){.gf-2,.gf-4{width:76vw}.gf-1,.gf-5{width:44vw}}
