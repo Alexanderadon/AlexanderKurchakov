@@ -67,6 +67,7 @@ export function Background({
           <div className="cinebg-geo">
             <i /><i /><i /><i /><i /><i /><i /><i /><i />
           </div>
+          <div className="cinebg-fade" />
         </>
       )}
       {lights.map((l, i) => (
