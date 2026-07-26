@@ -18,6 +18,7 @@ import { About } from "~/components/About";
 import { SiteFooter } from "~/components/SiteFooter";
 import { Mascot } from "~/components/Mascot";
 import { Hands } from "~/components/Hands";
+import { InkTrail } from "~/components/InkTrail";
 import { ExperimentPanel } from "~/components/ExperimentPanel";
 
 export function meta(_: Route.MetaArgs) {
@@ -57,6 +58,7 @@ function Page() {
       <SiteFooter />
       <Mascot />
       <Hands />
+      <InkTrail />
       <ExperimentPanel />
     </div>
   );
