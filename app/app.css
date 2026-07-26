@@ -469,17 +469,19 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .cinebg-geo b::before{width:1px;height:100%;
   -webkit-mask-image:linear-gradient(180deg,#000 6%,rgba(0,0,0,.5) 62%,transparent);
   mask-image:linear-gradient(180deg,#000 6%,rgba(0,0,0,.5) 62%,transparent)}
+.cinebg-geo b:nth-of-type(2)::after,.cinebg-geo b:nth-of-type(6)::after,.cinebg-geo b:nth-of-type(7)::after{display:none}
+.cinebg-geo b:nth-of-type(3)::before,.cinebg-geo b:nth-of-type(8)::before{display:none}
 .cinebg-geo b::after{height:1px;width:100%;
   -webkit-mask-image:linear-gradient(90deg,#000 6%,rgba(0,0,0,.5) 62%,transparent);
   mask-image:linear-gradient(90deg,#000 6%,rgba(0,0,0,.5) 62%,transparent)}
 .cinebg-geo b:nth-of-type(1){left:7%;top:5%;width:19%;height:8%;transform:none}
-.cinebg-geo b:nth-of-type(2){right:9%;top:13%;width:15%;height:7%;transform:scaleX(-1)}
-.cinebg-geo b:nth-of-type(3){left:14%;top:29%;width:22%;height:10%;transform:scaleY(-1)}
+.cinebg-geo b:nth-of-type(2){right:9%;top:11%;width:1px;height:15%;transform:scaleX(-1)}
+.cinebg-geo b:nth-of-type(3){left:14%;top:31%;width:24%;height:1px;transform:scaleY(-1)}
 .cinebg-geo b:nth-of-type(4){right:12%;top:41%;width:17%;height:9%;transform:scale(-1)}
 .cinebg-geo b:nth-of-type(5){left:9%;top:57%;width:20%;height:8%;transform:none}
-.cinebg-geo b:nth-of-type(6){right:7%;top:66%;width:14%;height:11%;transform:scaleX(-1)}
-.cinebg-geo b:nth-of-type(7){left:24%;top:80%;width:24%;height:9%;transform:scaleY(-1)}
-.cinebg-geo b:nth-of-type(8){right:15%;top:90%;width:16%;height:7%;transform:scaleX(-1)}
+.cinebg-geo b:nth-of-type(6){right:7%;top:64%;width:1px;height:13%;transform:scaleX(-1)}
+.cinebg-geo b:nth-of-type(7){left:24%;top:80%;width:1px;height:11%;transform:scaleY(-1)}
+.cinebg-geo b:nth-of-type(8){right:15%;top:90%;width:18%;height:1px;transform:scaleX(-1)}
 .cinebg-geo i:nth-child(3n+1){opacity:1;-webkit-mask-image:linear-gradient(38deg,transparent,#000 28%,#000 58%,transparent 88%);mask-image:linear-gradient(38deg,transparent,#000 28%,#000 58%,transparent 88%)}
 .cinebg-geo i:nth-child(3n+2){opacity:.62;-webkit-mask-image:linear-gradient(-24deg,transparent 8%,#000 42%,transparent 92%);mask-image:linear-gradient(-24deg,transparent 8%,#000 42%,transparent 92%)}
 .cinebg-geo i:nth-child(3n){opacity:.42;-webkit-mask-image:linear-gradient(96deg,#000 12%,transparent 52%,#000 88%);mask-image:linear-gradient(96deg,#000 12%,transparent 52%,#000 88%)}
