@@ -445,8 +445,8 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .cinebg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--cbg)}
 /* мятая бумага — основа; камень и царапины поверх неё как фактуры */
 .cinebg-tex{position:absolute;inset:0;background:url(/img/paper.webp) repeat;background-size:1500px}
-.cinebg-tex2{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:1024px;opacity:.5}
-.cinebg-tex3{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:1600px;opacity:.38}
+.cinebg-tex2{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:1024px;opacity:.1}
+.cinebg-tex3{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:1200px;opacity:.55}
 /* чертёж: тонкие линии, круги, прямоугольник — на пределе видимости */
 .cinebg-geo{position:absolute;inset:0;opacity:var(--cgeo)}
 .cinebg-fade{position:absolute;inset:0;background:
