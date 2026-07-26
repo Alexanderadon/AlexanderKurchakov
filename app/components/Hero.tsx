@@ -20,7 +20,18 @@ export function Hero() {
   return (
     <section id="hero" aria-label="Главная">
       <div className="bento" data-st>
-        <div className="tile td t-name rv">
+        <div className="tile td t-name t-video rv">
+          <video
+            className="hero-video"
+            src="/video/hero.mp4"
+            poster="/video/hero-poster.jpg"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-label={NAME}
+          />
           <div className="hero-top">
             <span className="lab">
               <b>/00</b>
@@ -29,7 +40,7 @@ export function Hero() {
             </span>
             <span className="lab">{t.hero.location}</span>
           </div>
-          <h1 id="nm" className={playIn ? "play-in" : undefined} aria-label={NAME}>
+          <h1 hidden id="nm" className={playIn ? "play-in" : undefined} aria-label={NAME}>
             {NAME.split("").map((ch, i) => (
               <span
                 key={i}
