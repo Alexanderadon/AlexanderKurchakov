@@ -7,11 +7,11 @@
 @font-face{font-family:'Unbounded';font-style:normal;font-weight:800;font-display:swap;src:url('/fonts/unbounded-800-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
 /* ============ tokens: палитры (data-palette на корне) ============ */
 :root{
-  /* «уголь» — по умолчанию: холст почти чёрный, один акцент — огонь */
-  --bg:#0D0D0F; --tile:#17181B; --tile2:#1F2126; --lt:#F7F6F2;
-  --tx:#F0EEE9; --txd:#191813; --mut:#9DA0AA; --mutl:#6B675C;
-  --fire:#FF5A2C; --fire2:#FF8A5C; --blue:#FF5A2C; --blue2:#FF8A5C;
-  --line:rgba(255,255,255,.08); --bd:1px solid rgba(255,255,255,.08);
+  /* тёплый угольно-бронзовый: чёрный камень с коричневым подтоном, акцент — бронза */
+  --bg:#0A0807; --tile:#171310; --tile2:#221C16; --lt:#F2ECE0;
+  --tx:#E9DFCC; --txd:#141009; --mut:#9A8F7C; --mutl:#6A6152;
+  --fire:#C89B4A; --fire2:#E3C078; --blue:#C89B4A; --blue2:#E3C078;
+  --line:rgba(233,223,204,.09); --bd:1px solid rgba(233,223,204,.09);
   --ez:cubic-bezier(.22,1,.36,1); --spr:cubic-bezier(.34,1.56,.64,1);
   --r:22px;
   --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -443,6 +443,7 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 /* ============ cinebg: свет собора (ветка cinematic-background) ============ */
 .rootwrap{position:relative}
 .cinebg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--cbg)}
+.cinebg-tex,.cinebg-tex2,.cinebg-tex3{filter:sepia(.55) hue-rotate(-8deg) saturate(1.3)}
 /* бумага (волокно) — основа; камень и царапины поверх неё как фактуры */
 .cinebg-tex{position:absolute;inset:0;background:url(/img/paper.webp) repeat;background-size:820px}
 .cinebg-tex2{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:1024px;opacity:.09}
