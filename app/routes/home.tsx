@@ -46,7 +46,7 @@ function Page() {
   useMagneticLinks(rootRef);
 
   return (
-    <div ref={rootRef}>
+    <div className="rootwrap" ref={rootRef}>
       <Background />
       <Header />
       <main id="top">
