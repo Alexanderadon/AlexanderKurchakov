@@ -444,9 +444,9 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .rootwrap{position:relative}
 .cinebg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--cbg)}
 /* бумага (волокно) — основа; камень и царапины поверх неё как фактуры */
-.cinebg-tex{position:absolute;inset:0;background:url(/img/paper.webp) repeat;background-size:900px}
-.cinebg-tex2{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:1024px;opacity:.16;-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 10%,rgba(0,0,0,.18) 30%,rgba(0,0,0,.18) 70%,#000 90%,#000 100%);mask-image:linear-gradient(90deg,#000 0%,#000 10%,rgba(0,0,0,.18) 30%,rgba(0,0,0,.18) 70%,#000 90%,#000 100%)}
-.cinebg-tex3{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:1450px;opacity:.5;-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 10%,rgba(0,0,0,.18) 30%,rgba(0,0,0,.18) 70%,#000 90%,#000 100%);mask-image:linear-gradient(90deg,#000 0%,#000 10%,rgba(0,0,0,.18) 30%,rgba(0,0,0,.18) 70%,#000 90%,#000 100%)}
+.cinebg-tex{position:absolute;inset:0;background:url(/img/paper.webp) repeat;background-size:820px}
+.cinebg-tex2{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:1024px;opacity:.09}
+.cinebg-tex3{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:1200px;opacity:.16}
 /* чертёж: тонкие линии, круги, прямоугольник — на пределе видимости */
 .cinebg-geo{position:absolute;inset:0;opacity:var(--cgeo)}
 .cinebg-fade{position:absolute;inset:0;background:
