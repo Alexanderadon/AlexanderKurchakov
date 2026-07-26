@@ -440,26 +440,19 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .inktrail{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:63}
 @media(pointer:coarse){.inktrail{display:none}}
 
-/* ============ cinebg: кинематографичный фон (ветка cinematic-background) ============ */
-/* мягкость — математикой градиентов, без filter:blur; движение — только transform */
+/* ============ cinebg: свет собора (ветка cinematic-background) ============ */
 .cinebg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--cbg)}
-.cinebg-grad{position:absolute;inset:-10%;opacity:var(--cgrad);
-  background:
-    radial-gradient(90% 70% at 70% 0%,rgba(255,255,255,.05),transparent 62%),
-    radial-gradient(80% 90% at 0% 55%,rgba(255,255,255,.035),transparent 60%),
-    radial-gradient(120% 80% at 50% 115%,rgba(255,255,255,.04),transparent 65%)}
-.cinebg-glow{position:absolute;aspect-ratio:1;transform:translate(-50%,-50%);will-change:transform;
-  background:radial-gradient(closest-side,var(--clight),transparent 70%);
-  background:radial-gradient(closest-side,var(--clight),color-mix(in srgb,var(--clight) 52%,transparent) 34%,color-mix(in srgb,var(--clight) 16%,transparent) 60%,transparent 84%);
-  opacity:var(--cglow);
-  animation-duration:calc(34s*var(--cspd));animation-timing-function:ease-in-out;
+/* шафт: вытянутое пятно света, мягко гаснущее по длине; размытие снимает границы */
+.cinebg-shaft{position:absolute;will-change:transform;
+  background:linear-gradient(175deg,transparent,var(--clight) 26%,var(--clight) 58%,transparent 92%);
+  /* боковое затухание — у луча нет ни граней, ни углов */
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 40%,#000 60%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 40%,#000 60%,transparent);
+  animation-name:cine-drift;animation-timing-function:ease-in-out;
   animation-iteration-count:infinite;animation-direction:alternate}
-.cinebg-glow:nth-child(3){animation-duration:calc(26s*var(--cspd))}
-.cinebg-glow:nth-child(4){animation-duration:calc(41s*var(--cspd))}
-@keyframes cine-b1{to{transform:translate(-50%,-50%) translate3d(11px,-8px,0) scale(1.03)}}
-@keyframes cine-b2{to{transform:translate(-50%,-50%) translate3d(-13px,7px,0) scale(.98)}}
-@keyframes cine-b3{to{transform:translate(-50%,-50%) translate3d(8px,13px,0) scale(1.02)}}
+@keyframes cine-drift{to{transform:translate3d(var(--dx),var(--dy),0)}}
 .cinebg-noise{position:absolute;inset:0;background-image:var(--noise);opacity:var(--cnoise)}
 .cinebg-vig{position:absolute;inset:0;opacity:var(--cvig);
-  background:radial-gradient(120% 100% at 50% 46%,transparent 56%,rgba(0,0,0,.55) 100%)}
-@media(prefers-reduced-motion:reduce){.cinebg-glow{animation:none}}
+  background:radial-gradient(130% 104% at 50% 40%,transparent 46%,rgba(0,0,0,.42) 76%,rgba(0,0,0,.95) 100%)}
+@media(max-width:640px){.cinebg-shaft{filter:blur(180px)!important}}
+@media(prefers-reduced-motion:reduce){.cinebg-shaft{animation:none}}
