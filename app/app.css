@@ -8,8 +8,8 @@
 /* ============ tokens: палитры (data-palette на корне) ============ */
 :root{
   /* приглушённая готика: ни одной светящейся плоскости, золото — старое */
-  --bg:#0D0D0B; --tile:#141410; --tile2:#1C1B16; --lt:#16150F;
-  --tx:#C4C4C0; --txd:#CFCBC0; --mut:#7E7C74; --mutl:#8C887C;
+  --bg:#0D0D0B; --tile:#141410; --tile2:#1C1B16; --lt:#CFC7B2;
+  --tx:#C4C4C0; --txd:#141410; --mut:#7E7C74; --mutl:#6E695B;
   --fire:#A8935F; --fire2:#C2AD79; --blue:#A8935F; --blue2:#C2AD79;
   --line:rgba(196,196,192,.09); --bd:1px solid rgba(196,196,192,.09);
   --ez:cubic-bezier(.22,1,.36,1); --spr:cubic-bezier(.34,1.56,.64,1);
