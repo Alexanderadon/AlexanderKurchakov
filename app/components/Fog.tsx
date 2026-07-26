@@ -20,7 +20,7 @@ float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float v=0.,a=.5;
-  for(int k=0;k<5;k++){v+=a*n(p);p*=2.02;a*=.52;}return v*0.97;}
+  for(int k=0;k<4;k++){v+=a*n(p);p*=2.05;a*=.5;}return v;}
 void main(){
   vec2 uv=gl_FragCoord.xy/u_res;
   vec2 md=uv-u_m;
@@ -28,7 +28,7 @@ void main(){
   vec2 me=md*vec2(1.25,1.9);
   float mi=exp(-dot(me,me)*11.0);
   // поле сильно сжато по вертикали => пелена стелется, а не поднимается клубами
-  vec2 p=vec2(uv.x*u_res.x/u_res.y*1.3,uv.y*5.0);
+  vec2 p=vec2(uv.x*u_res.x/u_res.y*1.05,uv.y*4.2);
   p.x-=mod(u_t,4096.0)*0.008;
   // расталкивание: у курсора туман уходит наружу
   p+=vec2(md.x,md.y*2.2)*mi*2.4;
@@ -37,11 +37,11 @@ void main(){
   vec2 q=vec2(fbm(p+d1),fbm(p+vec2(5.2,1.3)+d2));
   vec2 d3=vec2(cos(t*0.43),sin(t*0.37))*0.8;
   vec2 r=vec2(fbm(p+1.2*q+vec2(1.7,9.2)+d3),fbm(p+1.2*q+vec2(8.3,2.8)-d3));
-  float f=smoothstep(0.26,0.68,fbm(p+1.3*r));f=f*f*(3.0-2.0*f);
+  float f=smoothstep(0.22,0.66,fbm(p+1.3*r));f=f*f*(3.0-2.0*f);
   // потолок: 30% экрана, выше поднимается только там, где тронули
-  float ceilY=0.34+mi*0.40;
-  float vert=smoothstep(ceilY,ceilY-0.19,uv.y);
-  float a=(0.30+0.70*f)*vert*0.46;
+  float ceilY=0.42+mi*0.38;
+  float vert=smoothstep(ceilY,ceilY-0.30,uv.y);vert*=smoothstep(-0.14,0.06,uv.y)*0.35+0.65;
+  float a=(0.42+0.58*f)*vert*0.40;
   a*=1.0-mi*0.5;
   a+=(h(gl_FragCoord.xy)-0.5)*0.006;
   gl_FragColor=vec4(0.88,0.89,0.92,max(0.0,a));
