@@ -19,7 +19,8 @@ export interface Light {
 export interface BackgroundProps {
   backgroundColor?: string;
   lightColor?: string;
-  noiseOpacity?: number;
+  texture?: boolean;
+  geometryOpacity?: number;
   vignetteOpacity?: number;
   lights?: Light[];
   animationSpeed?: number;
@@ -29,22 +30,23 @@ export interface BackgroundProps {
 const DEFAULT_LIGHTS: Light[] = [
   {
     x: "-16%", y: "-38%", w: "clamp(850px,48vw,1900px)", h: "clamp(1500px,165vh,2500px)",
-    rot: -21, blur: "540px", opacity: 0.04, drift: ["14px", "-10px"], seconds: 42,
+    rot: -21, blur: "540px", opacity: 0.1, drift: ["14px", "-10px"], seconds: 42,
   },
   {
     x: "68%", y: "-26%", w: "clamp(750px,36vw,1600px)", h: "clamp(1400px,140vh,2300px)",
-    rot: 15, blur: "620px", opacity: 0.035, drift: ["-11px", "13px"], seconds: 34,
+    rot: 15, blur: "620px", opacity: 0.08, drift: ["-11px", "13px"], seconds: 34,
   },
   {
     x: "12%", y: "76%", w: "clamp(1200px,86vw,2500px)", h: "clamp(500px,46vh,900px)",
-    rot: -5, blur: "460px", opacity: 0.02, drift: ["9px", "8px"], seconds: 50,
+    rot: -5, blur: "460px", opacity: 0.05, drift: ["9px", "8px"], seconds: 50,
   },
 ];
 
 export function Background({
   backgroundColor = "#060607",
   lightColor = "#EFECE6",
-  noiseOpacity = 0.035,
+  texture = true,
+  geometryOpacity = 0.07,
   vignetteOpacity = 0.8,
   lights = DEFAULT_LIGHTS,
   animationSpeed = 1,
@@ -52,12 +54,21 @@ export function Background({
   const vars = {
     "--cbg": backgroundColor,
     "--clight": lightColor,
-    "--cnoise": noiseOpacity,
+    "--cgeo": geometryOpacity,
     "--cvig": vignetteOpacity,
   } as CSSProperties;
 
   return (
     <div className="cinebg" style={vars} aria-hidden="true">
+      {texture && (
+        <>
+          <div className="cinebg-tex" />
+          <div className="cinebg-tex2" />
+          <div className="cinebg-geo">
+            <i /><i /><i /><i />
+          </div>
+        </>
+      )}
       {lights.map((l, i) => (
         <i
           key={i}
@@ -78,7 +89,6 @@ export function Background({
           }
         />
       ))}
-      <div className="cinebg-noise" />
       <div className="cinebg-vig" />
     </div>
   );
