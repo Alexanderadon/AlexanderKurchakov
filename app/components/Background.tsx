@@ -44,7 +44,7 @@ const DEFAULT_LIGHTS: Light[] = [
 ];
 
 export function Background({
-  backgroundColor = "#020203",
+  backgroundColor = "#0A0807",
   lightColor = "#EFECE6",
   texture = true,
   geometryOpacity = 0.11,
