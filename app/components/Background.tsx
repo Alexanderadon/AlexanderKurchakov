@@ -46,7 +46,7 @@ export function Background({
   backgroundColor = "#040405",
   lightColor = "#EFECE6",
   texture = true,
-  geometryOpacity = 0.055,
+  geometryOpacity = 0.11,
   vignetteOpacity = 0.8,
   lights = DEFAULT_LIGHTS,
   animationSpeed = 1,
@@ -91,6 +91,7 @@ export function Background({
           }
         />
       ))}
+      <i className="cinebg-fog fog-a" /><i className="cinebg-fog fog-b" /><i className="cinebg-fog fog-c" />
       <div className="cinebg-vig" />
     </div>
   );
