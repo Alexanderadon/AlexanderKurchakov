@@ -95,20 +95,31 @@ export function Fog() {
 
     function size(): void {
       if (!cv || !gl) return;
-      cv.width = Math.max(2, Math.round(window.innerWidth * SCALE));
-      cv.height = Math.max(2, Math.round(window.innerHeight * SCALE));
+      const w = cv.clientWidth || window.innerWidth;
+      const hgt = cv.clientHeight || window.innerHeight;
+      cv.width = Math.max(2, Math.round(w * SCALE));
+      cv.height = Math.max(2, Math.round(hgt * SCALE));
       gl.viewport(0, 0, cv.width, cv.height);
       gl.uniform2f(uRes, cv.width, cv.height);
     }
     size();
     window.addEventListener("resize", size);
+    window.visualViewport?.addEventListener("resize", size);
 
-    let mx = 0.5, my = 0.4, tx = 0.5, ty = 0.4;
+    let mx = -3, my = -3, tx = -3, ty = -3;
     const onMove = (e: MouseEvent): void => {
       tx = e.clientX / window.innerWidth;
       ty = 1 - e.clientY / window.innerHeight;
     };
+    const onTouch = (e: TouchEvent): void => {
+      const t = e.touches[0];
+      if (!t) return;
+      tx = t.clientX / window.innerWidth;
+      ty = 1 - t.clientY / window.innerHeight;
+    };
     window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("touchstart", onTouch, { passive: true });
+    window.addEventListener("touchmove", onTouch, { passive: true });
 
     let raf = 0, last = 0;
     const t0 = performance.now();
@@ -127,7 +138,10 @@ export function Fog() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", size);
+      window.visualViewport?.removeEventListener("resize", size);
       window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("touchstart", onTouch);
+      window.removeEventListener("touchmove", onTouch);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
   }, []);
