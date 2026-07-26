@@ -47,9 +47,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ft);font-weight:400;
 /* ============ ambient glow ============ */
 .amb{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
 .amb i{position:absolute;border-radius:50%;filter:blur(90px);opacity:.13}
-.amb i:nth-child(1){width:46vw;height:46vw;right:-14vw;top:-12vw;background:radial-gradient(circle,var(--fire),transparent 70%)}
-.amb i:nth-child(2){width:40vw;height:40vw;left:-16vw;top:60vh;background:radial-gradient(circle,var(--blue),transparent 70%);opacity:.09}
-.amb i:nth-child(3){width:34vw;height:34vw;right:-10vw;top:170vh;background:radial-gradient(circle,var(--fire),transparent 70%);opacity:.07}
+.amb i:nth-child(1){width:46vw;height:46vw;right:-14vw;top:-12vw;background:radial-gradient(circle,var(--fire),transparent 84%)}
+.amb i:nth-child(2){width:40vw;height:40vw;left:-16vw;top:60vh;background:radial-gradient(circle,var(--blue),transparent 84%);opacity:.09}
+.amb i:nth-child(3){width:34vw;height:34vw;right:-10vw;top:170vh;background:radial-gradient(circle,var(--fire),transparent 84%);opacity:.07}
 
 /* ============ header ============ */
 header{position:sticky;top:0;z-index:60;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
@@ -419,7 +419,7 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .hgrip--r{width:clamp(300px,27vw,560px);top:clamp(300px,44vh,600px)}
 .hgrip--l canvas{-webkit-mask-image:linear-gradient(to left,#000 55%,transparent 92%);mask-image:linear-gradient(to left,#000 55%,transparent 92%)}
 .hgrip--r canvas{-webkit-mask-image:linear-gradient(to right,#000 55%,transparent 92%);mask-image:linear-gradient(to right,#000 55%,transparent 92%)}
-.hgrip-sh{position:fixed;left:0;top:0;width:120px;height:60px;margin:-30px 0 0 -60px;will-change:transform,opacity;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),transparent 70%);opacity:0;pointer-events:none;transition:opacity .3s;z-index:61}
+.hgrip-sh{position:fixed;left:0;top:0;width:120px;height:60px;margin:-30px 0 0 -60px;will-change:transform,opacity;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),transparent 84%);opacity:0;pointer-events:none;transition:opacity .3s;z-index:61}
 @media(max-width:1023px){.hgrip--l,.hgrip--r{width:clamp(240px,34vw,330px)}}
 @media(max-width:640px){.hgrip--l{width:46vw;top:20vh}.hgrip--r{width:46vw;top:52vh}.hgrip-sh{width:80px;height:40px;margin:-20px 0 0 -40px}}
 @media(max-height:480px){.hands-layer,.hgrip-sh{display:none!important}}
@@ -447,27 +447,32 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .cinebg-tex{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:512px}
 .cinebg-tex2{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:860px;opacity:.34}
 /* чертёж: тонкие линии, круги, прямоугольник — на пределе видимости */
-.cinebg-geo{position:absolute;inset:0;opacity:var(--cgeo);
-  background:
-    linear-gradient(90deg,transparent calc(21% - 1px),#fff 21%,transparent calc(21% + 1px)),
-    linear-gradient(90deg,transparent calc(79% - 1px),#fff 79%,transparent calc(79% + 1px)),
-    linear-gradient(0deg,transparent calc(74% - 1px),#fff 74%,transparent calc(74% + 1px))}
+.cinebg-geo{position:absolute;inset:0;opacity:var(--cgeo)}
 .cinebg-fade{position:absolute;inset:0;background:
-   radial-gradient(26% 5% at 14% 4%,var(--cbg) 0%,transparent 70%),
-   radial-gradient(20% 4% at 62% 9%,var(--cbg) 0%,transparent 72%),
-   radial-gradient(30% 5% at 88% 16%,var(--cbg) 0%,transparent 68%),
-   radial-gradient(22% 4% at 30% 22%,var(--cbg) 0%,transparent 72%),
-   radial-gradient(28% 6% at 74% 31%,var(--cbg) 0%,transparent 70%),
-   radial-gradient(18% 4% at 10% 38%,var(--cbg) 0%,transparent 74%),
-   radial-gradient(32% 5% at 46% 45%,var(--cbg) 0%,transparent 68%),
-   radial-gradient(24% 4% at 86% 54%,var(--cbg) 0%,transparent 72%),
-   radial-gradient(20% 5% at 22% 61%,var(--cbg) 0%,transparent 70%),
-   radial-gradient(30% 4% at 66% 69%,var(--cbg) 0%,transparent 72%),
-   radial-gradient(22% 5% at 12% 78%,var(--cbg) 0%,transparent 70%),
-   radial-gradient(26% 4% at 78% 88%,var(--cbg) 0%,transparent 72%),
-   radial-gradient(20% 5% at 40% 95%,var(--cbg) 0%,transparent 70%)}
+   radial-gradient(26% 5% at 14% 4%,var(--cbg) 0%,transparent 84%),
+   radial-gradient(20% 4% at 62% 9%,var(--cbg) 0%,transparent 86%),
+   radial-gradient(30% 5% at 88% 16%,var(--cbg) 0%,transparent 82%),
+   radial-gradient(22% 4% at 30% 22%,var(--cbg) 0%,transparent 86%),
+   radial-gradient(28% 6% at 74% 31%,var(--cbg) 0%,transparent 84%),
+   radial-gradient(18% 4% at 10% 38%,var(--cbg) 0%,transparent 88%),
+   radial-gradient(32% 5% at 46% 45%,var(--cbg) 0%,transparent 82%),
+   radial-gradient(24% 4% at 86% 54%,var(--cbg) 0%,transparent 86%),
+   radial-gradient(20% 5% at 22% 61%,var(--cbg) 0%,transparent 84%),
+   radial-gradient(30% 4% at 66% 69%,var(--cbg) 0%,transparent 86%),
+   radial-gradient(22% 5% at 12% 78%,var(--cbg) 0%,transparent 84%),
+   radial-gradient(26% 4% at 78% 88%,var(--cbg) 0%,transparent 86%),
+   radial-gradient(20% 5% at 40% 95%,var(--cbg) 0%,transparent 84%)}
 /* каждая фигура своей плотности и со своим затуханием — линия живёт, а не лежит */
 .cinebg-geo i{position:absolute;border:1px solid #fff;border-radius:50%}
+.cinebg-geo b{position:absolute;background:#fff;-webkit-mask-image:linear-gradient(180deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(180deg,transparent,#000 26%,#000 68%,transparent)}
+.cinebg-geo b:nth-of-type(1){left:21%;top:2%;width:1px;height:14%}
+.cinebg-geo b:nth-of-type(2){right:19%;top:23%;width:1px;height:11%}
+.cinebg-geo b:nth-of-type(3){left:9%;top:48%;width:1px;height:16%}
+.cinebg-geo b:nth-of-type(4){right:26%;top:66%;width:1px;height:12%}
+.cinebg-geo b:nth-of-type(5){left:34%;top:84%;width:1px;height:13%}
+.cinebg-geo b:nth-of-type(6){left:14%;top:17%;height:1px;width:22%;-webkit-mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent)}
+.cinebg-geo b:nth-of-type(7){right:12%;top:53%;height:1px;width:18%;-webkit-mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent)}
+.cinebg-geo b:nth-of-type(8){left:28%;top:76%;height:1px;width:26%;-webkit-mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent)}
 .cinebg-geo i:nth-child(3n+1){opacity:1;-webkit-mask-image:linear-gradient(38deg,transparent,#000 28%,#000 58%,transparent 88%);mask-image:linear-gradient(38deg,transparent,#000 28%,#000 58%,transparent 88%)}
 .cinebg-geo i:nth-child(3n+2){opacity:.62;-webkit-mask-image:linear-gradient(-24deg,transparent 8%,#000 42%,transparent 92%);mask-image:linear-gradient(-24deg,transparent 8%,#000 42%,transparent 92%)}
 .cinebg-geo i:nth-child(3n){opacity:.42;-webkit-mask-image:linear-gradient(96deg,#000 12%,transparent 52%,#000 88%);mask-image:linear-gradient(96deg,#000 12%,transparent 52%,#000 88%)}
