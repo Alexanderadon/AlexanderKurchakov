@@ -10,8 +10,12 @@ const FRAME_MS = 33;
 
 const VERT = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
 
-const FRAG = `precision mediump float;
-uniform vec2 u_res;uniform vec2 u_m;uniform float u_t;
+const FRAG = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec2 u_res;uniform vec2 u_m;uniform float u_t;uniform float u_s;
 float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
@@ -19,15 +23,19 @@ float fbm(vec2 p){float v=0.,a=.5;
   for(int k=0;k<4;k++){v+=a*n(p);p*=2.03;a*=.5;}return v;}
 void main(){
   vec2 uv=gl_FragCoord.xy/u_res;
-  vec2 p=vec2(uv.x*u_res.x/u_res.y,uv.y)*2.4;p.y-=u_t*0.022;
-  float t=u_t*0.055;
+  // анизотропия: сжат по вертикали => клубы стелются пластами, а не струями
+  vec2 p=vec2(uv.x*u_res.x/u_res.y*1.5,uv.y*3.6);
+  p.y+=u_s*3.6;p.x-=mod(u_t,4096.0)*0.004;
+  float t=u_t*0.05;
   vec2 md=uv-u_m;float mi=exp(-dot(md,md)*11.0);
-  vec2 q=vec2(fbm(p+vec2(0.,t)),fbm(p+vec2(5.2,1.3)-t*0.8));
-  vec2 r=vec2(fbm(p+2.0*q+vec2(1.7,9.2)+t*0.6),fbm(p+2.0*q+vec2(8.3,2.8)-t*0.5));
+  vec2 d1=vec2(cos(t*0.9),sin(t*0.7))*1.3, d2=vec2(sin(t*0.61),cos(t*0.83))*1.1;
+  vec2 q=vec2(fbm(p+d1),fbm(p+vec2(5.2,1.3)+d2));
+  vec2 d3=vec2(cos(t*0.43),sin(t*0.37))*0.9;
+  vec2 r=vec2(fbm(p+1.3*q+vec2(1.7,9.2)+d3),fbm(p+1.3*q+vec2(8.3,2.8)-d3));
   r+=md*mi*0.9;
-  float f=smoothstep(0.36,0.92,fbm(p+2.4*r));
-  float vert=smoothstep(1.02,0.12,uv.y);
-  gl_FragColor=vec4(0.93,0.92,0.90,f*vert*0.62+f*mi*0.16);
+  float f=smoothstep(0.32,0.74,fbm(p+1.5*r));
+  float vert=pow(smoothstep(1.0,-0.05,uv.y),1.6);
+  gl_FragColor=vec4(0.87,0.88,0.90,(0.26+0.74*f)*vert*0.55+f*mi*0.13);
 }`;
 
 function compile(gl: WebGLRenderingContext, type: number, src: string) {
@@ -75,6 +83,7 @@ export function Fog() {
     const uRes = gl.getUniformLocation(prog, "u_res");
     const uM = gl.getUniformLocation(prog, "u_m");
     const uT = gl.getUniformLocation(prog, "u_t");
+    const uS = gl.getUniformLocation(prog, "u_s");
 
     function size(): void {
       if (!cv || !gl) return;
@@ -103,6 +112,7 @@ export function Fog() {
       my += (ty - my) * 0.06;
       gl.uniform2f(uM, mx, my);
       gl.uniform1f(uT, (now - t0) / 1000);
+      gl.uniform1f(uS, window.scrollY / window.innerHeight);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     raf = requestAnimationFrame(loop);
