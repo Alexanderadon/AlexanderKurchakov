@@ -30,10 +30,10 @@ const DEFAULT_GLOWS: GlowPos[] = [
 export function Background({
   backgroundColor = "#0A0A0C",
   lightColor = "#E8E8EA",
-  glowOpacity = 0.045,
-  noiseOpacity = 0.025,
-  vignetteOpacity = 0.5,
-  gradientIntensity = 0.5,
+  glowOpacity = 0.1,
+  noiseOpacity = 0.045,
+  vignetteOpacity = 0.55,
+  gradientIntensity = 0.9,
   glowPositions = DEFAULT_GLOWS,
   animationSpeed = 1,
 }: BackgroundProps) {
