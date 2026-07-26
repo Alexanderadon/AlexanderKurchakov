@@ -66,6 +66,7 @@ export function Background({
           <div className="cinebg-tex2" />
           <div className="cinebg-geo">
             <i /><i /><i /><i /><i /><i /><i /><i /><i />
+            <b /><b /><b /><b /><b /><b /><b /><b />
           </div>
           <div className="cinebg-fade" />
         </>
