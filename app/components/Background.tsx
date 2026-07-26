@@ -91,7 +91,6 @@ export function Background({
           }
         />
       ))}
-      <i className="cinebg-fog fog-a" /><i className="cinebg-fog fog-b" /><i className="cinebg-fog fog-c" />
       <div className="cinebg-vig" />
     </div>
   );
