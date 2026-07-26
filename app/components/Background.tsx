@@ -3,6 +3,7 @@
 // границ и колец не видно, читается пространство, а не градиент.
 // Только CSS/transform, без картинок, canvas и библиотек.
 import type { CSSProperties } from "react";
+import { Fog } from "./Fog";
 
 export interface Light {
   x: string; // положение левого края, CSS-значение
@@ -91,6 +92,7 @@ export function Background({
           }
         />
       ))}
+      <Fog />
       <div className="cinebg-vig" />
     </div>
   );
