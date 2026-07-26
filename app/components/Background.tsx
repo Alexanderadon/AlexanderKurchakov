@@ -43,10 +43,10 @@ const DEFAULT_LIGHTS: Light[] = [
 ];
 
 export function Background({
-  backgroundColor = "#060607",
+  backgroundColor = "#040405",
   lightColor = "#EFECE6",
   texture = true,
-  geometryOpacity = 0.07,
+  geometryOpacity = 0.055,
   vignetteOpacity = 0.8,
   lights = DEFAULT_LIGHTS,
   animationSpeed = 1,
