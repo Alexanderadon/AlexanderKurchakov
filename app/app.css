@@ -444,8 +444,8 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .rootwrap{position:relative}
 .cinebg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--cbg)}
 /* камень + микроцарапины в другом масштабе — повтор тайла не читается */
-.cinebg-tex{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:512px}
-.cinebg-tex2{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:860px;opacity:.34}
+.cinebg-tex{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:1024px}
+.cinebg-tex2{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:1500px;opacity:.34}
 /* чертёж: тонкие линии, круги, прямоугольник — на пределе видимости */
 .cinebg-geo{position:absolute;inset:0;opacity:var(--cgeo)}
 .cinebg-fade{position:absolute;inset:0;background:
@@ -464,18 +464,22 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
    radial-gradient(20% 5% at 40% 95%,rgba(4,4,5,.85) 0%,transparent 100%)}
 /* каждая фигура своей плотности и со своим затуханием — линия живёт, а не лежит */
 .cinebg-geo i{position:absolute;border:1px solid #fff;border-radius:50%}
-.cinebg-geo b{position:absolute;background:#fff;-webkit-mask-image:linear-gradient(180deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(180deg,transparent,#000 26%,#000 68%,transparent)}
-.cinebg-geo b:nth-of-type(1){left:21%;top:2%;width:1px;height:14%}
-.cinebg-geo b:nth-of-type(2){right:19%;top:23%;width:1px;height:11%}
-.cinebg-geo b:nth-of-type(3){left:9%;top:48%;width:1px;height:16%}
-.cinebg-geo b:nth-of-type(4){right:26%;top:66%;width:1px;height:12%}
-.cinebg-geo b:nth-of-type(5){left:34%;top:84%;width:1px;height:13%}
-.cinebg-geo b:nth-of-type(6){left:14%;top:17%;height:1px;width:22%;-webkit-mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent)}
-.cinebg-geo b:nth-of-type(7){right:12%;top:53%;height:1px;width:18%;-webkit-mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent)}
-.cinebg-geo b:nth-of-type(9){right:7%;top:8%;width:1px;height:17%}
-.cinebg-geo b:nth-of-type(10){right:13%;top:37%;width:1px;height:13%}
-.cinebg-geo b:nth-of-type(11){right:5%;top:62%;width:1px;height:15%}
-.cinebg-geo b:nth-of-type(8){left:28%;top:76%;height:1px;width:26%;-webkit-mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(90deg,transparent,#000 26%,#000 68%,transparent)}
+.cinebg-geo b{position:absolute}
+.cinebg-geo b::before,.cinebg-geo b::after{content:"";position:absolute;left:0;top:0;background:#fff}
+.cinebg-geo b::before{width:1px;height:100%;
+  -webkit-mask-image:linear-gradient(180deg,#000 6%,rgba(0,0,0,.5) 62%,transparent);
+  mask-image:linear-gradient(180deg,#000 6%,rgba(0,0,0,.5) 62%,transparent)}
+.cinebg-geo b::after{height:1px;width:100%;
+  -webkit-mask-image:linear-gradient(90deg,#000 6%,rgba(0,0,0,.5) 62%,transparent);
+  mask-image:linear-gradient(90deg,#000 6%,rgba(0,0,0,.5) 62%,transparent)}
+.cinebg-geo b:nth-of-type(1){left:7%;top:5%;width:19%;height:8%;transform:none}
+.cinebg-geo b:nth-of-type(2){right:9%;top:13%;width:15%;height:7%;transform:scaleX(-1)}
+.cinebg-geo b:nth-of-type(3){left:14%;top:29%;width:22%;height:10%;transform:scaleY(-1)}
+.cinebg-geo b:nth-of-type(4){right:12%;top:41%;width:17%;height:9%;transform:scale(-1)}
+.cinebg-geo b:nth-of-type(5){left:9%;top:57%;width:20%;height:8%;transform:none}
+.cinebg-geo b:nth-of-type(6){right:7%;top:66%;width:14%;height:11%;transform:scaleX(-1)}
+.cinebg-geo b:nth-of-type(7){left:24%;top:80%;width:24%;height:9%;transform:scaleY(-1)}
+.cinebg-geo b:nth-of-type(8){right:15%;top:90%;width:16%;height:7%;transform:scaleX(-1)}
 .cinebg-geo i:nth-child(3n+1){opacity:1;-webkit-mask-image:linear-gradient(38deg,transparent,#000 28%,#000 58%,transparent 88%);mask-image:linear-gradient(38deg,transparent,#000 28%,#000 58%,transparent 88%)}
 .cinebg-geo i:nth-child(3n+2){opacity:.62;-webkit-mask-image:linear-gradient(-24deg,transparent 8%,#000 42%,transparent 92%);mask-image:linear-gradient(-24deg,transparent 8%,#000 42%,transparent 92%)}
 .cinebg-geo i:nth-child(3n){opacity:.42;-webkit-mask-image:linear-gradient(96deg,#000 12%,transparent 52%,#000 88%);mask-image:linear-gradient(96deg,#000 12%,transparent 52%,#000 88%)}

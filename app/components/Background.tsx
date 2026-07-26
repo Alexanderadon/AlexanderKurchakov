@@ -67,31 +67,11 @@ export function Background({
           <div className="cinebg-tex2" />
           <div className="cinebg-geo">
             <i /><i /><i /><i /><i /><i /><i /><i /><i />
-            <b /><b /><b /><b /><b /><b /><b /><b /><b /><b /><b />
+            <b /><b /><b /><b /><b /><b /><b /><b />
           </div>
           <div className="cinebg-fade" />
         </>
       )}
-      {lights.map((l, i) => (
-        <i
-          key={i}
-          className="cinebg-shaft"
-          style={
-            {
-              left: l.x,
-              top: l.y,
-              width: l.w,
-              height: l.h,
-              rotate: `${l.rot ?? 0}deg`,
-              filter: `blur(${l.blur ?? "520px"})`,
-              opacity: l.opacity ?? 0.03,
-              "--dx": l.drift?.[0] ?? "10px",
-              "--dy": l.drift?.[1] ?? "-10px",
-              animationDuration: `${(l.seconds ?? 40) / Math.max(0.1, animationSpeed)}s`,
-            } as CSSProperties
-          }
-        />
-      ))}
       <Fog />
       <div className="cinebg-vig" />
     </div>
