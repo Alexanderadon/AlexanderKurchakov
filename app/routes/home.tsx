@@ -10,7 +10,6 @@ import { useReveal } from "~/hooks/useReveal";
 import { useCustomCursor } from "~/hooks/useCustomCursor";
 import { useMagneticLinks } from "~/hooks/useMagneticLinks";
 import { Ambient } from "~/components/Ambient";
-import { DotGrid } from "~/components/DotGrid";
 import { Header } from "~/components/Header";
 import { Hero } from "~/components/Hero";
 import { Marquee } from "~/components/Marquee";
@@ -48,7 +47,6 @@ function Page() {
   return (
     <div ref={rootRef}>
       <Ambient />
-      <DotGrid />
       <Header />
       <main id="top">
         <Hero />
