@@ -44,7 +44,7 @@ const DEFAULT_LIGHTS: Light[] = [
 ];
 
 export function Background({
-  backgroundColor = "#040405",
+  backgroundColor = "#020203",
   lightColor = "#EFECE6",
   texture = true,
   geometryOpacity = 0.11,
@@ -67,7 +67,7 @@ export function Background({
           <div className="cinebg-tex2" />
           <div className="cinebg-geo">
             <i /><i /><i /><i /><i /><i /><i /><i /><i />
-            <b /><b /><b /><b /><b /><b /><b /><b />
+            <b /><b /><b /><b /><b /><b /><b /><b /><b /><b /><b />
           </div>
           <div className="cinebg-fade" />
         </>
