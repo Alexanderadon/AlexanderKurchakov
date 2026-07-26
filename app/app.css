@@ -442,6 +442,20 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 
 /* ============ cinebg: свет собора (ветка cinematic-background) ============ */
 .cinebg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--cbg)}
+/* камень + микроцарапины в другом масштабе — повтор тайла не читается */
+.cinebg-tex{position:absolute;inset:0;background:url(/img/stone.webp) repeat;background-size:512px}
+.cinebg-tex2{position:absolute;inset:0;background:url(/img/scratch.webp) repeat;background-size:860px;opacity:.5}
+/* чертёж: тонкие линии, круги, прямоугольник — на пределе видимости */
+.cinebg-geo{position:absolute;inset:0;opacity:var(--cgeo);
+  background:
+    linear-gradient(90deg,transparent calc(21% - 1px),#fff 21%,transparent calc(21% + 1px)),
+    linear-gradient(90deg,transparent calc(79% - 1px),#fff 79%,transparent calc(79% + 1px)),
+    linear-gradient(0deg,transparent calc(74% - 1px),#fff 74%,transparent calc(74% + 1px))}
+.cinebg-geo i{position:absolute;border:1px solid #fff;border-radius:50%}
+.cinebg-geo i:nth-child(1){left:6%;top:44%;width:34vw;height:34vw}
+.cinebg-geo i:nth-child(2){left:24%;top:62%;width:22vw;height:22vw}
+.cinebg-geo i:nth-child(3){right:8%;top:10%;width:26vw;height:26vw}
+.cinebg-geo i:nth-child(4){right:14%;bottom:8%;width:30vw;height:22vw;border-radius:0}
 /* шафт: вытянутое пятно света, мягко гаснущее по длине; размытие снимает границы */
 .cinebg-shaft{position:absolute;will-change:transform;
   background:linear-gradient(175deg,transparent,var(--clight) 26%,var(--clight) 58%,transparent 92%);
