@@ -1,7 +1,8 @@
 // Hero: bento-сетка (7 плиток). Имя разбито на буквы декларативно (.ch + --i);
 // класс .play-in ставится после маунта (client) при отсутствии reduced-motion.
-import { useEffect, useState } from "react";
-import { ENSP } from "~/lib/chars";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
+import { ENSP, PLAY } from "~/lib/chars";
 import { useLang } from "~/lib/i18n";
 import { cssVars } from "~/lib/style";
 import { prefersReducedMotion } from "~/lib/media";
@@ -10,18 +11,71 @@ import { MountainsPreview } from "./previews/MountainsPreview";
 
 const NAME = "АЛЕКСАНДР";
 
+type SndState = "idle" | "off" | "on";
+
 export function Hero() {
   const { t } = useLang();
   const [playIn, setPlayIn] = useState(false);
+  const vidRef = useRef<HTMLVideoElement>(null);
+  const [snd, setSnd] = useState<SndState>("idle");
   useEffect(() => {
     if (!prefersReducedMotion()) setPlayIn(true);
   }, []);
 
+  // как в карточках работ: клик — звук, подпись отражает состояние
+  useEffect(() => {
+    const v = vidRef.current;
+    if (!v) return;
+    v.muted = true;
+    const sync = (): void => setSnd(v.paused ? "idle" : v.muted ? "off" : "on");
+    v.addEventListener("play", sync);
+    v.addEventListener("pause", sync);
+    sync();
+    return () => {
+      v.removeEventListener("play", sync);
+      v.removeEventListener("pause", sync);
+    };
+  }, []);
+
+  const toggleVid = (): void => {
+    const v = vidRef.current;
+    if (!v) return;
+    if (v.paused) {
+      const p = v.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } else {
+      v.muted = !v.muted;
+    }
+    setSnd(v.paused ? "idle" : v.muted ? "off" : "on");
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleVid();
+    }
+  };
+  const onClick = (e: MouseEvent<HTMLDivElement>): void => {
+    if ((e.target as HTMLElement).closest("a")) return;
+    toggleVid();
+  };
+  const sndText =
+    snd === "idle"
+      ? PLAY + " " + t.video.watch
+      : snd === "off"
+        ? t.video.sndOff
+        : t.video.sndOn;
+
   return (
     <section id="hero" aria-label="Главная">
       <div className="bento" data-st>
-        <div className="tile td t-name t-video rv">
+        <div
+          className="tile td t-name t-video rv"
+          tabIndex={0}
+          onClick={onClick}
+          onKeyDown={onKeyDown}
+        >
           <video
+            ref={vidRef}
             className="hero-video"
             src="/video/hero.mp4"
             poster="/video/hero-poster.jpg"
@@ -32,6 +86,9 @@ export function Hero() {
             preload="metadata"
             aria-label={NAME}
           />
+          <span className="snd mono" aria-hidden="true">
+            {sndText}
+          </span>
           <div className="hero-top">
             <span className="lab">
               <b>/00</b>
