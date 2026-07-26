@@ -9,7 +9,7 @@ import { WorksProvider } from "~/lib/works-context";
 import { useReveal } from "~/hooks/useReveal";
 import { useCustomCursor } from "~/hooks/useCustomCursor";
 import { useMagneticLinks } from "~/hooks/useMagneticLinks";
-import { Ambient } from "~/components/Ambient";
+import { Background } from "~/components/Background";
 import { Header } from "~/components/Header";
 import { Hero } from "~/components/Hero";
 import { Marquee } from "~/components/Marquee";
@@ -47,7 +47,7 @@ function Page() {
 
   return (
     <div ref={rootRef}>
-      <Ambient />
+      <Background />
       <Header />
       <main id="top">
         <Hero />
