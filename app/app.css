@@ -449,19 +449,19 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 /* чертёж: тонкие линии, круги, прямоугольник — на пределе видимости */
 .cinebg-geo{position:absolute;inset:0;opacity:var(--cgeo)}
 .cinebg-fade{position:absolute;inset:0;background:
-   radial-gradient(26% 5% at 14% 4%,var(--cbg) 0%,transparent 84%),
-   radial-gradient(20% 4% at 62% 9%,var(--cbg) 0%,transparent 86%),
-   radial-gradient(30% 5% at 88% 16%,var(--cbg) 0%,transparent 82%),
-   radial-gradient(22% 4% at 30% 22%,var(--cbg) 0%,transparent 86%),
-   radial-gradient(28% 6% at 74% 31%,var(--cbg) 0%,transparent 84%),
-   radial-gradient(18% 4% at 10% 38%,var(--cbg) 0%,transparent 88%),
-   radial-gradient(32% 5% at 46% 45%,var(--cbg) 0%,transparent 82%),
-   radial-gradient(24% 4% at 86% 54%,var(--cbg) 0%,transparent 86%),
-   radial-gradient(20% 5% at 22% 61%,var(--cbg) 0%,transparent 84%),
-   radial-gradient(30% 4% at 66% 69%,var(--cbg) 0%,transparent 86%),
-   radial-gradient(22% 5% at 12% 78%,var(--cbg) 0%,transparent 84%),
-   radial-gradient(26% 4% at 78% 88%,var(--cbg) 0%,transparent 86%),
-   radial-gradient(20% 5% at 40% 95%,var(--cbg) 0%,transparent 84%)}
+   radial-gradient(26% 5% at 14% 4%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(20% 4% at 62% 9%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(30% 5% at 88% 16%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(22% 4% at 30% 22%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(28% 6% at 74% 31%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(18% 4% at 10% 38%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(32% 5% at 46% 45%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(24% 4% at 86% 54%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(20% 5% at 22% 61%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(30% 4% at 66% 69%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(22% 5% at 12% 78%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(26% 4% at 78% 88%,rgba(4,4,5,.85) 0%,transparent 100%),
+   radial-gradient(20% 5% at 40% 95%,rgba(4,4,5,.85) 0%,transparent 100%)}
 /* каждая фигура своей плотности и со своим затуханием — линия живёт, а не лежит */
 .cinebg-geo i{position:absolute;border:1px solid #fff;border-radius:50%}
 .cinebg-geo b{position:absolute;background:#fff;-webkit-mask-image:linear-gradient(180deg,transparent,#000 26%,#000 68%,transparent);mask-image:linear-gradient(180deg,transparent,#000 26%,#000 68%,transparent)}
@@ -487,10 +487,7 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .cinebg-geo i:nth-child(9){left:10%;top:90%;width:34vw;height:22vw;border-radius:0}
 /* шафт: вытянутое пятно света, мягко гаснущее по длине; размытие снимает границы */
 .cinebg-shaft{position:fixed;will-change:transform;
-  background:linear-gradient(175deg,transparent,var(--clight) 26%,var(--clight) 58%,transparent 92%);
-  /* боковое затухание — у луча нет ни граней, ни углов */
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 40%,#000 60%,transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 40%,#000 60%,transparent);
+  background:radial-gradient(ellipse 48% 46% at 50% 50%,var(--clight),transparent 78%);
   animation-name:cine-drift;animation-timing-function:ease-in-out;
   animation-iteration-count:infinite;animation-direction:alternate}
 @keyframes cine-drift{to{transform:translate3d(var(--dx),var(--dy),0)}}
@@ -499,3 +496,13 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
   background:radial-gradient(130% 104% at 50% 40%,transparent 46%,rgba(0,0,0,.42) 76%,rgba(0,0,0,.95) 100%)}
 @media(max-width:640px){.cinebg-shaft{filter:blur(180px)!important}}
 @media(prefers-reduced-motion:reduce){.cinebg-shaft{animation:none}}
+
+/* туман: две бесшовные текстуры в трёх слоях, разный масштаб и скорость дрейфа */
+.cinebg-fog{position:fixed;inset:-10%;pointer-events:none;will-change:transform}
+.fog-a{background:url(/img/fog1.webp) repeat;background-size:1700px;opacity:.055;animation:fog-a 96s linear infinite}
+.fog-b{background:url(/img/fog2.webp) repeat;background-size:2600px;opacity:.045;animation:fog-b 148s linear infinite}
+.fog-c{background:url(/img/fog1.webp) repeat;background-size:3400px;opacity:.03;animation:fog-c 210s linear infinite}
+@keyframes fog-a{to{transform:translate3d(-1700px,90px,0)}}
+@keyframes fog-b{to{transform:translate3d(2600px,-120px,0)}}
+@keyframes fog-c{to{transform:translate3d(-3400px,-60px,0)}}
+@media(prefers-reduced-motion:reduce){.cinebg-fog{animation:none}}
