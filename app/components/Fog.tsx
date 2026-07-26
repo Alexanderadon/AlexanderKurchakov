@@ -23,20 +23,27 @@ float fbm(vec2 p){float v=0.,a=.5;
   for(int k=0;k<5;k++){v+=a*n(p);p*=2.02;a*=.52;}return v*0.97;}
 void main(){
   vec2 uv=gl_FragCoord.xy/u_res;
-  // анизотропия: сжат по вертикали => клубы стелются пластами, а не струями
-  vec2 p=vec2(uv.x*u_res.x/u_res.y*1.5,uv.y*3.6);
-  p.x-=mod(u_t,4096.0)*0.006;
-  float t=u_t*0.05;
-  vec2 md=uv-u_m;float mi=exp(-dot(md,md)*11.0);
-  vec2 d1=vec2(cos(t*0.9),sin(t*0.7))*1.3, d2=vec2(sin(t*0.61),cos(t*0.83))*1.1;
+  vec2 md=uv-u_m;
+  // зона влияния курсора — вытянутый эллипс (по земле шире, чем вверх)
+  vec2 me=md*vec2(1.25,1.9);
+  float mi=exp(-dot(me,me)*11.0);
+  // поле сильно сжато по вертикали => пелена стелется, а не поднимается клубами
+  vec2 p=vec2(uv.x*u_res.x/u_res.y*1.3,uv.y*5.0);
+  p.x-=mod(u_t,4096.0)*0.008;
+  // расталкивание: у курсора туман уходит наружу
+  p+=vec2(md.x,md.y*2.2)*mi*2.4;
+  float t=u_t*0.045;
+  vec2 d1=vec2(cos(t*0.9),sin(t*0.7))*1.2,d2=vec2(sin(t*0.61),cos(t*0.83))*1.0;
   vec2 q=vec2(fbm(p+d1),fbm(p+vec2(5.2,1.3)+d2));
-  vec2 d3=vec2(cos(t*0.43),sin(t*0.37))*0.9;
-  vec2 r=vec2(fbm(p+1.3*q+vec2(1.7,9.2)+d3),fbm(p+1.3*q+vec2(8.3,2.8)-d3));
-  r+=md*mi*0.9;
-  float f=smoothstep(0.30,0.72,fbm(p+1.4*r));f=f*f*(3.0-2.0*f);
-  float vert=pow(smoothstep(1.05,-0.1,uv.y),1.5);
-  float a=(0.22+0.78*f)*vert*0.54+f*mi*0.12;
-  a+=(h(gl_FragCoord.xy)-0.5)*0.008;
+  vec2 d3=vec2(cos(t*0.43),sin(t*0.37))*0.8;
+  vec2 r=vec2(fbm(p+1.2*q+vec2(1.7,9.2)+d3),fbm(p+1.2*q+vec2(8.3,2.8)-d3));
+  float f=smoothstep(0.26,0.68,fbm(p+1.3*r));f=f*f*(3.0-2.0*f);
+  // потолок: 30% экрана, выше поднимается только там, где тронули
+  float ceilY=0.34+mi*0.40;
+  float vert=smoothstep(ceilY,ceilY-0.19,uv.y);
+  float a=(0.30+0.70*f)*vert*0.46;
+  a*=1.0-mi*0.5;
+  a+=(h(gl_FragCoord.xy)-0.5)*0.006;
   gl_FragColor=vec4(0.88,0.89,0.92,max(0.0,a));
 }`;
 
