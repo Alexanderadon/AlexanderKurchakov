@@ -78,7 +78,7 @@ export function About() {
           <div className="af rv">
             <span className="lab">{t.about.factDone}</span>
             <div>
-              <div className="num b">30+</div>
+              <div className="num b">150+</div>
               <p className="cap">{t.about.factDoneCap}</p>
             </div>
           </div>

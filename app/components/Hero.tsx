@@ -184,7 +184,7 @@ export function Hero() {
         <div className="tile td t-fact rv">
           <span className="lab">{t.hero.released}</span>
           <div>
-            <div className="num">30+</div>
+            <div className="num">150+</div>
             <p className="cap">{t.hero.releasedCap}</p>
           </div>
         </div>
