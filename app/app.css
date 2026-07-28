@@ -520,8 +520,8 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .t-video .snd{z-index:3}
 
 /* собор — полоса над футером */
-.cathedral{position:relative;width:100%;height:clamp(220px,34vw,460px);pointer-events:none;
-  background:url(/img/cathedral.webp) center bottom/contain no-repeat;opacity:.6;
-  -webkit-mask-image:linear-gradient(180deg,transparent,#000 30%,#000 100%);
-  mask-image:linear-gradient(180deg,transparent,#000 30%,#000 100%)}
+.cathedral{position:absolute;left:0;right:0;bottom:0;height:clamp(260px,38vw,620px);pointer-events:none;
+  background:url(/img/cathedral.webp) center bottom/100% auto no-repeat;opacity:.3;
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 34%,#000 72%,rgba(0,0,0,.35) 100%);
+  mask-image:linear-gradient(180deg,transparent,#000 34%,#000 72%,rgba(0,0,0,.35) 100%)}
 @media(max-width:700px){.cathedral{height:34vw;opacity:.45}}
