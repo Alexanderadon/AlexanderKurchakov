@@ -55,6 +55,7 @@ function Page() {
         <Works />
         <About />
       </main>
+      <div className="cathedral" aria-hidden="true" />
       <SiteFooter />
       <Mascot />
       <Hands />

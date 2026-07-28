@@ -519,12 +519,9 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 .t-video{cursor:pointer}
 .t-video .snd{z-index:3}
 
-/* собор в подвале: чертёж во всю ширину, контент поверх */
-footer{position:relative;overflow:hidden;padding-bottom:clamp(150px,22vh,320px)}
-.cathedral{position:absolute;left:50%;bottom:0;transform:translateX(-50%);
-  width:min(1500px,120%);aspect-ratio:1010/539;pointer-events:none;opacity:.55;
-  background:url(/img/cathedral.webp) center bottom/contain no-repeat;
-  -webkit-mask-image:linear-gradient(180deg,transparent,#000 34%,#000 100%);
-  mask-image:linear-gradient(180deg,transparent,#000 34%,#000 100%)}
-.fwrap{position:relative;z-index:1}
-@media(max-width:700px){.cathedral{width:190%;opacity:.4}}
+/* собор — полоса над футером */
+.cathedral{position:relative;width:100%;height:clamp(220px,34vw,460px);pointer-events:none;
+  background:url(/img/cathedral.webp) center bottom/contain no-repeat;opacity:.6;
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 30%,#000 100%);
+  mask-image:linear-gradient(180deg,transparent,#000 30%,#000 100%)}
+@media(max-width:700px){.cathedral{height:34vw;opacity:.45}}
