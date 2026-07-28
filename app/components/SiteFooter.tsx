@@ -5,7 +5,6 @@ export function SiteFooter() {
   const { t } = useLang();
   return (
     <footer id="contact">
-      <div className="cathedral" aria-hidden="true" />
       <div className="fwrap">
         <div className="links">
           <a href="mailto:alexanderkurachakov@gmail.com">email</a>
