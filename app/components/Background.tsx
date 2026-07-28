@@ -2,6 +2,7 @@
 // Источник — не круг, а вытянутый скошенный шафт с большим размытием, поэтому
 // границ и колец не видно, читается пространство, а не градиент.
 // Только CSS/transform, без картинок, canvas и библиотек.
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { Fog } from "./Fog";
 
@@ -52,11 +53,24 @@ export function Background({
   lights = DEFAULT_LIGHTS,
   animationSpeed = 1,
 }: BackgroundProps) {
+  // высота футера: собор стоит ровно на его верхней кромке, ничего не раздвигая
+  const [footerH, setFooterH] = useState(0);
+  useEffect(() => {
+    const f = document.querySelector("footer");
+    if (!f) return;
+    const upd = (): void => setFooterH(f.offsetHeight);
+    upd();
+    const ro = new ResizeObserver(upd);
+    ro.observe(f);
+    return () => ro.disconnect();
+  }, []);
+
   const vars = {
     "--cbg": backgroundColor,
     "--clight": lightColor,
     "--cgeo": geometryOpacity,
     "--cvig": vignetteOpacity,
+    "--fh": `${footerH}px`,
   } as CSSProperties;
 
   return (
