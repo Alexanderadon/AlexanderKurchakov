@@ -85,7 +85,6 @@ export function Background({
             <b /><b /><b /><b /><b /><b /><b /><b />
           </div>
           <div className="cinebg-fade" />
-          <div className="cathedral" />
         </>
       )}
       <Fog />
