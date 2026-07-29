@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Типы
+        run: npm run typecheck
+
+      - name: Модульные тесты
+        run: npm run test
+
+      # Три движка не для галочки: баг с собором (белый прямоугольник
+      # в пол-экрана вместо чертежа) воспроизводился только в WebKit.
+      - name: Браузеры для e2e
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Сквозные тесты
+        run: npm run e2e
+
+      - name: Отчёт при падении
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

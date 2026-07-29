@@ -32,3 +32,10 @@ _port/
 .vercel
 
 .cache/
+
+# test artifacts
+coverage/
+
+# playwright
+test-results/
+playwright-report/
