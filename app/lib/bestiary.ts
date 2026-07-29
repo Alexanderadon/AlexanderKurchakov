@@ -39,7 +39,11 @@ export const pageAspectInSpread = (): number =>
  */
 export const coverOverhang = (): number => COVER_RATIO / (SPREAD_RATIO / 2);
 
-/** Такт открытия, мс. Половина — уход обложки, половина — приход разворота. */
-export const OPEN_MS = 620;
+/** Такт открытия, мс. Книга — предмет тяжёлый: спешка выдаёт подделку
+ *  вернее любой геометрии. 620 мс читались как хлопок. */
+export const OPEN_MS = 1500;
 /** Переворот страницы, мс. */
-export const TURN_MS = 700;
+export const TURN_MS = 820;
+/** Сколько листов в книге. Текстур пока две, они чередуются; когда приедут
+ *  настоящие страницы, меняется только это число. */
+export const LEAVES = 8;

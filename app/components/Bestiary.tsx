@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "~/lib/i18n";
 import { prefersReducedMotion } from "~/lib/media";
-import { OPEN_MS, SPREAD_RATIO } from "~/lib/bestiary";
+import { LEAVES, OPEN_MS, SPREAD_RATIO, TURN_MS } from "~/lib/bestiary";
 import { createBook, type BookScene } from "./bestiary/bookScene";
 
 type Phase = "shut" | "opening" | "open" | "closing";
@@ -23,6 +23,10 @@ export function Bestiary() {
   const rafRef = useRef(0);
   const safetyRef = useRef(0);
   const posRef = useRef(0); // насколько книга раскрыта сейчас, 0..1
+  const turnRafRef = useRef(0);
+  const turnRef2 = useRef(0); // ход текущего листа, 0..1
+  const pageRef = useRef(0); // сколько листов уже слева
+  const busyRef = useRef(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
@@ -46,6 +50,51 @@ export function Bestiary() {
     after(instant ? 0 : OPEN_MS, () => setPhase("open"));
   }, [phase, after]);
 
+  const paint = useCallback((): void => {
+    sceneRef.current?.draw(posRef.current, turnRef2.current, pageRef.current, LEAVES - pageRef.current);
+  }, []);
+
+  /**
+   * Листание. Тычок по правой половине разворота гонит лист влево, по левой —
+   * возвращает назад. Кнопок нет намеренно: книгу листают, тыкая в неё.
+   */
+  const flip = useCallback(
+    (dir: 1 | -1): void => {
+      if (busyRef.current || phase !== "open") return;
+      const next = pageRef.current + dir;
+      if (next < 0 || next > LEAVES) return;
+      if (prefersReducedMotion()) {
+        pageRef.current = next;
+        paint();
+        return;
+      }
+      busyRef.current = true;
+      const t0 = performance.now();
+      const step = (now: number): void => {
+        const k = Math.min(1, (now - t0) / TURN_MS);
+        const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        turnRef2.current = dir > 0 ? e : 1 - e;
+        paint();
+        if (k < 1) {
+          turnRafRef.current = requestAnimationFrame(step);
+        } else {
+          // Лист доехал — засчитываем его в стопку и обнуляем ход, иначе
+          // следующий переворот стартовал бы с середины.
+          pageRef.current = next;
+          turnRef2.current = 0;
+          busyRef.current = false;
+          paint();
+        }
+      };
+      if (dir < 0) {
+        pageRef.current = next;
+        turnRef2.current = 1;
+      }
+      turnRafRef.current = requestAnimationFrame(step);
+    },
+    [phase, paint],
+  );
+
   /** Гонит сцену от текущего положения к целевому: 0 — закрыта, 1 — раскрыта. */
   const run = useCallback(
     (to: 0 | 1): void => {
@@ -53,7 +102,7 @@ export function Bestiary() {
       if (!scene) return;
       if (prefersReducedMotion()) {
         posRef.current = to;
-        scene.draw(to);
+        paint();
         return;
       }
       const from = posRef.current;
@@ -63,7 +112,7 @@ export function Bestiary() {
       const step = (now: number): void => {
         const k = Math.min(1, (now - t0) / OPEN_MS);
         posRef.current = from + (to - from) * k;
-        scene.draw(posRef.current);
+        paint();
         if (k < 1) {
           rafRef.current = requestAnimationFrame(step);
         } else {
@@ -86,10 +135,10 @@ export function Bestiary() {
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
         rafRef.current = 0;
         posRef.current = to;
-        sceneRef.current?.draw(to);
+        paint();
       }, OPEN_MS + 260);
     },
-    [],
+    [paint],
   );
 
   const close = useCallback((): void => {
@@ -125,13 +174,13 @@ export function Bestiary() {
         const cv = turnRef.current;
         if (dead || !cv) return;
         sceneRef.current = createBook(cv, { coverFront, endpaper, pageLeft, pageRight });
-        sceneRef.current?.draw(posRef.current);
+        paint();
         run(phase === "closing" ? 0 : 1);
       })
       .catch(() => undefined);
     const onResize = (): void => {
       sceneRef.current?.resize();
-      sceneRef.current?.draw(posRef.current);
+      paint();
     };
     window.addEventListener("resize", onResize);
     return () => {
@@ -151,6 +200,12 @@ export function Bestiary() {
       if (e.key === "Escape") {
         e.preventDefault();
         close();
+      } else if (e.key === "ArrowRight" || e.key === "PageDown") {
+        e.preventDefault();
+        flip(1);
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        e.preventDefault();
+        flip(-1);
       } else if (e.key === "Tab") {
         // Ловушка фокуса. Без неё Tab из диалога уходит на фон: экранный
         // читатель и клавиатура оказываются на странице, которая логически
@@ -179,7 +234,7 @@ export function Bestiary() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [phase, close]);
+  }, [phase, close, flip]);
 
   // Фокус уводим в диалог, чтобы Escape и стрелки работали сразу, без клика.
   useEffect(() => {
@@ -235,7 +290,18 @@ export function Bestiary() {
                   страниц с толщиной, форзац на изнанке крышки, камера с
                   перспективой. Прежний вариант был перебросом карточки: крышка
                   уходила ребром, и в этот кадр её подменял плоский разворот. */}
-              <canvas ref={turnRef} className="bbook" role="img" aria-label={t.hero.bestiarySpread} />
+              <canvas
+                ref={turnRef}
+                className="bbook"
+                role="img"
+                aria-label={t.hero.bestiarySpread}
+                onClick={(e) => {
+                  // Половина, по которой ткнули, и задаёт направление —
+                  // ровно как листают настоящую книгу.
+                  const r = e.currentTarget.getBoundingClientRect();
+                  flip(e.clientX - r.left > r.width / 2 ? 1 : -1);
+                }}
+              />
 
             </div>
 
