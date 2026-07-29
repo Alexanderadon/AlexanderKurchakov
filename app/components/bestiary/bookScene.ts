@@ -34,6 +34,13 @@ const PAGE_H = PAGE_W / 0.8003;
 /** Толщина блока страниц. Без неё книга — лист бумаги, а не том. */
 const BLOCK_T = 0.055;
 const COVER_T = 0.012;
+/**
+ * «Квадрат» — выступ крышки за обрез блока. У переплётчиков это миллиметра три,
+ * и без него книга разваливается на две бумажки: крышка ровно по размеру
+ * страницы целиком прячется под ней, кожаной рамки вокруг не остаётся.
+ * Это главное, что отличает том от двух картинок на чёрном фоне.
+ */
+const SQUARE = 0.028;
 
 const COLS = 48;
 const ROWS = 6;
@@ -45,10 +52,12 @@ uniform mat4 u_model;
 uniform vec2 u_size;     // ширина и высота плоскости
 uniform float u_bend;    // 0 — жёсткая плоскость, >0 — изгиб бумаги
 uniform float u_dir;     // +1 растём вправо от петли, -1 влево
+uniform float u_sag;     // провал бумаги к жёлобу
 varying vec2 v_uv;
 varying vec3 v_n;
 
 const float PI = 3.141592653589793;
+const float SAG_K = 0.16;   // как быстро провал сходит на нет от корешка
 
 void main(){
   float s = a_uv.x * u_size.x;
@@ -62,8 +71,12 @@ void main(){
     p = vec3(R * sin(ang) * u_dir, (0.5 - a_uv.y) * u_size.y, R * (1.0 - cos(ang)));
     n = vec3(sin(ang) * u_dir, 0.0, -cos(ang));
   } else {
-    p = vec3(s * u_dir, (0.5 - a_uv.y) * u_size.y, 0.0);
-    n = vec3(0.0, 0.0, 1.0);
+    // Раскрытая книга не лежит идеально плоско: у корешка бумага уходит вниз, в
+    // жёлоб, и выпрямляется к обрезу. Без этого разворот читается наклейкой.
+    float dip = -u_sag * exp(-a_uv.x / SAG_K);
+    float slope = (u_sag / SAG_K) * exp(-a_uv.x / SAG_K) / max(1e-4, u_size.x);
+    p = vec3(s * u_dir, (0.5 - a_uv.y) * u_size.y, dip);
+    n = normalize(vec3(-slope * u_dir, 0.0, 1.0));
   }
   v_uv = a_uv;
   // Нормаль поворачиваем моделью — свет обязан жить в мировых координатах,
@@ -77,7 +90,7 @@ precision mediump float;
 uniform sampler2D u_tex;
 uniform vec3 u_light;
 uniform vec4 u_tint;      // rgb — подмешиваемый цвет, a — его доля
-uniform highp float u_stripe;   // >0: рисуем торец блока полосами вместо текстуры
+uniform highp float u_stripe;   // 1 — торец блока полосами, 2 — контактная тень
 varying vec2 v_uv;
 varying vec3 v_n;
 
@@ -85,6 +98,16 @@ void main(){
   vec3 n = normalize(v_n);
   float d = abs(dot(n, normalize(u_light)));
   float lit = 0.58 + 0.42 * d;
+
+  // Контактная тень на «столе». Без неё том висит в пустоте: глаз ищет опору
+  // раньше, чем разбирается в форме предмета.
+  if (u_stripe > 1.5) {
+    vec2 q = (v_uv - 0.5) * 2.0;
+    float r = length(vec2(q.x * 0.92, q.y));
+    float a = (1.0 - smoothstep(0.55, 1.0, r)) * 0.5;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+    return;
+  }
 
   vec4 tex;
   if (u_stripe > 0.5) {
@@ -178,6 +201,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const uDir = gl.getUniformLocation(prog, "u_dir");
   const uTint = gl.getUniformLocation(prog, "u_tint");
   const uStripe = gl.getUniformLocation(prog, "u_stripe");
+  const uSag = gl.getUniformLocation(prog, "u_sag");
   gl.uniform1i(gl.getUniformLocation(prog, "u_tex"), 0);
   gl.uniform3f(gl.getUniformLocation(prog, "u_light"), -0.3, 0.5, 0.81);
 
@@ -213,7 +237,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     dir: 1 | -1;
     tex: WebGLTexture | null;
     bend?: number;
-    stripe?: boolean;
+    sag?: number;
+    stripe?: number;
     tint?: [number, number, number, number];
   }
 
@@ -225,7 +250,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     gl.uniform2f(uSize, p.size[0], p.size[1]);
     gl.uniform1f(uBend, p.bend ?? 0);
     gl.uniform1f(uDir, p.dir);
-    gl.uniform1f(uStripe, p.stripe ? 1 : 0);
+    gl.uniform1f(uStripe, p.stripe ?? 0);
+    gl.uniform1f(uSag, p.sag ?? 0);
     const t = p.tint ?? [0, 0, 0, 0];
     gl.uniform4f(uTint, t[0], t[1], t[2], t[3]);
     gl.activeTexture(gl.TEXTURE0);
@@ -265,45 +291,76 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const leafModel = multiply(translation(0, 0, BLOCK_T + 0.002), rotationY(-leafA));
 
     const half: [number, number] = [PAGE_W, PAGE_H];
+    // Крышка больше блока на «квадрат» и посажена так, чтобы выступ шёл по трём
+    // сторонам — сверху, снизу и по обрезу, — а у корешка совпадал с блоком.
+    const coverSize: [number, number] = [PAGE_W + SQUARE, PAGE_H + SQUARE * 2];
+    // Насколько левая стопка уже набралась: пока лист один, это доля его хода.
+    const leftGrown = ease(phase(t, 0.34, 1));
+    const leftT = 0.004 + BLOCK_T * 0.32 * leftGrown;
+    // Бумага проваливается в жёлоб только у раскрытой книги.
+    const sag = 0.028 * settle;
 
     // Порядок рисования снизу вверх; глубина включена, но прозрачные кромки
     // страниц требуют, чтобы дальнее шло раньше ближнего.
     const pieces: Piece[] = [
-      // Задняя крышка — под всем, изнанкой вверх. Растёт вправо от корешка:
-      // у закрытой книги слева нет ничего, и отдельной «левой страницы» тоже
-      // быть не должно — левой стороной становится перевернувшийся лист.
-      { model: translation(0, 0, 0), size: half, dir: 1, tex: texEnd },
+      // Контактная тень на столе — первой, под всем остальным.
+      {
+        model: translation(-PAGE_W * (1 - settle * 0.5), 0, -0.004),
+        size: [PAGE_W * (1 + settle) + SQUARE * 2, PAGE_H * 1.24],
+        dir: 1,
+        tex: null,
+        stripe: 2,
+      },
+      // Задняя крышка — под всем, изнанкой вверх, с выступом за обрез блока.
+      // Растёт вправо от корешка: у закрытой книги слева нет ничего, и отдельной
+      // «левой страницы» быть не должно — ею становится перевернувшийся лист.
+      { model: translation(0, 0, 0), size: coverSize, dir: 1, tex: texEnd },
       // торцы блока: верхний, нижний и внешний обрез
       {
         model: multiply(translation(0, PAGE_H / 2, 0), rotationX(-Math.PI / 2)),
         size: [PAGE_W, BLOCK_T],
         dir: 1,
         tex: null,
-        stripe: true,
+        stripe: 1,
       },
       {
         model: multiply(translation(0, -PAGE_H / 2, 0), rotationX(Math.PI / 2)),
         size: [PAGE_W, BLOCK_T],
         dir: 1,
         tex: null,
-        stripe: true,
+        stripe: 1,
       },
       {
         model: multiply(translation(PAGE_W, 0, 0), rotationY(Math.PI / 2)),
         size: [BLOCK_T, PAGE_H],
         dir: 1,
         tex: null,
-        stripe: true,
+        stripe: 1,
       },
-      // правая страница — верх блока
-      { model: translation(0, 0, BLOCK_T), size: half, dir: 1, tex: texR },
+      // Правая страница — верх блока, с провалом к жёлобу.
+      { model: translation(0, 0, BLOCK_T), size: half, dir: 1, tex: texR, sag },
+      // Левая стопка: набирается по мере того, как лист ложится налево.
+      {
+        model: multiply(translation(0, PAGE_H / 2, 0), rotationX(-Math.PI / 2)),
+        size: [PAGE_W, leftT],
+        dir: -1,
+        tex: null,
+        stripe: 1,
+      },
+      {
+        model: multiply(translation(-PAGE_W, 0, 0), rotationY(-Math.PI / 2)),
+        size: [leftT, PAGE_H],
+        dir: 1,
+        tex: null,
+        stripe: 1,
+      },
       // Лист, следующий за крышкой. Рисуем дважды: лицом вверх он показывает
       // ту же страницу, что лежала справа, а лёгши налево — свою изнанку.
-      { model: leafModel, size: half, dir: 1, tex: texR, bend: leafBend },
-      { model: multiply(leafModel, translation(0, 0, -0.0008)), size: half, dir: 1, tex: texL, bend: leafBend },
+      { model: leafModel, size: half, dir: 1, tex: texR, bend: leafBend, sag: leafBend < 0.01 ? sag : 0 },
+      { model: multiply(leafModel, translation(0, 0, -0.0008)), size: half, dir: 1, tex: texL, bend: leafBend, sag: leafBend < 0.01 ? sag : 0 },
       // крышка: лицо снаружи, форзац изнутри — рисуем двумя проходами
-      { model: coverModel, size: half, dir: 1, tex: texCover },
-      { model: multiply(coverModel, translation(0, 0, -0.001)), size: half, dir: 1, tex: texEnd },
+      { model: coverModel, size: coverSize, dir: 1, tex: texCover },
+      { model: multiply(coverModel, translation(0, 0, -0.001)), size: coverSize, dir: 1, tex: texEnd },
     ];
 
     for (const p of pieces) drawPiece(view, p);
