@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./base";
 
 /**
  * Снимает пиксели с экрана и считает долю «светлых» — тех, что ярче порога.

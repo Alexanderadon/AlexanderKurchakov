@@ -6,6 +6,7 @@ import { ENSP, PLAY } from "~/lib/chars";
 import { useLang } from "~/lib/i18n";
 import { cssVars } from "~/lib/style";
 import { prefersReducedMotion } from "~/lib/media";
+import { Bestiary } from "./Bestiary";
 import { NowPreview } from "./previews/NowPreview";
 import { MountainsPreview } from "./previews/MountainsPreview";
 
@@ -75,7 +76,13 @@ export function Hero() {
           onKeyDown={onKeyDown}
         >
           <video
-            ref={vidRef}
+            // Глушим в ref-колбэке, а не в эффекте: React не отражает проп muted
+            // в DOM-атрибут, и между вставкой <video autoPlay> и эффектом остаётся
+            // окно, в котором звук успевает пойти.
+            ref={(el) => {
+              if (el) el.muted = true;
+              vidRef.current = el;
+            }}
             className="hero-video"
             src="/video/hero.mp4"
             poster="/video/hero-poster.jpg"
@@ -190,13 +197,7 @@ export function Hero() {
         </div>
 
         <div className="tile td t-seal t-best rv">
-          <img
-            className="bcover"
-            src="/img/bestiary/cover.webp"
-            alt={t.hero.bestiary}
-            loading="lazy"
-            decoding="async"
-          />
+          <Bestiary />
         </div>
       </div>
     </section>

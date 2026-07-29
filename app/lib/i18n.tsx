@@ -40,6 +40,9 @@ const RU = {
     released: "выпущено",
     releasedCap: "проектов — от лендингов до игровых прототипов",
     bestiary: "бестиарий",
+    bestiaryOpen: "открыть бестиарий",
+    bestiaryClose: "закрыть",
+    bestiaryTurn: "перевернуть",
   },
   marquee: ["сайты", "игры", "айдентика", "видео", "шеберлік", "匠心", "мастерство"],
   works: {
@@ -125,6 +128,9 @@ const KZ: Dict = {
     released: "шығарылды",
     releasedCap: "жоба — лендингтерден ойын прототиптеріне дейін",
     bestiary: "бестиарий",
+    bestiaryOpen: "бестиарийді ашу",
+    bestiaryClose: "жабу",
+    bestiaryTurn: "бетті аудару",
   },
   marquee: ["сайттар", "ойындар", "айдентика", "бейне", "шеберлік", "匠心", "өнер"],
   works: {
@@ -208,6 +214,9 @@ const EN: Dict = {
     released: "shipped",
     releasedCap: "projects — from landing pages to game prototypes",
     bestiary: "bestiary",
+    bestiaryOpen: "open the bestiary",
+    bestiaryClose: "close",
+    bestiaryTurn: "turn the page",
   },
   marquee: ["sites", "games", "identity", "video", "шеберлік", "匠心", "mastery"],
   works: {
