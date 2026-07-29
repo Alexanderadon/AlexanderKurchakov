@@ -37,7 +37,7 @@ const PAGE_W = 1;
 /** Пропорция обложки, снятая с ассета: 1122×1402. */
 const PAGE_H = PAGE_W / 0.8003;
 /** Толщина блока страниц. Без неё книга — лист бумаги, а не том. */
-const BLOCK_T = 0.092;
+const BLOCK_T = 0.155;
 const COVER_T = 0.012;
 /**
  * «Квадрат» — выступ крышки за обрез блока. У переплётчиков это миллиметра три,
@@ -62,6 +62,7 @@ uniform float u_arc;     // >0: плоскость свёрнута дугой �
 uniform float u_flip;    // >0: зеркалить текстуру по горизонтали
 varying vec2 v_uv;
 varying vec3 v_n;
+varying float v_face;
 
 const float PI = 3.141592653589793;
 const float SAG_K = 0.16;   // как быстро провал сходит на нет от корешка
@@ -85,7 +86,11 @@ void main(){
     float R = u_size.x / max(1e-4, u_bend);
     float ang = s / R;
     p = vec3(R * sin(ang) * u_dir, (0.5 - a_uv.y) * u_size.y, R * (1.0 - cos(ang)));
-    n = vec3(sin(ang) * u_dir, 0.0, -cos(ang));
+    // Знак проверен через векторное произведение касательных: при ang=0
+    // нормаль обязана быть (0,0,1) — вверх, к зрителю. Была (0,0,-1), то есть
+    // смотрела в стол; при abs(dot) это не замечалось, а с честным светом
+    // изгибающийся лист становился серым.
+    n = vec3(-sin(ang) * u_dir, 0.0, cos(ang));
   } else {
     // Раскрытая книга не лежит идеально плоско: у корешка бумага уходит вниз, в
     // жёлоб, и выпрямляется к обрезу. Без этого разворот читается наклейкой.
@@ -101,6 +106,10 @@ void main(){
   // Нормаль поворачиваем моделью — свет обязан жить в мировых координатах,
   // иначе он поедет вместе с предметом, а это первый признак подделки.
   v_n = mat3(u_model[0].xyz, u_model[1].xyz, u_model[2].xyz) * n;
+  // У плоскостей, растущих ВЛЕВО от петли, геометрия зеркальна: обход вершин
+  // переворачивается, и gl_FrontFacing сообщает «изнанка» для поверхности,
+  // которая смотрит на зрителя. Передаём знак, чтобы фрагментный шейдер это учёл.
+  v_face = u_dir;
   gl_Position = u_mvp * vec4(p, 1.0);
 }`;
 
@@ -109,14 +118,20 @@ precision mediump float;
 uniform sampler2D u_tex;
 uniform vec3 u_light;
 uniform vec4 u_tint;      // rgb — подмешиваемый цвет, a — его доля
-uniform highp float u_stripe;   // 1 — торец блока полосами, 2 — контактная тень
+uniform highp float u_stripe;   // 1 — торец, 2 — тень на столе, 3 — кожа, 4 — тень листа
 varying vec2 v_uv;
 varying vec3 v_n;
+varying float v_face;
 
 void main(){
-  vec3 n = normalize(v_n);
-  float d = abs(dot(n, normalize(u_light)));
-  float lit = 0.58 + 0.42 * d;
+  // Нормаль разворачиваем по грани: у изнанки листа она смотрит от зрителя, и
+  // abs(dot) светил её наравне с лицом — бумага казалась самосветящейся.
+  vec3 n = normalize(v_n) * (gl_FrontFacing ? 1.0 : -1.0) * v_face;
+  vec3 l = normalize(u_light);
+  float d = max(dot(n, l), 0.0);
+  // Просвет: тонкая бумага пропускает свет с обратной стороны, но слабо.
+  float back = max(-dot(n, l), 0.0) * 0.12;
+  float lit = 0.34 + 0.66 * d + back;
 
   // Контактная тень на «столе». Без неё том висит в пустоте: глаз ищет опору
   // раньше, чем разбирается в форме предмета.
@@ -129,6 +144,15 @@ void main(){
     return;
   }
 
+  // Тень переворачиваемого листа. Настоящая тень изогнутой бумаги сама изогнута —
+  // ни один градиент под элементом её не заменит, потому что не знает формы.
+  if (u_stripe > 3.5) {
+    float a = 0.26 * smoothstep(0.0, 0.10, v_uv.x) * (1.0 - smoothstep(0.12, 0.62, v_uv.x));
+    if (a < 0.004) discard;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+    return;
+  }
+
   vec4 tex;
   if (u_stripe > 2.5) {
     // Кожа корешка. Процедурная, а не кусок обложки: натянутая на дугу обложка
@@ -136,7 +160,7 @@ void main(){
     // очередь. Бинты поперёк — след шнуров, на которые сшит блок.
     float grain = fract(sin(v_uv.y * 733.0 + v_uv.x * 91.0) * 4137.0);
     float bands = smoothstep(0.34, 0.5, abs(fract(v_uv.y * 5.0) - 0.5)) * 0.16;
-    vec3 leather = vec3(0.082, 0.076, 0.063) * (0.86 + 0.14 * grain) + bands * vec3(0.10, 0.09, 0.07);
+    vec3 leather = vec3(0.135, 0.125, 0.104) * (0.86 + 0.14 * grain) + bands * vec3(0.10, 0.09, 0.07);
     tex = vec4(leather, 1.0);
   } else if (u_stripe > 0.5) {
     // Торец блока — сотни листов. Рисуем их полосами: текстуру такого разрешения
@@ -285,7 +309,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     gl.uniform1f(uBend, p.bend ?? 0);
     gl.uniform1f(uDir, p.dir);
     // Тень — декаль: пишет цвет, но не глубину, иначе перекроет книгу собой.
-    gl.depthMask((p.stripe ?? 0) < 1.5);
+    // Тени — декали: пишут цвет, но не глубину, иначе перекроют книгу собой.
+    const st = p.stripe ?? 0;
+    gl.depthMask(!(st > 1.5 && st < 2.5) && st < 3.5);
     gl.uniform1f(uStripe, p.stripe ?? 0);
     gl.uniform1f(uSag, p.sag ?? 0);
     gl.uniform1f(uArc, p.arc ?? 0);
@@ -356,7 +382,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const coverSize: [number, number] = [PAGE_W + SQUARE, PAGE_H + SQUARE * 2];
     // Насколько левая стопка уже набралась: пока лист один, это доля его хода.
     // Бумага проваливается в жёлоб только у раскрытой книги.
-    const sag = 0.055 * settle;   // страницы заметно уходят в жёлоб
+    const sag = 0.038 * settle;   // страницы заметно уходят в жёлоб
 
     // Порядок рисования снизу вверх; глубина включена, но прозрачные кромки
     // страниц требуют, чтобы дальнее шло раньше ближнего.
@@ -373,18 +399,16 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       // широкий жёлоб. Ставим до крышек, чтобы он уходил ЗА них по глубине.
       {
         model: translation(0, 0, BLOCK_T + COVER_T),
-        size: [(BLOCK_T + COVER_T * 2) + 0.16 * settle, PAGE_H + SQUARE * 2],
+        size: [BLOCK_T + COVER_T * 2, PAGE_H + SQUARE * 2],
         dir: -1,
         tex: null,
         arc: 1,
         stripe: 3,
       },
-      // Левая стопка: страница, на которую ложатся перевёрнутые листы.
-      { model: translation(0, 0, leftT), size: half, dir: -1, tex: texL, sag: -sag, flip: true },
       // Задняя крышка — под всем, изнанкой вверх, с выступом за обрез блока.
       // Растёт вправо от корешка: у закрытой книги слева нет ничего, и отдельной
       // «левой страницы» быть не должно — ею становится перевернувшийся лист.
-      { model: translation(0, 0, 0), size: coverSize, dir: 1, tex: texEnd },
+      { model: translation(0, 0, 0), size: coverSize, dir: 1, tex: texEnd, sag },
       // торцы блока: верхний, нижний и внешний обрез
       {
         model: multiply(translation(0, PAGE_H / 2, rightT / 2), rotationX(-Math.PI / 2)),
@@ -424,6 +448,23 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
         tex: null,
         stripe: 1,
       },
+      // Тень листа на странице под ним. Строго ПЕРЕД самим листом: наоборот
+      // она накрывала его собой. Держится у корешка и слабеет к обрезу — там
+      // бумага уже отошла от страницы и контакт потерян.
+      ...(leafBend > 0.02
+        ? [
+            {
+              model: multiply(
+                translation(-0.01 * leafBend, -0.014 * leafBend, Math.max(rightT, leftT) + 0.0015),
+                rotationY(-leafA),
+              ),
+              size: half,
+              dir: 1 as const,
+              tex: null,
+              stripe: 4,
+            },
+          ]
+        : []),
       // Лист, следующий за крышкой. Рисуем дважды: лицом вверх он показывает
       // ту же страницу, что лежала справа, а лёгши налево — свою изнанку.
       { model: leafModel, size: half, dir: 1, tex: texR, bend: leafBend, sag: leafBend < 0.01 ? (leafA > Math.PI / 2 ? -sag : sag) : 0 },
@@ -440,6 +481,20 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       { model: coverModel, size: coverSize, dir: 1, tex: texCover },
       { model: multiply(coverModel, translation(0, 0, -0.001)), size: coverSize, dir: 1, tex: texEnd, flip: true },
     ];
+
+    // Левая страница существует только после того, как крышка перевалила за
+    // ребро: до этого слева нет ничего, книга закрыта. Раньше она лежала
+    // открытой с самого начала — страница показывалась прежде корочки.
+    if (coverA > Math.PI / 2) {
+      pieces.splice(2, 0, {
+        model: translation(0, 0, leftT),
+        size: half,
+        dir: -1,
+        tex: texL,
+        sag: -sag,
+        flip: true,
+      });
+    }
 
     for (const p of pieces) drawPiece(view, p);
     gl.depthMask(true);
