@@ -128,17 +128,18 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
 .num.b{color:var(--blue)}
 .t-fact .cap{color:var(--mut);font-size:14.5px;margin-top:8px}
 .t-seal{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start}
-/* Плитка бестиария. Обложка вписывается по высоте (contain, а не cover): у книги
-   4:3, у плитки 1.46, при обрезке съедало бы орнаментальную рамку по верху и низу.
-   Зазор по 14 px с боков не виден — края переплёта тёмные, как и фон сайта. */
-.t-best{display:block;position:relative;padding:0;overflow:hidden}
-.t-best .bcover{width:100%;height:100%;object-fit:contain;display:block;
-  transition:transform .6s var(--ez)}
-.t-best:hover .bcover{transform:scale(1.045)}
-/* Подпись поверх переплёта — с затемнением сверху, иначе она тонет в тиснении. */
-.t-best .lab{position:absolute;left:16px;top:13px;z-index:2}
-.t-best::before{content:"";position:absolute;inset:0 0 auto;height:64px;z-index:1;
-  background:linear-gradient(180deg,rgba(13,13,11,.72),transparent);pointer-events:none}
+/* Плитка бестиария: книга ЛЕЖИТ на поверхности плитки, а не заполняет её.
+   Поля обязательны — предмет читается предметом только тогда, когда вокруг
+   видно поверхность, на которой он лежит. Тень отбрасывается по форме книги
+   (drop-shadow, а не box-shadow у плитки) — иначе это тень карточки, не тома. */
+.t-best{display:grid;place-items:center;padding:clamp(15px,1.7vw,24px)}
+.t-best .bcover{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
+  filter:drop-shadow(0 15px 20px rgba(0,0,0,.72)) drop-shadow(0 3px 4px rgba(0,0,0,.55));
+  transition:transform .55s var(--ez),filter .55s var(--ez)}
+/* Наведение — книгу приподнимают со стола, а не увеличивают: том едет вверх,
+   тень отстаёт и мягчеет. Масштаб здесь читался бы как зум по картинке. */
+.t-best:hover .bcover{transform:translateY(-5px);
+  filter:drop-shadow(0 26px 30px rgba(0,0,0,.78)) drop-shadow(0 5px 7px rgba(0,0,0,.5))}
 .orn i:nth-child(even){background:var(--blue)}
 
 /* «сейчас в работе» — вместо персонажа (он теперь живёт в углу) */
