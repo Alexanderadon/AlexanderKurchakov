@@ -527,3 +527,63 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
   -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 10%,#000 100%);
   mask-image:linear-gradient(180deg,transparent 0,#000 10%,#000 100%)}
 @media(max-width:700px){.cathedral{width:86vw;height:46vw;opacity:.4}}
+
+/* ============ preloader ============ */
+/* Шрифты прелоадера лежат у нас, а не на fonts.gstatic.com: третья сторона на
+   критическом пути — это лишний DNS+TLS+запрос ради страницы, чья работа
+   показывать загрузку. font-display:block, потому что подстановка тут заметнее
+   короткой задержки: надпись должна появиться уже резаной. */
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:400 600;font-display:block;src:url('/fonts/cinzel-normal-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Old Standard TT';font-style:normal;font-weight:400 600;font-display:block;src:url('/fonts/oldstandardtt-normal-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Old Standard TT';font-style:normal;font-weight:400 600;font-display:block;src:url('/fonts/oldstandardtt-normal-cyrillic.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:'Old Standard TT';font-style:italic;font-weight:400 600;font-display:block;src:url('/fonts/oldstandardtt-italic-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Old Standard TT';font-style:italic;font-weight:400 600;font-display:block;src:url('/fonts/oldstandardtt-italic-cyrillic.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+
+/* Гейт первого экрана. visibility:hidden выбран намеренно: элемент сохраняет
+   поток (значит, никакого сдвига вёрстки при снятии), но выпадает из дерева
+   доступности и не ловит фокус — контент под прелоадером недостижим ни
+   скринридером, ни табом. Атрибут снимает либо React, либо предохранитель
+   в BOOT-скрипте: невидимый сайт из-за упавшего JS недопустим. */
+html[data-preload] .rootwrap{visibility:hidden}
+html[data-preload] body{overflow:hidden}
+
+.preload{position:fixed;inset:0;z-index:9999;cursor:none;opacity:1;
+  transition:opacity .6s var(--ez);color:var(--tx);-webkit-tap-highlight-color:transparent}
+.preload[data-fade]{opacity:0;pointer-events:none}
+.preload-gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+.preload-eye{position:fixed;pointer-events:none;will-change:transform}
+
+.preload-top{position:fixed;top:max(4vh,env(safe-area-inset-top));left:0;right:0;text-align:center;
+  pointer-events:none;font-family:'Cinzel',Georgia,serif;font-size:clamp(10px,1.3vw,14px);
+  letter-spacing:.42em;color:rgba(168,147,95,.30);padding:0 6vw}
+.preload-top s{display:block;text-decoration:none;font-family:'Old Standard TT',Georgia,serif;
+  font-style:italic;font-size:.78em;letter-spacing:.16em;color:rgba(196,196,192,.22);margin-top:.5em}
+
+.preload-hud{position:fixed;left:max(4vw,env(safe-area-inset-left));
+  bottom:max(5vh,env(safe-area-inset-bottom));pointer-events:none}
+.preload-num{display:flex;align-items:baseline;gap:.12em;font-family:'Cinzel',Georgia,serif;
+  font-weight:600;font-size:clamp(38px,5.6vw,64px);line-height:1;letter-spacing:.03em;
+  color:var(--lt);text-shadow:0 0 30px rgba(168,147,95,.4);font-variant-numeric:tabular-nums}
+.preload-num i{font-style:normal;font-size:.3em;opacity:.45;letter-spacing:.18em;font-weight:400}
+.preload-rn{font-family:'Cinzel',Georgia,serif;font-size:clamp(11px,1.4vw,14px);letter-spacing:.42em;
+  color:rgba(168,147,95,.66);margin-top:.6em;min-height:1.2em}
+.preload-bar{width:min(26vw,280px);min-width:150px;height:1px;margin:14px 0 10px;
+  background:rgba(168,147,95,.16);position:relative;overflow:hidden}
+.preload-bar u{position:absolute;inset:0 auto 0 0;width:0;
+  background:linear-gradient(90deg,rgba(168,147,95,0),var(--fire2))}
+.preload-cap{font-family:'Old Standard TT',Georgia,serif;font-size:clamp(10px,1.2vw,13px);
+  letter-spacing:.28em;color:rgba(196,196,192,.4)}
+.preload-cap b{color:rgba(168,147,95,.8);font-weight:400;font-family:'Cinzel',Georgia,serif;
+  letter-spacing:.3em;text-transform:uppercase}
+
+@media (max-width:620px),(orientation:portrait){
+  .preload-top{top:2.6vh;letter-spacing:.3em}
+  .preload-rn{letter-spacing:.3em}
+  .preload-hud{bottom:calc(3.2vh + env(safe-area-inset-bottom))}
+}
+/* Прелоадера нет при reduced-motion — решение принимается ещё в BOOT-скрипте,
+   но правило страхует на случай, если атрибут выставят иначе. */
+@media (prefers-reduced-motion:reduce){
+  html[data-preload] .rootwrap{visibility:visible}
+  .preload{display:none}
+}
