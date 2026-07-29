@@ -85,3 +85,20 @@ describe("decodeImage", () => {
     await expect(decodeImage("/missing.webp")).rejects.toThrow(/missing\.webp/);
   });
 });
+
+describe("состав сигналов", () => {
+  it("руки входят в готовность", () => {
+    // Настоящий сторож регресса: прелоадер уходил, а руки (32 файла, ≈1.1 МБ,
+    // самое тяжёлое на первом экране) проявлялись через 3.4 с на канале 3 Мбит —
+    // ровно потому, что этого ключа в таблице не было. Сквозным тестом такое не
+    // ловится: на localhost всё приезжает мгновенно и разрыв не воспроизводится.
+    expect(Object.keys(SIGNAL_WEIGHTS)).toContain("hands");
+    expect(SIGNAL_WEIGHTS.hands).toBeGreaterThan(0.1);
+  });
+
+  it("ни один ассет первого экрана не забыт", () => {
+    for (const k of ["fonts", "hands", "cathedral", "paper", "hero", "frame"]) {
+      expect(Object.keys(SIGNAL_WEIGHTS)).toContain(k);
+    }
+  });
+});

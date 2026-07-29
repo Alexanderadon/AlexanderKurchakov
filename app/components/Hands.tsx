@@ -6,8 +6,9 @@
 import { useEffect, useRef } from "react";
 import { usePrefs } from "~/lib/prefs";
 import { prefersReducedMotion } from "~/lib/media";
+import { HAND_FRAMES_PER_SIDE, handImages } from "~/lib/handFrames";
 
-const N = 16;
+const N = HAND_FRAMES_PER_SIDE;
 const FRAME_W = 720;
 const FRAME_H = 739;
 
@@ -55,13 +56,10 @@ function HandsLayer() {
     const els = [elL, elR];
     const shs = [shL, shR];
     const ctxs = [ctxL, ctxR];
-    const imgs = [0, 1].map((s) =>
-      Array.from({ length: N }, (_, i) => {
-        const im = new Image();
-        im.src = `/img/hands/${s ? "R" : "L"}${String(i + 1).padStart(2, "0")}.webp`;
-        return im;
-      }),
-    );
+    // Те же объекты, что прогрел прелоадер: своих копий не заводим, иначе
+    // 32 кадра декодируются второй раз уже после того, как сайт открылся.
+    const all = handImages();
+    const imgs = [0, 1].map((s) => all.slice(s * N, s * N + N));
     const cards = Array.from(document.querySelectorAll<HTMLElement>(".work"));
 
     // Никаких чтений layout внутри кадра: базовая геометрия рук кэшируется в
