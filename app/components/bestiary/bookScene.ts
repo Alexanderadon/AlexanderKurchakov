@@ -53,6 +53,7 @@ uniform vec2 u_size;     // ширина и высота плоскости
 uniform float u_bend;    // 0 — жёсткая плоскость, >0 — изгиб бумаги
 uniform float u_dir;     // +1 растём вправо от петли, -1 влево
 uniform float u_sag;     // провал бумаги к жёлобу
+uniform float u_arc;     // >0: плоскость свёрнута дугой — корешок
 varying vec2 v_uv;
 varying vec3 v_n;
 
@@ -63,7 +64,16 @@ void main(){
   float s = a_uv.x * u_size.x;
   vec3 p;
   vec3 n;
-  if (u_bend > 0.001) {
+  if (u_arc > 0.001) {
+    // Корешок. Полоса кожи, свёрнутая полуцилиндром между крышками: у закрытой
+    // книги это узкая дуга по толщине блока, у раскрытой — широкий жёлоб, в
+    // который уходят страницы. Без него том разваливается на две половины
+    // ровно в середине кадра, куда зритель и смотрит.
+    float a = (a_uv.x - 0.5) * PI * u_arc;
+    float R = u_size.x / max(1e-3, PI * u_arc);
+    p = vec3(R * sin(a), (0.5 - a_uv.y) * u_size.y, -R * (1.0 - cos(a)));
+    n = vec3(sin(a), 0.0, cos(a));
+  } else if (u_bend > 0.001) {
     // Тот же цилиндр переменного радиуса, что и в перевороте страницы: на краях
     // хода радиус уходит в бесконечность и лист становится плоским.
     float R = u_size.x / max(1e-4, u_bend);
@@ -110,7 +120,15 @@ void main(){
   }
 
   vec4 tex;
-  if (u_stripe > 0.5) {
+  if (u_stripe > 2.5) {
+    // Кожа корешка. Процедурная, а не кусок обложки: натянутая на дугу обложка
+    // выводила в жёлоб обрывки тиснения — там, куда зритель смотрит в первую
+    // очередь. Бинты поперёк — след шнуров, на которые сшит блок.
+    float grain = fract(sin(v_uv.y * 733.0 + v_uv.x * 91.0) * 4137.0);
+    float bands = smoothstep(0.34, 0.5, abs(fract(v_uv.y * 5.0) - 0.5)) * 0.16;
+    vec3 leather = vec3(0.082, 0.076, 0.063) * (0.86 + 0.14 * grain) + bands * vec3(0.10, 0.09, 0.07);
+    tex = vec4(leather, 1.0);
+  } else if (u_stripe > 0.5) {
     // Торец блока — сотни листов. Рисуем их полосами: текстуру такого разрешения
     // пришлось бы гнать отдельным файлом ради полоски в шесть пикселей.
     float k = fract(v_uv.y * 190.0);
@@ -202,6 +220,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const uTint = gl.getUniformLocation(prog, "u_tint");
   const uStripe = gl.getUniformLocation(prog, "u_stripe");
   const uSag = gl.getUniformLocation(prog, "u_sag");
+  const uArc = gl.getUniformLocation(prog, "u_arc");
   gl.uniform1i(gl.getUniformLocation(prog, "u_tex"), 0);
   gl.uniform3f(gl.getUniformLocation(prog, "u_light"), -0.3, 0.5, 0.81);
 
@@ -238,6 +257,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     tex: WebGLTexture | null;
     bend?: number;
     sag?: number;
+    arc?: number;
     stripe?: number;
     tint?: [number, number, number, number];
   }
@@ -252,6 +272,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     gl.uniform1f(uDir, p.dir);
     gl.uniform1f(uStripe, p.stripe ?? 0);
     gl.uniform1f(uSag, p.sag ?? 0);
+    gl.uniform1f(uArc, p.arc ?? 0);
     const t = p.tint ?? [0, 0, 0, 0];
     gl.uniform4f(uTint, t[0], t[1], t[2], t[3]);
     gl.activeTexture(gl.TEXTURE0);
@@ -310,6 +331,16 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
         dir: 1,
         tex: null,
         stripe: 2,
+      },
+      // Корешок: у закрытой книги узкая дуга по толщине блока, у раскрытой —
+      // широкий жёлоб. Ставим до крышек, чтобы он уходил ЗА них по глубине.
+      {
+        model: translation(0, 0, BLOCK_T + COVER_T),
+        size: [(BLOCK_T + COVER_T * 2) + 0.16 * settle, PAGE_H + SQUARE * 2],
+        dir: -1,
+        tex: null,
+        arc: 1,
+        stripe: 3,
       },
       // Задняя крышка — под всем, изнанкой вверх, с выступом за обрез блока.
       // Растёт вправо от корешка: у закрытой книги слева нет ничего, и отдельной
