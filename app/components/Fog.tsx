@@ -26,12 +26,18 @@ void main(){
   vec2 md=uv-u_m;
   // зона влияния курсора — вытянутый эллипс (по земле шире, чем вверх)
   vec2 me=md*vec2(1.25,1.9);
-  float mi=exp(-dot(me,me)*11.0);
+  float mi=exp(-dot(me,me)*8.5);
   // поле сильно сжато по вертикали => пелена стелется, а не поднимается клубами
   vec2 p=vec2(uv.x*u_res.x/u_res.y*1.05,uv.y*4.2);
   p.x-=mod(u_t,4096.0)*0.008;
-  // расталкивание: у курсора туман уходит наружу
-  p+=vec2(md.x,md.y*2.2)*mi*2.4;
+  // Расталкивание: у курсора туман уходит наружу.
+  //
+  // Амплитуда держится НИЖЕ ЕДИНИЦЫ намеренно. Смещение поля равно md*mi*A, и
+  // его градиент в центре равен A. При A>1 отображение складывается само на
+  // себя, шум рвётся по кольцу на краю гауссианы — на глаз это выглядит, будто
+  // туман отрывается при движении курсора. Было 2.4, да ещё ×2.2 по вертикали,
+  // то есть градиент доходил до 5.3.
+  p+=vec2(md.x,md.y*1.35)*mi*0.85;
   float t=u_t*0.045;
   vec2 d1=vec2(cos(t*0.9),sin(t*0.7))*1.2,d2=vec2(sin(t*0.61),cos(t*0.83))*1.0;
   vec2 q=vec2(fbm(p+d1),fbm(p+vec2(5.2,1.3)+d2));
@@ -126,9 +132,21 @@ export function Fog() {
       tx = t.clientX / window.innerWidth;
       ty = 1 - t.clientY / window.innerHeight;
     };
+    // Курсор ушёл за окно или палец оторвался — влияние надо УВЕСТИ, а не
+    // оставить замороженным на последней точке: иначе в том месте навсегда
+    // остаётся вмятина в пелене, и это читается как оторвавшийся клок.
+    // Цель просто уезжает далеко, а инерция в цикле затягивает след плавно.
+    const onLeave = (): void => {
+      tx = -3;
+      ty = -3;
+    };
     window.addEventListener("mousemove", onMove, { passive: true });
     window.addEventListener("touchstart", onTouch, { passive: true });
     window.addEventListener("touchmove", onTouch, { passive: true });
+    document.addEventListener("mouseleave", onLeave);
+    window.addEventListener("blur", onLeave);
+    window.addEventListener("touchend", onLeave, { passive: true });
+    window.addEventListener("touchcancel", onLeave, { passive: true });
 
     let raf = 0, last = 0;
     const t0 = performance.now();
@@ -151,6 +169,10 @@ export function Fog() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("touchstart", onTouch);
       window.removeEventListener("touchmove", onTouch);
+      document.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("blur", onLeave);
+      window.removeEventListener("touchend", onLeave);
+      window.removeEventListener("touchcancel", onLeave);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
   }, []);
