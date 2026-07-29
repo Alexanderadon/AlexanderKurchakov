@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { createEye, type Eye } from "./eye";
 import { bufferDpr, eyeMetrics, isNarrow } from "./geometry";
 import { DEFAULT_TIMING, initialCounter, smoothstep, progressTarget, stepCounter } from "./progress";
+import { whenHandsReady } from "~/lib/handFrames";
 import { Readiness, decodeImage, whenFontsReady } from "./readiness";
 import { createScene, type SceneImages } from "./scene";
 import { stageAt, type Viewport } from "./words";
@@ -115,6 +116,13 @@ export function Preloader() {
       () => ready.mark("hero"),
       () => ready.mark("hero"),
     );
+    // Руки. Ждём именно декодирование всех кадров: Hands.tsx запрашивает их сам
+    // и рано (≈1.3 с), но рисует только те, что уже раскодированы, — а канвас до
+    // тех пор пустой. Ошибку отдельного кадра глотаем: один непришедший файл не
+    // повод держать оверлей до жёсткого предела.
+    whenHandsReady().then(() => {
+      if (!disposed) ready.mark("hands");
+    });
 
     // ── факел
     let mx = vp.w * 0.5;

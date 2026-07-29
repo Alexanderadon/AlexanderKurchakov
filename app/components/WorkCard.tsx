@@ -47,12 +47,40 @@ export function WorkCard({
   const rafIds = useRef<number[]>([]);
   const firstVisible = useRef(true);
   const [snd, setSnd] = useState<SndState>("idle");
+  // Постеры карточек — 1.6 МБ jpg, и почти все они ниже первого экрана. У
+  // атрибута poster нет ленивой загрузки: браузер тянет его всегда и сразу,
+  // отбирая полосу у того, что видно немедленно (руки — почти мегабайт). Ставим
+  // постер, только когда карточка подходит к экрану.
+  const [near, setNear] = useState(false);
   const sndText =
     snd === "idle"
       ? PLAY + " " + t.video.watch
       : snd === "off"
         ? t.video.sndOff
         : t.video.sndOn;
+
+  // Запас в 500 px: постер успевает приехать до того, как карточка войдёт в
+  // кадр, и подмены пустого прямоугольника на картинку никто не видит. Без
+  // IntersectionObserver (старые движки) грузим сразу — как было.
+  useEffect(() => {
+    if (!("IntersectionObserver" in window)) {
+      setNear(true);
+      return;
+    }
+    const el = cardRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "500px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   // Показ/скрытие при фильтрации — таймер на элементе, без гонок (как toggleItem).
   useEffect(() => {
@@ -196,7 +224,7 @@ export function WorkCard({
               ref={videoRef}
               data-skip={item.dataSkip}
               src={item.videoSrc}
-              poster={item.poster}
+              poster={near ? item.poster : undefined}
               muted
               loop
               playsInline

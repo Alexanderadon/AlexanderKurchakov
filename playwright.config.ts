@@ -25,10 +25,24 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
+  // Звук глушим на уровне конфига, а не по памяти: на странице автостартует
+  // hero.mp4, и каждый прогон орал в колонки на машине разработчика.
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], launchOptions: { args: ["--mute-audio"] } },
+    },
+    {
+      name: "firefox",
+      use: {
+        ...devices["Desktop Firefox"],
+        launchOptions: { firefoxUserPrefs: { "media.volume_scale": "0.0" } },
+      },
+    },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
-    { name: "iphone", use: { ...devices["iPhone 13"] } },
+    {
+      name: "iphone",
+      use: { ...devices["iPhone 13"], launchOptions: { args: ["--mute-audio"] } },
+    },
   ],
 });
