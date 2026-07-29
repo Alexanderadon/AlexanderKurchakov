@@ -43,7 +43,7 @@ const COVER_T = 0.012;
 const SQUARE = 0.028;
 
 const COLS = 48;
-const ROWS = 6;
+const ROWS = 1; // изгиб одинаков по высоте — лишние строки были холостой работой
 
 const VERT = `
 attribute vec2 a_uv;
@@ -115,6 +115,7 @@ void main(){
     vec2 q = (v_uv - 0.5) * 2.0;
     float r = length(vec2(q.x * 0.92, q.y));
     float a = (1.0 - smoothstep(0.55, 1.0, r)) * 0.5;
+    if (a < 0.004) discard;
     gl_FragColor = vec4(0.0, 0.0, 0.0, a);
     return;
   }
@@ -175,12 +176,12 @@ const ease = (x: number): number => {
 const phase = (t: number, a: number, b: number): number => clamp01((t - a) / (b - a));
 
 export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
-  const gl = canvas.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: true });
-  if (!gl) return null;
   const fail = (why: string): null => {
     canvas.dataset.bookError = why;
     return null;
   };
+  const gl = canvas.getContext("webgl", { alpha: true, antialias: false, premultipliedAlpha: true });
+  if (!gl) return fail("webgl недоступен");
 
   const vs = compile(gl, gl.VERTEX_SHADER, VERT);
   if (typeof vs === "string") return fail("вершинный: " + vs);
@@ -194,6 +195,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
     return fail("линковка: " + (gl.getProgramInfoLog(prog) || "?"));
   }
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
   gl.useProgram(prog);
 
   const verts: number[] = [];
@@ -247,7 +250,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       canvas.height = h;
     }
     gl.viewport(0, 0, w, h);
-    proj = perspective((38 * Math.PI) / 180, w / h, 0.1, 40);
+    proj = perspective((38 * Math.PI) / 180, w / h, 1.2, 40);
   }
 
   interface Piece {
@@ -270,6 +273,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     gl.uniform2f(uSize, p.size[0], p.size[1]);
     gl.uniform1f(uBend, p.bend ?? 0);
     gl.uniform1f(uDir, p.dir);
+    // Тень — декаль: пишет цвет, но не глубину, иначе перекроет книгу собой.
+    gl.depthMask((p.stripe ?? 0) < 1.5);
     gl.uniform1f(uStripe, p.stripe ?? 0);
     gl.uniform1f(uSag, p.sag ?? 0);
     gl.uniform1f(uArc, p.arc ?? 0);
@@ -290,10 +295,16 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const settle = ease(phase(t, 0.15, 1));
     const pitch = ((30 - 30 * settle) * Math.PI) / 180;
     const yaw = ((-13 + 13 * settle) * Math.PI) / 180;
-    const dist = 2.62 - 0.22 * settle;
+    // Горб по дистанции: в середине хода крышка стоит дыбом и вылезала за
+    // кадр. Камера отъезжает и возвращается — на концах такта расстояние то же.
+    const dist = 2.62 - 0.22 * settle + 1.15 * Math.sin(Math.PI * ease(phase(t, 0, 0.78)));
     const lookX = (PAGE_W / 2) * (1 - settle);
     const view = multiply(
-      multiply(translation(0, 0, -dist), multiply(rotationX(pitch), rotationY(yaw))),
+      // Знак наклона именно такой. Мировой +Z — «вверх от стола»; при
+      // rotationX(+pitch) он проецировался ВНИЗ экрана: толщина блока, подъём
+      // крышки и высота отходящего листа рисовались в обратную сторону, а
+      // разворот выходил трапецией шире сверху — обратная перспектива.
+      multiply(translation(0, 0, -dist), multiply(rotationX(-pitch), rotationY(yaw))),
       translation(-lookX, 0, 0),
     );
 
@@ -326,7 +337,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const pieces: Piece[] = [
       // Контактная тень на столе — первой, под всем остальным.
       {
-        model: translation(-PAGE_W * (1 - settle * 0.5), 0, -0.004),
+        model: translation(-(PAGE_W * settle + SQUARE), 0, -0.004),
         size: [PAGE_W * (1 + settle) + SQUARE * 2, PAGE_H * 1.24],
         dir: 1,
         tex: null,
@@ -348,21 +359,21 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       { model: translation(0, 0, 0), size: coverSize, dir: 1, tex: texEnd },
       // торцы блока: верхний, нижний и внешний обрез
       {
-        model: multiply(translation(0, PAGE_H / 2, 0), rotationX(-Math.PI / 2)),
+        model: multiply(translation(0, PAGE_H / 2, BLOCK_T / 2), rotationX(-Math.PI / 2)),
         size: [PAGE_W, BLOCK_T],
         dir: 1,
         tex: null,
         stripe: 1,
       },
       {
-        model: multiply(translation(0, -PAGE_H / 2, 0), rotationX(Math.PI / 2)),
+        model: multiply(translation(0, -PAGE_H / 2, BLOCK_T / 2), rotationX(Math.PI / 2)),
         size: [PAGE_W, BLOCK_T],
         dir: 1,
         tex: null,
         stripe: 1,
       },
       {
-        model: multiply(translation(PAGE_W, 0, 0), rotationY(Math.PI / 2)),
+        model: multiply(translation(PAGE_W, 0, BLOCK_T), rotationY(Math.PI / 2)),
         size: [BLOCK_T, PAGE_H],
         dir: 1,
         tex: null,
@@ -372,7 +383,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       { model: translation(0, 0, BLOCK_T), size: half, dir: 1, tex: texR, sag },
       // Левая стопка: набирается по мере того, как лист ложится налево.
       {
-        model: multiply(translation(0, PAGE_H / 2, 0), rotationX(-Math.PI / 2)),
+        model: multiply(translation(0, PAGE_H / 2, leftT / 2), rotationX(-Math.PI / 2)),
         size: [PAGE_W, leftT],
         dir: -1,
         tex: null,
@@ -387,14 +398,15 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       },
       // Лист, следующий за крышкой. Рисуем дважды: лицом вверх он показывает
       // ту же страницу, что лежала справа, а лёгши налево — свою изнанку.
-      { model: leafModel, size: half, dir: 1, tex: texR, bend: leafBend, sag: leafBend < 0.01 ? sag : 0 },
-      { model: multiply(leafModel, translation(0, 0, -0.0008)), size: half, dir: 1, tex: texL, bend: leafBend, sag: leafBend < 0.01 ? sag : 0 },
+      { model: leafModel, size: half, dir: 1, tex: texR, bend: leafBend, sag: leafBend < 0.01 ? (leafA > Math.PI / 2 ? -sag : sag) : 0 },
+      { model: multiply(leafModel, translation(0, 0, -0.0008)), size: half, dir: 1, tex: texL, bend: leafBend, sag: leafBend < 0.01 ? (leafA > Math.PI / 2 ? -sag : sag) : 0 },
       // крышка: лицо снаружи, форзац изнутри — рисуем двумя проходами
       { model: coverModel, size: coverSize, dir: 1, tex: texCover },
       { model: multiply(coverModel, translation(0, 0, -0.001)), size: coverSize, dir: 1, tex: texEnd },
     ];
 
     for (const p of pieces) drawPiece(view, p);
+    gl.depthMask(true);
   }
 
   resize();
