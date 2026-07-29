@@ -44,7 +44,8 @@ void main(){
   float a=(0.42+0.58*f)*vert*0.40;
   a*=1.0-mi*0.5;
   a+=(h(gl_FragCoord.xy)-0.5)*0.006;
-  gl_FragColor=vec4(0.88,0.89,0.92,max(0.0,a));
+  a=max(0.0,a);
+  gl_FragColor=vec4(vec3(0.88,0.89,0.92)*a,a);
 }`;
 
 function compile(gl: WebGLRenderingContext, type: number, src: string) {
@@ -62,9 +63,14 @@ export function Fog() {
     if (prefersReducedMotion()) return;
     const cv = ref.current;
     if (!cv) return;
+    // premultipliedAlpha оставляем по умолчанию (true) и пишем цвет уже
+    // умноженным на альфу — см. gl_FragColor в шейдере. Раньше буфер был
+    // объявлен НЕумноженным, а смешивание SRC_ALPHA/ONE_MINUS_SRC_ALPHA
+    // складывало в него уже умноженные значения: содержимое не совпадало с
+    // объявленным форматом, и движки трактовали это по-разному — в Chromium
+    // туман выходил заметно гуще, чем в Firefox.
     const gl = cv.getContext("webgl", {
       alpha: true,
-      premultipliedAlpha: false,
       antialias: false,
       depth: false,
     });
@@ -87,7 +93,8 @@ export function Fog() {
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // парная к premultiplied-выводу формула: цвет уже умножен, повторно не множим
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     const uRes = gl.getUniformLocation(prog, "u_res");
     const uM = gl.getUniformLocation(prog, "u_m");
