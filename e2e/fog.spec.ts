@@ -67,10 +67,11 @@ test("вклад тумана в пределах и одинаков между
   const withoutFog = await bandLuma(page, band);
 
   const contribution = withFog.avg - withoutFog.avg;
-  // Пелена по земле: заметна, но не заволакивает. До починки Chromium давал
-  // ощутимо больше Firefox — теперь оба обязаны укладываться в одну вилку.
-  expect(contribution, `вклад тумана ${contribution.toFixed(4)}`).toBeGreaterThan(0.002);
-  expect(contribution, `туман слишком густой: ${contribution.toFixed(4)}`).toBeLessThan(0.09);
+  // Пелена должна угадываться, а не заволакивать: замер по трём движкам даёт
+  // 0.011-0.013. Верхняя граница держит плотность от сползания обратно —
+  // при 0.40 в шейдере было 0.037-0.044, и дым лез поверх карточек.
+  expect(contribution, `тумана не видно вовсе: ${contribution.toFixed(4)}`).toBeGreaterThan(0.003);
+  expect(contribution, `туман слишком густой: ${contribution.toFixed(4)}`).toBeLessThan(0.022);
   // Проверять максимум по кадру бессмысленно: в полосу попадает светлая
   // карточка сайта, и максимум равен единице независимо от тумана.
   console.log(`вклад тумана: ${contribution.toFixed(4)}`);
