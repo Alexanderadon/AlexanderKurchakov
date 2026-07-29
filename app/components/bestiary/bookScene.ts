@@ -50,7 +50,7 @@ const COVER_T = 0.012;
 const SQUARE = 0.028;
 /** Замки отходят в самом начале хода — до того, как тронется крышка. */
 const CLASP_END = 0.30;
-const CLASP_W = 0.36;
+const CLASP_W = 0.27;
 
 const COLS = 48;
 const ROWS = 1; // изгиб одинаков по высоте — лишние строки были холостой работой
@@ -83,8 +83,8 @@ void main(){
     // ровно в середине кадра, куда зритель и смотрит.
     float a = (a_uv.x - 0.5) * PI * u_arc;
     float R = u_size.x / max(1e-3, PI * u_arc);
-    p = vec3(R * sin(a), (0.5 - a_uv.y) * u_size.y, -R * (1.0 - cos(a)));
-    n = vec3(sin(a), 0.0, cos(a));
+    p = vec3(R * sin(a), (0.5 - a_uv.y) * u_size.y, R * (1.0 - cos(a)));
+    n = vec3(-sin(a), 0.0, cos(a));
   } else if (u_bend > 0.001) {
     // Тот же цилиндр переменного радиуса, что и в перевороте страницы: на краях
     // хода радиус уходит в бесконечность и лист становится плоским.
@@ -386,11 +386,14 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const leafPhase = tw > 0 ? tw : ease(phase(t, 0.46, 1));
     const leafA = leafPhase * Math.PI;
     const leafBend = Math.sin(clamp01(leafPhase) * Math.PI) * 1.6;
+    const sag = 0.038 * settle;
     // Стопки живут от числа перевёрнутых листов, а не от хода открытия.
     const total = Math.max(1, leftPages + rightPages);
     const leftShare = (leftPages + leafPhase) / total;
     const leftT = 0.004 + BLOCK_T * 0.92 * leftShare * ease(phase(t, 0.4, 1));
     const rightT = 0.004 + BLOCK_T * 0.92 * (1 - leftShare);
+    // Дно жёлоба: туда проваливаются страницы, оттуда поднимается корешок.
+    const gutterZ = Math.max(0.004, rightT - sag - 0.008);
     // Лист идёт ВЫШЕ правой стопки и выше крышки, пока та ещё в воздухе: раньше
     // он нырял внутрь корочки, потому что его высота была привязана к блоку.
     const leafZ = Math.max(rightT, leftT) + 0.006 + 0.03 * Math.sin(leafPhase * Math.PI);
@@ -402,7 +405,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const coverSize: [number, number] = [PAGE_W + SQUARE, PAGE_H + SQUARE * 2];
     // Насколько левая стопка уже набралась: пока лист один, это доля его хода.
     // Бумага проваливается в жёлоб только у раскрытой книги.
-    const sag = 0.038 * settle;   // страницы заметно уходят в жёлоб
+    // Дно жёлоба: туда проваливаются страницы, оттуда поднимается корешок.
+
 
     // Порядок рисования снизу вверх; глубина включена, но прозрачные кромки
     // страниц требуют, чтобы дальнее шло раньше ближнего.
@@ -420,15 +424,15 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       // лицевая сторона корешка смотрит от него, вниз. Первый заход показывал в
       // жёлобе читаемое BESTIARIUM — так не бывает.
       {
-        model: translation(0, 0, BLOCK_T + COVER_T),
-        size: [BLOCK_T + COVER_T * 2, PAGE_H + SQUARE * 2],
+        model: translation(0, 0, gutterZ - 0.004),
+        size: [BLOCK_T + COVER_T * 2, PAGE_H],
         dir: -1,
         tex: texSpine,
         arc: 1,
       },
       {
-        model: translation(0, 0, BLOCK_T + COVER_T + 0.005),
-        size: [(BLOCK_T + COVER_T * 2) * 0.94, PAGE_H + SQUARE * 2],
+        model: translation(0, 0, gutterZ),
+        size: [(BLOCK_T + COVER_T * 2) * 0.9, PAGE_H],
         dir: -1,
         tex: null,
         arc: 1,
@@ -535,7 +539,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
         pieces.push({
           model: multiply(
             multiply(
-              translation(PAGE_W + SQUARE - CLASP_W * 0.62, PAGE_H * sy, coverZ + 0.002),
+              translation(PAGE_W + SQUARE - CLASP_W * 0.34, PAGE_H * sy, coverZ + 0.002),
               rotationY(-1.9 * cl),
             ),
             translation(0, 0, 0),

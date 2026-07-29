@@ -46,4 +46,4 @@ export const OPEN_MS = 1500;
 export const TURN_MS = 820;
 /** Сколько листов в книге. Текстур пока две, они чередуются; когда приедут
  *  настоящие страницы, меняется только это число. */
-export const LEAVES = 8;
+export const LEAVES = 6;
