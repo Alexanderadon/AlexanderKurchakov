@@ -18,6 +18,8 @@ export interface BookTextures {
   endpaper: TexImageSource;
   pageLeft: TexImageSource;
   pageRight: TexImageSource;
+  spine: TexImageSource;
+  clasp: TexImageSource;
 }
 
 export interface BookScene {
@@ -46,6 +48,9 @@ const COVER_T = 0.012;
  * Это главное, что отличает том от двух картинок на чёрном фоне.
  */
 const SQUARE = 0.028;
+/** Замки отходят в самом начале хода — до того, как тронется крышка. */
+const CLASP_END = 0.30;
+const CLASP_W = 0.36;
 
 const COLS = 48;
 const ROWS = 1; // изгиб одинаков по высоте — лишние строки были холостой работой
@@ -118,6 +123,7 @@ precision mediump float;
 uniform sampler2D u_tex;
 uniform vec3 u_light;
 uniform vec4 u_tint;      // rgb — подмешиваемый цвет, a — его доля
+uniform float u_alpha;    // общая прозрачность куска
 uniform highp float u_stripe;   // 1 — торец, 2 — тень на столе, 3 — кожа, 4 — тень листа
 varying vec2 v_uv;
 varying vec3 v_n;
@@ -133,20 +139,13 @@ void main(){
   float back = max(-dot(n, l), 0.0) * 0.12;
   float lit = 0.34 + 0.66 * d + back;
 
-  // Контактная тень на «столе». Без неё том висит в пустоте: глаз ищет опору
-  // раньше, чем разбирается в форме предмета.
-  if (u_stripe > 1.5) {
-    vec2 q = (v_uv - 0.5) * 2.0;
-    float r = length(vec2(q.x * 0.92, q.y));
-    float a = (1.0 - smoothstep(0.55, 1.0, r)) * 0.5;
-    if (a < 0.004) discard;
-    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
-    return;
-  }
-
-  // Тень переворачиваемого листа. Настоящая тень изогнутой бумаги сама изогнута —
-  // ни один градиент под элементом её не заменит, потому что не знает формы.
+  // Режимы разбираются от СТАРШЕГО к младшему. Раньше шли по возрастанию, и
+  // условие u_stripe > 1.5 перехватывало всё, что старше: кожа корешка (3) и
+  // тень листа (4) обе уходили в ветку контактной тени. В жёлобе вместо
+  // подкладки рисовалось тёмное пятно, а тень листа не работала вовсе.
   if (u_stripe > 3.5) {
+    // Тень листа: узкая полоса у корешка, слабеет к обрезу — там бумага уже
+    // отошла от страницы и контакт потерян.
     float a = 0.26 * smoothstep(0.0, 0.10, v_uv.x) * (1.0 - smoothstep(0.12, 0.62, v_uv.x));
     if (a < 0.004) discard;
     gl_FragColor = vec4(0.0, 0.0, 0.0, a);
@@ -155,13 +154,21 @@ void main(){
 
   vec4 tex;
   if (u_stripe > 2.5) {
-    // Кожа корешка. Процедурная, а не кусок обложки: натянутая на дугу обложка
-    // выводила в жёлоб обрывки тиснения — там, куда зритель смотрит в первую
-    // очередь. Бинты поперёк — след шнуров, на которые сшит блок.
+    // Подкладка корешка: гладкая кожа с бинтами. Именно её видно в жёлобе у
+    // раскрытой книги — лицевая сторона с тиснением смотрит от зрителя.
     float grain = fract(sin(v_uv.y * 733.0 + v_uv.x * 91.0) * 4137.0);
     float bands = smoothstep(0.34, 0.5, abs(fract(v_uv.y * 5.0) - 0.5)) * 0.16;
     vec3 leather = vec3(0.135, 0.125, 0.104) * (0.86 + 0.14 * grain) + bands * vec3(0.10, 0.09, 0.07);
     tex = vec4(leather, 1.0);
+  } else if (u_stripe > 1.5) {
+    // Контактная тень на «столе». Без неё том висит в пустоте: глаз ищет опору
+    // раньше, чем разбирается в форме предмета.
+    vec2 q = (v_uv - 0.5) * 2.0;
+    float r = length(vec2(q.x * 0.92, q.y));
+    float a = (1.0 - smoothstep(0.55, 1.0, r)) * 0.5;
+    if (a < 0.004) discard;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+    return;
   } else if (u_stripe > 0.5) {
     // Торец блока — сотни листов. Рисуем их полосами: текстуру такого разрешения
     // пришлось бы гнать отдельным файлом ради полоски в шесть пикселей.
@@ -174,7 +181,8 @@ void main(){
   }
   if (tex.a < 0.02) discard;
   vec3 col = mix(tex.rgb, u_tint.rgb, u_tint.a) * lit;
-  gl_FragColor = vec4(col * tex.a, tex.a);
+  float a = tex.a * u_alpha;
+  gl_FragColor = vec4(col * a, a);
 }`;
 
 function compile(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | string {
@@ -207,6 +215,11 @@ const ease = (x: number): number => {
 };
 /** Фаза внутри общего такта: [a, b] растягивается на весь ход 0..1. */
 const phase = (t: number, a: number, b: number): number => clamp01((t - a) / (b - a));
+/** Плавный переход между двумя границами — для затухания. */
+const smoothstep01 = (a: number, b: number, x: number): number => {
+  const t = clamp01((x - a) / (b - a));
+  return t * t * (3 - 2 * t);
+};
 
 export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
   const fail = (why: string): null => {
@@ -258,6 +271,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const uSag = gl.getUniformLocation(prog, "u_sag");
   const uArc = gl.getUniformLocation(prog, "u_arc");
   const uFlip = gl.getUniformLocation(prog, "u_flip");
+  const uAlpha = gl.getUniformLocation(prog, "u_alpha");
   gl.uniform1i(gl.getUniformLocation(prog, "u_tex"), 0);
   gl.uniform3f(gl.getUniformLocation(prog, "u_light"), -0.3, 0.5, 0.81);
 
@@ -265,6 +279,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const texEnd = makeTexture(gl, tex.endpaper);
   const texL = makeTexture(gl, tex.pageLeft);
   const texR = makeTexture(gl, tex.pageRight);
+  const texSpine = makeTexture(gl, tex.spine);
+  const texClasp = makeTexture(gl, tex.clasp);
 
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -295,6 +311,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     bend?: number;
     sag?: number;
     flip?: boolean;
+    alpha?: number;
     arc?: number;
     stripe?: number;
     tint?: [number, number, number, number];
@@ -316,6 +333,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     gl.uniform1f(uSag, p.sag ?? 0);
     gl.uniform1f(uArc, p.arc ?? 0);
     gl.uniform1f(uFlip, p.flip ? 1 : 0);
+    gl.uniform1f(uAlpha, p.alpha ?? 1);
     const t = p.tint ?? [0, 0, 0, 0];
     gl.uniform4f(uTint, t[0], t[1], t[2], t[3]);
     gl.activeTexture(gl.TEXTURE0);
@@ -355,8 +373,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
     // ── Крышка. Идёт первой по времени: от 0 до 78% такта поворачивается вокруг
     // корешка на 180° и по дороге опускается на стол.
-    const coverA = ease(phase(t, 0, 0.78)) * Math.PI;
-    const coverZ = BLOCK_T + COVER_T - (BLOCK_T + COVER_T - 0.002) * ease(phase(t, 0.45, 1));
+    // Крышка трогается только после того, как отойдут замки: книга на застёжках
+    // не может открыться раньше, чем их отпустили.
+    const coverA = ease(phase(t, CLASP_END, 0.84)) * Math.PI;
+    const coverZ = BLOCK_T + COVER_T - (BLOCK_T + COVER_T - 0.002) * ease(phase(t, 0.5, 1));
     const coverModel = multiply(translation(0, 0, coverZ), rotationY(-coverA));
 
     // ── Первый лист трогается позже крышки: бумага не приклеена к переплёту.
@@ -395,11 +415,20 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
         tex: null,
         stripe: 2,
       },
-      // Корешок: у закрытой книги узкая дуга по толщине блока, у раскрытой —
-      // широкий жёлоб. Ставим до крышек, чтобы он уходил ЗА них по глубине.
+      // Корешок в двух проходах. Снаружи — тиснение с названием, изнутри —
+      // гладкая кожа подкладки. У раскрытой книги зритель видит ИМЕННО подкладку:
+      // лицевая сторона корешка смотрит от него, вниз. Первый заход показывал в
+      // жёлобе читаемое BESTIARIUM — так не бывает.
       {
         model: translation(0, 0, BLOCK_T + COVER_T),
         size: [BLOCK_T + COVER_T * 2, PAGE_H + SQUARE * 2],
+        dir: -1,
+        tex: texSpine,
+        arc: 1,
+      },
+      {
+        model: translation(0, 0, BLOCK_T + COVER_T + 0.005),
+        size: [(BLOCK_T + COVER_T * 2) * 0.94, PAGE_H + SQUARE * 2],
         dir: -1,
         tex: null,
         arc: 1,
@@ -496,6 +525,29 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       });
     }
 
+    // Замки. Отходят наружу вокруг своей петли на крышке и гаснут — книга на
+    // застёжках не открывается, пока их не отпустили. Рисуем последними: они
+    // лежат поверх всего, что закрывает.
+    const cl = ease(phase(t, 0, CLASP_END));
+    if (cl < 0.999) {
+      const clH = CLASP_W * (268 / 760);
+      for (const sy of [0.27, -0.27]) {
+        pieces.push({
+          model: multiply(
+            multiply(
+              translation(PAGE_W + SQUARE - CLASP_W * 0.62, PAGE_H * sy, coverZ + 0.002),
+              rotationY(-1.9 * cl),
+            ),
+            translation(0, 0, 0),
+          ),
+          size: [CLASP_W, clH],
+          dir: 1,
+          tex: texClasp,
+          alpha: 1 - smoothstep01(0.62, 1, cl),
+        });
+      }
+    }
+
     for (const p of pieces) drawPiece(view, p);
     gl.depthMask(true);
   }
@@ -507,7 +559,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     resize,
     dispose(): void {
       if (!gl) return;
-      for (const t of [texCover, texEnd, texL, texR]) gl.deleteTexture(t);
+      for (const t of [texCover, texEnd, texL, texR, texSpine, texClasp]) gl.deleteTexture(t);
       gl.deleteBuffer(buf);
       gl.deleteProgram(prog);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
