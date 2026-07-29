@@ -193,12 +193,10 @@ export function Hero() {
           <img
             className="bcover"
             src="/img/bestiary/cover.webp"
-            alt=""
-            aria-hidden="true"
+            alt={t.hero.bestiary}
             loading="lazy"
             decoding="async"
           />
-          <span className="lab">{t.hero.bestiary}</span>
         </div>
       </div>
     </section>
