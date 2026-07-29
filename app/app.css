@@ -140,6 +140,83 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
    тень отстаёт и мягчеет. Масштаб здесь читался бы как зум по картинке. */
 .t-best:hover .bcover{transform:translateY(-5px);
   filter:drop-shadow(0 26px 30px rgba(0,0,0,.78)) drop-shadow(0 5px 7px rgba(0,0,0,.5))}
+.bshut{display:block;width:100%;height:100%;padding:0;background:none;border:0;cursor:pointer}
+.bshut:focus-visible{outline:2px solid var(--fire);outline-offset:6px;border-radius:10px}
+
+/* ============ бестиарий: раскрытие ============ */
+.bmodal{position:fixed;inset:0;z-index:200;display:grid;place-items:center;
+  padding:clamp(12px,3vw,48px);background:rgba(4,4,5,.86);
+  animation:bfade .32s var(--ez)}
+.bmodal--closing{animation:bfade .32s var(--ez) reverse both}
+@keyframes bfade{from{opacity:0}to{opacity:1}}
+
+/* Сцена задаёт перспективу и общий размер. preserve-3d обязателен по всей
+   цепочке: без него дочерние повороты сплющиваются в плоскость родителя. */
+/* Ширина ограничена ещё и высотой окна: без этого на экране 1280×720 разворот
+   выходил 738 px и кнопки, вынесенные за его края, уезжали за нижнюю границу —
+   до них было не дотянуться ни мышью, ни с клавиатуры. 190 px — запас на две
+   кнопки (по 52) и поля модалки. */
+.bstage{position:relative;aspect-ratio:var(--spread-ratio);
+  width:min(100%,1180px,calc((100dvh - 190px) * var(--spread-ratio)));
+  perspective:2200px;transform-style:preserve-3d;outline:none}
+@supports not (height:100dvh){
+  .bstage{width:min(100%,1180px,calc((100vh - 190px) * var(--spread-ratio)))}
+}
+.bface{position:absolute;inset:0;margin:auto;width:100%;height:100%;
+  object-fit:contain;transform-style:preserve-3d;backface-visibility:hidden}
+
+/* Крышка уходит от зрителя ребром. На −90° её ширина равна нулю — там и
+   происходит подмена альбомной обложки книжным разворотом, поэтому разница
+   пропорций (1.33 против 1.60) не видна ни в одном кадре.
+
+   Каждая половина — ОТДЕЛЬНАЯ анимация со своей длительностью и задержкой, а
+   не проценты внутри одной общей. С процентами easing растягивал фазы
+   по-разному: на 50% времени крышка была повёрнута лишь градусов на пятнадцать,
+   а разворот уже проступал под ней. Теперь −90° к моменту подмены гарантированы
+   арифметикой, а не подбором кривой. */
+.bstage{--h:calc(var(--o,620ms) / 2)}
+.bface--cover,.bface--spread{transform-origin:50% 50%}
+@keyframes bcov{from{transform:rotateY(0) scale(.64)}to{transform:rotateY(-90deg) scale(1)}}
+@keyframes bspr{from{transform:rotateY(90deg)}to{transform:rotateY(0)}}
+/* Мгновенное включение видимости ровно в момент передачи хода. Отдельной
+   анимацией, а не keyframe-процентом: у двух анимаций разные тайминг-функции,
+   и переключать непрозрачность надо по часам, а не по кривой. */
+@keyframes bshow{from{visibility:hidden}to{visibility:visible}}
+.bmodal--opening .bface--cover{animation:bcov var(--h) cubic-bezier(.5,0,.9,.5) both}
+.bmodal--opening .bface--spread{
+  animation:bspr var(--h) cubic-bezier(.1,.5,.5,1) var(--h) both,
+            bshow 1ms step-end var(--h) both}
+.bmodal--open .bface--cover{opacity:0;pointer-events:none}
+.bmodal--closing .bface--spread{
+  animation:bspr var(--h) cubic-bezier(.5,0,.9,.5) reverse both,
+            bshow 1ms step-end reverse both}
+.bmodal--closing .bface--cover{
+  animation:bcov var(--h) cubic-bezier(.1,.5,.5,1) var(--h) reverse both}
+/* Пока книга раскрыта, в плитке не должно быть второго такого же тома. */
+.bshut[aria-expanded="true"] .bcover{opacity:0}
+.bspread{width:100%;height:100%;object-fit:contain;display:block;
+  filter:drop-shadow(0 40px 60px rgba(0,0,0,.7))}
+
+/* Холст переворота лежит поверх всего разворота: лист уходит с правой половины
+   на левую, значит рисовать его надо по всей ширине книги, а не в границах
+   одной страницы. Событий не ловит — кнопки и фон под ним остаются кликабельны. */
+.bturn{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+
+.bnext,.bclose{z-index:210;font-family:var(--mono);font-size:12px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--lt);
+  background:rgba(13,13,11,.72);border:1px solid rgba(207,199,178,.22);
+  border-radius:99px;padding:9px 16px;transition:background .25s,color .25s}
+.bnext{position:fixed;left:50%;bottom:clamp(14px,3.5vh,38px);transform:translateX(-50%)}
+.bclose{position:fixed;right:clamp(12px,3vw,30px);top:clamp(12px,3vh,26px);padding:9px 13px}
+.bnext:hover:not(:disabled),.bclose:hover{background:var(--fire);color:var(--txd)}
+.bnext:disabled{opacity:.4;cursor:default}
+
+/* Без анимации: ни поворотов, ни переворота — сразу открытый разворот. */
+@media(prefers-reduced-motion:reduce){
+  .bmodal,.bmodal--closing,.bface--cover,.bface--spread{animation:none}
+  .bface--cover{display:none}
+  .bface--spread{transform:none;opacity:1}
+}
 .orn i:nth-child(even){background:var(--blue)}
 
 /* «сейчас в работе» — вместо персонажа (он теперь живёт в углу) */

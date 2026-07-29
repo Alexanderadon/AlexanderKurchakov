@@ -221,7 +221,10 @@ export function WorkCard({
         {isVideo && (
           <>
             <video
-              ref={videoRef}
+              ref={(el) => {
+                if (el) el.muted = true; // см. Hero: проп muted в атрибут не попадает
+                videoRef.current = el;
+              }}
               data-skip={item.dataSkip}
               src={item.videoSrc}
               poster={near ? item.poster : undefined}

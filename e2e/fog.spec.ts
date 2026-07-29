@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./base";
 
 /**
  * Средняя яркость участка страницы по НАСТОЯЩЕМУ скриншоту.
