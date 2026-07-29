@@ -4,6 +4,7 @@ import {
   OPEN_MS,
   PAGE,
   SPREAD_RATIO,
+  LEAVES,
   TURN_MS,
   coverOverhang,
   pageAspectInSpread,
@@ -49,9 +50,12 @@ describe("геометрия бестиария", () => {
   });
 
   it("такты заданы и вменяемы", () => {
-    expect(OPEN_MS).toBeGreaterThan(300);
-    expect(OPEN_MS).toBeLessThan(1200);
+    // Верхняя граница поднята осознанно: 620 мс читались как хлопок, а книга —
+    // предмет тяжёлый, и спешка выдаёт подделку вернее любой геометрии.
+    expect(OPEN_MS).toBeGreaterThan(900);
+    expect(OPEN_MS).toBeLessThan(2400);
     expect(OPEN_MS % 2).toBe(0); // делится пополам без остатка: две равные фазы
     expect(TURN_MS).toBeGreaterThan(300);
+    expect(LEAVES).toBeGreaterThan(1);
   });
 });

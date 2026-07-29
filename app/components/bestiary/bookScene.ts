@@ -21,8 +21,13 @@ export interface BookTextures {
 }
 
 export interface BookScene {
-  /** open: 0 — книга закрыта, 1 — разворот лежит перед зрителем. */
-  draw(open: number): void;
+  /**
+   * open: 0 — книга закрыта, 1 — разворот лежит перед зрителем.
+   * turn: 0..1 — ход переворачиваемого листа поверх раскрытой книги.
+   * left/right: сколько листов уже слева и сколько осталось справа —
+   * от этого растут стопки, и книга выглядит листаемой, а не двухстраничной.
+   */
+  draw(open: number, turn?: number, left?: number, right?: number): void;
   resize(): void;
   dispose(): void;
 }
@@ -292,9 +297,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, data.length / 2);
   }
 
-  function draw(open: number): void {
+  function draw(open: number, turn = 0, leftPages = 0, rightPages = 8): void {
     if (!gl) return;
     const t = clamp01(open);
+    const tw = clamp01(turn);
 
     // ── Камера. Она не украшение: закрытая книга должна читаться объёмной, а
     // раскрытый разворот — лежать перед зрителем в лоб. Поэтому наклон уходит в
@@ -328,19 +334,29 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const coverModel = multiply(translation(0, 0, coverZ), rotationY(-coverA));
 
     // ── Первый лист трогается позже крышки: бумага не приклеена к переплёту.
-    const leafA = ease(phase(t, 0.34, 1)) * Math.PI;
-    const leafBend = Math.sin(clamp01(phase(t, 0.34, 1)) * Math.PI) * 1.5;
-    const leafModel = multiply(translation(0, 0, BLOCK_T + 0.002), rotationY(-leafA));
+    // Лист во время РАСКРЫТИЯ идёт следом за крышкой, а после — слушается
+    // листания. Задержка 0.46 против 0.30 у крышки: бумага не приклеена к
+    // переплёту, и раньше лист успевал нырнуть под крышку, пока та ещё шла.
+    const leafPhase = tw > 0 ? tw : ease(phase(t, 0.46, 1));
+    const leafA = leafPhase * Math.PI;
+    const leafBend = Math.sin(clamp01(leafPhase) * Math.PI) * 1.6;
+    // Стопки живут от числа перевёрнутых листов, а не от хода открытия.
+    const total = Math.max(1, leftPages + rightPages);
+    const leftShare = (leftPages + leafPhase) / total;
+    const leftT = 0.004 + BLOCK_T * 0.92 * leftShare * ease(phase(t, 0.4, 1));
+    const rightT = 0.004 + BLOCK_T * 0.92 * (1 - leftShare);
+    // Лист идёт ВЫШЕ правой стопки и выше крышки, пока та ещё в воздухе: раньше
+    // он нырял внутрь корочки, потому что его высота была привязана к блоку.
+    const leafZ = Math.max(rightT, leftT) + 0.006 + 0.03 * Math.sin(leafPhase * Math.PI);
+    const leafModel = multiply(translation(0, 0, leafZ), rotationY(-leafA));
 
     const half: [number, number] = [PAGE_W, PAGE_H];
     // Крышка больше блока на «квадрат» и посажена так, чтобы выступ шёл по трём
     // сторонам — сверху, снизу и по обрезу, — а у корешка совпадал с блоком.
     const coverSize: [number, number] = [PAGE_W + SQUARE, PAGE_H + SQUARE * 2];
     // Насколько левая стопка уже набралась: пока лист один, это доля его хода.
-    const leftGrown = ease(phase(t, 0.34, 1));
-    const leftT = 0.004 + BLOCK_T * 0.32 * leftGrown;
     // Бумага проваливается в жёлоб только у раскрытой книги.
-    const sag = 0.028 * settle;
+    const sag = 0.055 * settle;   // страницы заметно уходят в жёлоб
 
     // Порядок рисования снизу вверх; глубина включена, но прозрачные кромки
     // страниц требуют, чтобы дальнее шло раньше ближнего.
@@ -363,34 +379,36 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
         arc: 1,
         stripe: 3,
       },
+      // Левая стопка: страница, на которую ложатся перевёрнутые листы.
+      { model: translation(0, 0, leftT), size: half, dir: -1, tex: texL, sag: -sag, flip: true },
       // Задняя крышка — под всем, изнанкой вверх, с выступом за обрез блока.
       // Растёт вправо от корешка: у закрытой книги слева нет ничего, и отдельной
       // «левой страницы» быть не должно — ею становится перевернувшийся лист.
       { model: translation(0, 0, 0), size: coverSize, dir: 1, tex: texEnd },
       // торцы блока: верхний, нижний и внешний обрез
       {
-        model: multiply(translation(0, PAGE_H / 2, BLOCK_T / 2), rotationX(-Math.PI / 2)),
-        size: [PAGE_W, BLOCK_T],
+        model: multiply(translation(0, PAGE_H / 2, rightT / 2), rotationX(-Math.PI / 2)),
+        size: [PAGE_W, rightT],
         dir: 1,
         tex: null,
         stripe: 1,
       },
       {
-        model: multiply(translation(0, -PAGE_H / 2, BLOCK_T / 2), rotationX(Math.PI / 2)),
-        size: [PAGE_W, BLOCK_T],
+        model: multiply(translation(0, -PAGE_H / 2, rightT / 2), rotationX(Math.PI / 2)),
+        size: [PAGE_W, rightT],
         dir: 1,
         tex: null,
         stripe: 1,
       },
       {
-        model: multiply(translation(PAGE_W, 0, BLOCK_T), rotationY(Math.PI / 2)),
-        size: [BLOCK_T, PAGE_H],
+        model: multiply(translation(PAGE_W, 0, rightT), rotationY(Math.PI / 2)),
+        size: [rightT, PAGE_H],
         dir: 1,
         tex: null,
         stripe: 1,
       },
       // Правая страница — верх блока, с провалом к жёлобу.
-      { model: translation(0, 0, BLOCK_T), size: half, dir: 1, tex: texR, sag },
+      { model: translation(0, 0, rightT), size: half, dir: 1, tex: texR, sag },
       // Левая стопка: набирается по мере того, как лист ложится налево.
       {
         model: multiply(translation(0, PAGE_H / 2, leftT / 2), rotationX(-Math.PI / 2)),
