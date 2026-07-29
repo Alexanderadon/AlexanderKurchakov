@@ -128,12 +128,17 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
 .num.b{color:var(--blue)}
 .t-fact .cap{color:var(--mut);font-size:14.5px;margin-top:8px}
 .t-seal{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start}
-.seal-big{width:76px;height:76px;border-radius:20px;border:2px solid var(--fire);color:var(--fire);
-  display:grid;place-items:center;font-family:var(--fd),var(--ft);font-weight:var(--fdw);font-size:24px;transform:rotate(-5deg);
-  background:color-mix(in srgb,var(--fire) 8%,transparent);margin:14px 0;transition:transform .5s var(--spr)}
-.t-seal:hover .seal-big{transform:rotate(5deg)}
-.orn{display:flex;gap:7px;margin-top:6px}
-.orn i{width:6px;height:6px;background:var(--fire);opacity:.75;transform:rotate(45deg)}
+/* Плитка бестиария. Обложка вписывается по высоте (contain, а не cover): у книги
+   4:3, у плитки 1.46, при обрезке съедало бы орнаментальную рамку по верху и низу.
+   Зазор по 14 px с боков не виден — края переплёта тёмные, как и фон сайта. */
+.t-best{display:block;position:relative;padding:0;overflow:hidden}
+.t-best .bcover{width:100%;height:100%;object-fit:contain;display:block;
+  transition:transform .6s var(--ez)}
+.t-best:hover .bcover{transform:scale(1.045)}
+/* Подпись поверх переплёта — с затемнением сверху, иначе она тонет в тиснении. */
+.t-best .lab{position:absolute;left:16px;top:13px;z-index:2}
+.t-best::before{content:"";position:absolute;inset:0 0 auto;height:64px;z-index:1;
+  background:linear-gradient(180deg,rgba(13,13,11,.72),transparent);pointer-events:none}
 .orn i:nth-child(even){background:var(--blue)}
 
 /* «сейчас в работе» — вместо персонажа (он теперь живёт в углу) */

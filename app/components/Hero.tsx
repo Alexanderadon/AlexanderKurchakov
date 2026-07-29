@@ -189,21 +189,16 @@ export function Hero() {
           </div>
         </div>
 
-        <div className="tile td t-seal rv">
-          <span className="lab">{t.hero.seal}</span>
-          <div className="seal-big" aria-hidden="true">
-            АК
-          </div>
-          <div>
-            <span className="lab">шеберлік · 匠心</span>
-            <div className="orn" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
-          </div>
+        <div className="tile td t-seal t-best rv">
+          <img
+            className="bcover"
+            src="/img/bestiary/cover.webp"
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            decoding="async"
+          />
+          <span className="lab">{t.hero.bestiary}</span>
         </div>
       </div>
     </section>
