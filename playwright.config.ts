@@ -6,9 +6,11 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
-  // Каждый тест поднимает свой WebGL-контекст: на многих воркерах они дерутся
-  // за GPU, кадры проседают и падают проверки, завязанные на время.
-  workers: 2,
+  // Каждый тест поднимает свои WebGL-контексты: туман, прелоадер, сцена книги.
+  // На двух воркерах WebKit начал терять контексты — тесты книги проходили в
+  // одиночку и падали в общем прогоне. Один воркер медленнее, но честнее:
+  // альтернатива — красный набор, который никто не читает.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

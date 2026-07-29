@@ -81,8 +81,13 @@ section{margin-bottom:clamp(56px,7vw,110px)}
 .td{background:var(--tile);border:var(--bd)}
 .td::after{content:"";position:absolute;inset:0;background-image:var(--noise);opacity:.055;pointer-events:none;border-radius:inherit}
 .tl{background:var(--lt);color:var(--txd);box-shadow:0 1px 0 rgba(255,255,255,.05)}
-.tile:hover{transform:translateY(-7px) rotate(.7deg);box-shadow:0 26px 50px -28px rgba(0,0,0,.65)}
-.bento>.tile:nth-child(even):hover{transform:translateY(-7px) rotate(-.8deg)}
+/* Ховер-эффекты только там, где есть настоящий курсор. На тач-устройствах они
+   дают «залипший ховер» после тапа: плитка остаётся приподнятой до следующего
+   касания в другом месте. */
+@media (hover: hover){
+  .tile:hover{transform:translateY(-7px) rotate(.7deg);box-shadow:0 26px 50px -28px rgba(0,0,0,.65)}
+  .bento>.tile:nth-child(even):hover{transform:translateY(-7px) rotate(-.8deg)}
+}
 .lab{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
 .lab b{color:var(--fire);font-weight:500}
 .tl .lab{color:var(--mutl)}
@@ -132,14 +137,20 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
    Поля обязательны — предмет читается предметом только тогда, когда вокруг
    видно поверхность, на которой он лежит. Тень отбрасывается по форме книги
    (drop-shadow, а не box-shadow у плитки) — иначе это тень карточки, не тома. */
-.t-best{display:grid;place-items:center;padding:clamp(15px,1.7vw,24px)}
+/* min-height обязателен: высота плитки бралась от картинки, а картинка мерялась
+   от высоты плитки. На десктопе ряд вытягивал соседний тайл и круг размыкался,
+   на мобильном плитка осталась одна в ряду и схлопнулась в пустую полоску. */
+.t-best{display:grid;place-items:center;padding:clamp(15px,1.7vw,24px);
+  min-height:clamp(190px,42vw,260px)}
 .t-best .bcover{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
   filter:drop-shadow(0 15px 20px rgba(0,0,0,.72)) drop-shadow(0 3px 4px rgba(0,0,0,.55));
   transition:transform .55s var(--ez),filter .55s var(--ez)}
 /* Наведение — книгу приподнимают со стола, а не увеличивают: том едет вверх,
    тень отстаёт и мягчеет. Масштаб здесь читался бы как зум по картинке. */
-.t-best:hover .bcover{transform:translateY(-5px);
-  filter:drop-shadow(0 26px 30px rgba(0,0,0,.78)) drop-shadow(0 5px 7px rgba(0,0,0,.5))}
+@media (hover: hover){
+  .t-best:hover .bcover{transform:translateY(-5px);
+    filter:drop-shadow(0 26px 30px rgba(0,0,0,.78)) drop-shadow(0 5px 7px rgba(0,0,0,.5))}
+}
 .bshut{display:block;width:100%;height:100%;padding:0;background:none;border:0;cursor:pointer}
 .bshut:focus-visible{outline:2px solid var(--fire);outline-offset:6px;border-radius:10px}
 
@@ -200,7 +211,7 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
 /* Холст переворота лежит поверх всего разворота: лист уходит с правой половины
    на левую, значит рисовать его надо по всей ширине книги, а не в границах
    одной страницы. Событий не ловит — кнопки и фон под ним остаются кликабельны. */
-.bturn{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+.bbook{position:absolute;inset:0;width:100%;height:100%;display:block}
 
 .bnext,.bclose{z-index:210;font-family:var(--mono);font-size:12px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--lt);
