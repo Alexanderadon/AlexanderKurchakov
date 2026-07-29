@@ -18,10 +18,10 @@ type Phase = "shut" | "opening" | "open" | "closing";
 export function Bestiary() {
   const { t } = useLang();
   const [phase, setPhase] = useState<Phase>("shut");
-  const [lock, setLock] = useState(false);
   const turnRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<BookScene | null>(null);
   const rafRef = useRef(0);
+  const safetyRef = useRef(0);
   const posRef = useRef(0); // насколько книга раскрыта сейчас, 0..1
   const btnRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -34,6 +34,7 @@ export function Bestiary() {
   useEffect(
     () => () => {
       timers.current.forEach(clearTimeout);
+      clearTimeout(safetyRef.current);
     },
     [],
   );
@@ -63,25 +64,38 @@ export function Bestiary() {
         const k = Math.min(1, (now - t0) / OPEN_MS);
         posRef.current = from + (to - from) * k;
         scene.draw(posRef.current);
-        if (k < 1) rafRef.current = requestAnimationFrame(step);
+        if (k < 1) {
+          rafRef.current = requestAnimationFrame(step);
+        } else {
+          // Ход дошёл сам — снимаем свою страховку, чтобы она не сработала
+          // потом вхолостую.
+          rafRef.current = 0;
+          clearTimeout(safetyRef.current);
+          safetyRef.current = 0;
+        }
       };
       rafRef.current = requestAnimationFrame(step);
       // Страховка: если цикл кадров встанет (в headless WebKit он до конца не
       // доходил), книга иначе замрёт на полпути.
-      after(OPEN_MS + 260, () => {
-        cancelAnimationFrame(rafRef.current);
+      //
+      // Держим её в ОТДЕЛЬНОМ ref и гасим предыдущую. Раньше страховка жила в
+      // общем списке таймеров: открыл книгу, быстро закрыл — и таймер от первого
+      // хода отменял requestAnimationFrame второго, книга застревала на полпути.
+      clearTimeout(safetyRef.current);
+      safetyRef.current = window.setTimeout(() => {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
         posRef.current = to;
         sceneRef.current?.draw(to);
-      });
+      }, OPEN_MS + 260);
     },
-    [after],
+    [],
   );
 
   const close = useCallback((): void => {
     if (phase !== "open" && phase !== "opening") return;
     const instant = prefersReducedMotion();
     setPhase("closing");
-    setLock(false);
     run(0);
     after(instant ? 0 : OPEN_MS, () => {
       setPhase("shut");
@@ -137,6 +151,30 @@ export function Bestiary() {
       if (e.key === "Escape") {
         e.preventDefault();
         close();
+      } else if (e.key === "Tab") {
+        // Ловушка фокуса. Без неё Tab из диалога уходит на фон: экранный
+        // читатель и клавиатура оказываются на странице, которая логически
+        // закрыта модалкой, а вернуться обратно нечем.
+        const box = dialogRef.current?.parentElement;
+        if (!box) return;
+        const items = Array.from(
+          box.querySelectorAll<HTMLElement>('button, [href], [tabindex]:not([tabindex="-1"])'),
+        ).filter((el) => !el.hasAttribute("disabled"));
+        if (!items.length) {
+          e.preventDefault();
+          dialogRef.current?.focus();
+          return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const cur = document.activeElement;
+        if (e.shiftKey && (cur === first || cur === dialogRef.current)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && cur === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
     document.addEventListener("keydown", onKey);
@@ -197,7 +235,7 @@ export function Bestiary() {
                   страниц с толщиной, форзац на изнанке крышки, камера с
                   перспективой. Прежний вариант был перебросом карточки: крышка
                   уходила ребром, и в этот кадр её подменял плоский разворот. */}
-              <canvas ref={turnRef} className="bbook" aria-hidden="true" />
+              <canvas ref={turnRef} className="bbook" role="img" aria-label={t.hero.bestiarySpread} />
 
             </div>
 
