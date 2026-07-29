@@ -39,7 +39,7 @@ const RU = {
     contacts: "контакты",
     released: "выпущено",
     releasedCap: "проектов — от лендингов до игровых прототипов",
-    seal: "печать",
+    bestiary: "бестиарий",
   },
   marquee: ["сайты", "игры", "айдентика", "видео", "шеберлік", "匠心", "мастерство"],
   works: {
@@ -124,7 +124,7 @@ const KZ: Dict = {
     contacts: "байланыс",
     released: "шығарылды",
     releasedCap: "жоба — лендингтерден ойын прототиптеріне дейін",
-    seal: "мөр",
+    bestiary: "бестиарий",
   },
   marquee: ["сайттар", "ойындар", "айдентика", "бейне", "шеберлік", "匠心", "өнер"],
   works: {
@@ -207,7 +207,7 @@ const EN: Dict = {
     contacts: "contacts",
     released: "shipped",
     releasedCap: "projects — from landing pages to game prototypes",
-    seal: "seal",
+    bestiary: "bestiary",
   },
   marquee: ["sites", "games", "identity", "video", "шеберлік", "匠心", "mastery"],
   works: {
