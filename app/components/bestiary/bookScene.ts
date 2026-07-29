@@ -20,6 +20,8 @@ export interface BookTextures {
   pageRight: TexImageSource;
   spine: TexImageSource;
   clasp: TexImageSource;
+  strap: TexImageSource;
+  plate: TexImageSource;
 }
 
 export interface BookScene {
@@ -65,6 +67,7 @@ uniform float u_dir;     // +1 растём вправо от петли, -1 в�
 uniform float u_sag;     // провал бумаги к жёлобу
 uniform float u_arc;     // >0: плоскость свёрнута дугой — корешок
 uniform float u_flip;    // >0: зеркалить текстуру по горизонтали
+uniform float u_curl;    // +1 изгиб вверх (лист), -1 вниз (ремешок через торец)
 varying vec2 v_uv;
 varying vec3 v_n;
 varying float v_face;
@@ -90,12 +93,13 @@ void main(){
     // хода радиус уходит в бесконечность и лист становится плоским.
     float R = u_size.x / max(1e-4, u_bend);
     float ang = s / R;
-    p = vec3(R * sin(ang) * u_dir, (0.5 - a_uv.y) * u_size.y, R * (1.0 - cos(ang)));
+    float cz = u_curl < 0.0 ? -1.0 : 1.0;
+    p = vec3(R * sin(ang) * u_dir, (0.5 - a_uv.y) * u_size.y, cz * R * (1.0 - cos(ang)));
     // Знак проверен через векторное произведение касательных: при ang=0
     // нормаль обязана быть (0,0,1) — вверх, к зрителю. Была (0,0,-1), то есть
     // смотрела в стол; при abs(dot) это не замечалось, а с честным светом
     // изгибающийся лист становился серым.
-    n = vec3(-sin(ang) * u_dir, 0.0, cos(ang));
+    n = vec3(-cz * sin(ang) * u_dir, 0.0, cos(ang));
   } else {
     // Раскрытая книга не лежит идеально плоско: у корешка бумага уходит вниз, в
     // жёлоб, и выпрямляется к обрезу. Без этого разворот читается наклейкой.
@@ -272,6 +276,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const uArc = gl.getUniformLocation(prog, "u_arc");
   const uFlip = gl.getUniformLocation(prog, "u_flip");
   const uAlpha = gl.getUniformLocation(prog, "u_alpha");
+  const uCurl = gl.getUniformLocation(prog, "u_curl");
   gl.uniform1i(gl.getUniformLocation(prog, "u_tex"), 0);
   gl.uniform3f(gl.getUniformLocation(prog, "u_light"), -0.3, 0.5, 0.81);
 
@@ -281,6 +286,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const texR = makeTexture(gl, tex.pageRight);
   const texSpine = makeTexture(gl, tex.spine);
   const texClasp = makeTexture(gl, tex.clasp);
+  const texStrap = makeTexture(gl, tex.strap);
+  const texPlate = makeTexture(gl, tex.plate);
 
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -312,6 +319,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     sag?: number;
     flip?: boolean;
     alpha?: number;
+    curl?: number;
     arc?: number;
     stripe?: number;
     tint?: [number, number, number, number];
@@ -334,6 +342,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     gl.uniform1f(uArc, p.arc ?? 0);
     gl.uniform1f(uFlip, p.flip ? 1 : 0);
     gl.uniform1f(uAlpha, p.alpha ?? 1);
+    gl.uniform1f(uCurl, p.curl ?? 1);
     const t = p.tint ?? [0, 0, 0, 0];
     gl.uniform4f(uTint, t[0], t[1], t[2], t[3]);
     gl.activeTexture(gl.TEXTURE0);
@@ -529,27 +538,35 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       });
     }
 
-    // Замки. Отходят наружу вокруг своей петли на крышке и гаснут — книга на
-    // застёжках не открывается, пока их не отпустили. Рисуем последними: они
-    // лежат поверх всего, что закрывает.
+    // Замки — из двух частей на одной петле, как настоящие. Бляшка приклёпана к
+    // крышке и никуда не уходит; ремешок сидит на её петле, согнут через торец,
+    // пока застёгнут, и распрямляется, поднимаясь. Одной плоской накладкой это
+    // не изобразить: она умеет только повернуться целиком.
     const cl = ease(phase(t, 0, CLASP_END));
-    if (cl < 0.999) {
-      const clH = CLASP_W * (268 / 760);
-      for (const sy of [0.27, -0.27]) {
-        pieces.push({
-          model: multiply(
-            multiply(
-              translation(PAGE_W + SQUARE - CLASP_W * 0.34, PAGE_H * sy, coverZ + 0.002),
-              rotationY(-1.9 * cl),
-            ),
-            translation(0, 0, 0),
-          ),
-          size: [CLASP_W, clH],
-          dir: 1,
-          tex: texClasp,
-          alpha: 1 - smoothstep01(0.62, 1, cl),
-        });
-      }
+    const plateW = CLASP_W * 0.52;
+    const strapW = CLASP_W * 1.15;
+    for (const sy of [0.27, -0.27]) {
+      const hingeX = PAGE_W + SQUARE - plateW * 0.72;
+      // бляшка: лежит на крышке, живёт вместе с ней
+      pieces.push({
+        model: multiply(coverModel, translation(hingeX, PAGE_H * sy, COVER_T + 0.002)),
+        size: [plateW, plateW * (386 / 420)],
+        dir: 1,
+        tex: texPlate,
+      });
+      // ремешок: от петли бляшки через торец. Изгиб уходит с 1.75 в ноль —
+      // застёгнутый ремешок обёрнут вокруг обреза, отстёгнутый прям.
+      pieces.push({
+        model: multiply(
+          multiply(coverModel, translation(hingeX + plateW * 0.62, PAGE_H * sy, COVER_T + 0.004)),
+          rotationY(-1.35 * cl),
+        ),
+        size: [strapW, strapW * (106 / 620)],
+        dir: 1,
+        tex: texStrap,
+        bend: 1.75 * (1 - cl),
+        curl: -1,
+      });
     }
 
     for (const p of pieces) drawPiece(view, p);
@@ -563,7 +580,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     resize,
     dispose(): void {
       if (!gl) return;
-      for (const t of [texCover, texEnd, texL, texR, texSpine, texClasp]) gl.deleteTexture(t);
+      for (const t of [texCover, texEnd, texL, texR, texSpine, texClasp, texStrap, texPlate]) gl.deleteTexture(t);
       gl.deleteBuffer(buf);
       gl.deleteProgram(prog);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
