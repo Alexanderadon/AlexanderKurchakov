@@ -171,11 +171,13 @@ export function Bestiary() {
       load("/img/bestiary/page-right.webp"),
       load("/img/bestiary/spine.webp"),
       load("/img/bestiary/clasp.webp"),
+      load("/img/bestiary/strap.webp"),
+      load("/img/bestiary/plate.webp"),
     ])
-      .then(([coverFront, endpaper, pageLeft, pageRight, spine, clasp]) => {
+      .then(([coverFront, endpaper, pageLeft, pageRight, spine, clasp, strap, plate]) => {
         const cv = turnRef.current;
         if (dead || !cv) return;
-        sceneRef.current = createBook(cv, { coverFront, endpaper, pageLeft, pageRight, spine, clasp });
+        sceneRef.current = createBook(cv, { coverFront, endpaper, pageLeft, pageRight, spine, clasp, strap, plate });
         paint();
         run(phase === "closing" ? 0 : 1);
       })
