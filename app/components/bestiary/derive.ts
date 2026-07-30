@@ -158,9 +158,20 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
       // Металличность и шероховатость из маски золота. Материал ставит оба
       // параметра в единицу, значения целиком живут в картах: кожа — матовый
       // диэлектрик, тиснение — полированный металл, который и ловит окружение.
+      //
+      // ПОТЁРТОСТИ. У древнего тома позолота не бывает равномерно свежей: у
+      // кромок и углов её съедают руки и полка. Вклад золота гасится к границам
+      // листа, и не ровной виньеткой, а пятнами — низкочастотный синус даёт
+      // неравномерность износа. Стёртое золото заодно матовеет.
       const gld = goldSoft[y * W + x];
-      const mv = Math.round(Math.min(1, 0.06 + 0.9 * gld) * 255);
-      const rv = Math.round(Math.min(1, Math.max(0, 0.78 - 0.5 * gld)) * 255);
+      const ex = Math.min(x, W - 1 - x) / W;
+      const ey = Math.min(y, H - 1 - y) / H;
+      const border = smoothstep(0, 0.055, ex) * smoothstep(0, 0.075, ey);
+      const patch = 0.82 + 0.18 * Math.sin(x * 0.011 + 3.1) * Math.sin(y * 0.014 + 1.2);
+      const wear = Math.min(1, (0.28 + 0.72 * border) * patch);
+      const gw = gld * wear;
+      const mv = Math.round(Math.min(1, 0.06 + 0.9 * gw) * 255);
+      const rv = Math.round(Math.min(1, Math.max(0, 0.78 - 0.5 * gw)) * 255);
       mImg.data[k] = mv;
       mImg.data[k + 1] = mv;
       mImg.data[k + 2] = mv;
