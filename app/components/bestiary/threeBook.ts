@@ -673,7 +673,13 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // короткое затухающее колебание. Линейный ход читается механикой.
     const rawLeaf = tw > 0 ? tw : ease(phase(t, 0.46, 1));
     const leafPhase = leafFall(rawLeaf);
-    const leftShare = (leftPages + leafPhase) / total;
+    // Доля левой стопки гасится при ЗАКРЫВАНИИ. Иначе у закрытой книги половина
+    // толщины остаётся слева, за пределами крышки: том стоит с торчащей плитой
+    // сбоку. Физически верно — закрытая книга это одна стопка под крышкой, где бы
+    // ни была закладка. Порог 0.5 совпадает с моментом, когда крышка проходит
+    // вертикаль и левая стопка вообще становится видимой.
+    const spread = ease(phase(t, 0.5, 0.92));
+    const leftShare = ((leftPages + leafPhase) / total) * spread;
     const rightT = 0.01 + BLOCK_T * 0.94 * (1 - leftShare);
     const leftT = 0.01 + BLOCK_T * 0.94 * leftShare;
 
@@ -687,7 +693,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leftPage.visible = leftBlock.visible;
     leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.0015);
 
-    spine.position.set(0, 0, Math.min(rightT, leftT) - spineR);
+    const rimHi = Math.max(rightT, leftT);
+    const rim = rimHi + (Math.min(rightT, leftT) - rimHi) * ease(phase(t, 0.45, 0.9));
+    spine.position.set(0, 0, rim - spineR);
     // Капталы сидят на торцах блока у самого корешка и едут за его толщиной.
     for (let i = 0; i < headbands.length; i++) {
       const sy = i === 0 ? 1 : -1;
