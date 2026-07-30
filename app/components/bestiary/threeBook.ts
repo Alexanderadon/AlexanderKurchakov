@@ -193,6 +193,8 @@ function bendableMaterial(
   map: Texture,
   width: number,
   cut = false,
+  /** Полувысота меша — нужна вееру и провису, они считаются от неё. */
+  halfH = 0,
   /**
    * Куда загибать по глубине. Лист поднимается ОТ стопки (+1), а ремешок обязан
    * заворачиваться К книге, обнимая передний обрез (-1). С единым знаком ремешки
@@ -234,7 +236,13 @@ function bendableMaterial(
       float wid = ${width.toFixed(4)};
       float s = position.x;                 // расстояние от петли
       float u = clamp(s / wid, 0.0, 1.0);
-      float a = uBend * pow(u, 1.7);
+      // ВЕЕР. Линия сгиба у настоящего листа НЕ параллельна корешку: у одного
+      // края он зажат туже, к другому завёрт раскрывается. Форма ближе к конусу
+      // с вершиной у корешка, чем к цилиндру. Без веера лист читается свёрнутым
+      // жестяным листом.
+      float v = ${halfH > 0 ? `clamp(position.y / ${halfH.toFixed(4)}, -1.0, 1.0)` : `0.0`};
+      float fan = mix(1.32, 0.62, 0.5 + 0.5 * v);
+      float a = uBend * fan * pow(u, 1.7);
       float R = a > 0.0005 ? s / a : 1.0e6;
       float dir = ${dir.toFixed(1)};
       ${target}
@@ -251,7 +259,14 @@ function bendableMaterial(
       .replace(
         "#include <begin_vertex>",
         "#include <begin_vertex>" +
-          bendCode("transformed.x = R * sin(a);\n      transformed.z += dir * R * (1.0 - cos(a));"),
+          bendCode(
+            "transformed.x = R * sin(a);\n" +
+              "      transformed.z += dir * R * (1.0 - cos(a));\n" +
+              // ПРОВИС свободного края под собственным весом. Без него лист жёсткий:
+              // у бумаги дальний от петли край обвисает, и у краёв по высоте сильнее,
+              // чем в середине. Считается ПОСЛЕ изгиба, поэтому с ним не спорит.
+              "      transformed.z -= dir * uBend * 0.045 * pow(u, 2.2) * (0.3 + 0.7 * abs(v));",
+          ),
       );
   };
   // ── Тень.
@@ -272,7 +287,14 @@ function bendableMaterial(
       .replace(
         "#include <begin_vertex>",
         "#include <begin_vertex>" +
-          bendCode("transformed.x = R * sin(a);\n      transformed.z += dir * R * (1.0 - cos(a));"),
+          bendCode(
+            "transformed.x = R * sin(a);\n" +
+              "      transformed.z += dir * R * (1.0 - cos(a));\n" +
+              // ПРОВИС свободного края под собственным весом. Без него лист жёсткий:
+              // у бумаги дальний от петли край обвисает, и у краёв по высоте сильнее,
+              // чем в середине. Считается ПОСЛЕ изгиба, поэтому с ним не спорит.
+              "      transformed.z -= dir * uBend * 0.045 * pow(u, 2.2) * (0.3 + 0.7 * abs(v));",
+          ),
       );
   };
 
@@ -453,7 +475,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const book = new Group();
   scene.add(book);
 
-  const coverW = PAGE_W + SQUARE;
+  // Ширина крышки считается от рубчика: картон начинается ЗА жёлобом, поэтому
+  // из общей ширины вычитается его ширина. Тогда передний кант выходит ровно
+  // SQUARE и совпадает с верхним и нижним.
+  const coverW = PAGE_W + SQUARE - GROOVE;
   const coverH = PAGE_H + SQUARE * 2;
 
   // ── задняя крышка: коробка, а не плоскость. Толщина есть по построению.
@@ -465,7 +490,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     paper(T.end),
     leather,
   ]);
-  backCover.position.set(GROOVE + coverW / 2 - SQUARE / 2, 0, -COVER_T / 2);
+  backCover.position.set(GROOVE + coverW / 2, 0, -COVER_T / 2);
   backCover.receiveShadow = true;
   book.add(backCover);
 
@@ -653,7 +678,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }),
     paper(T.end),
   ]);
-  frontCover.position.set(GROOVE + coverW / 2 - SQUARE / 2, 0, COVER_T / 2);
+  frontCover.position.set(GROOVE + coverW / 2, 0, COVER_T / 2);
   frontCover.castShadow = true;
   coverHinge.add(frontCover);
 
@@ -732,9 +757,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // ── переворачиваемый лист: плоскость, гнущаяся в шейдере.
   const leafHinge = new Group();
   book.add(leafHinge);
-  const leafGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
+  const leafGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 16);
   leafGeo.translate(PAGE_W / 2, 0, 0);
-  const leafFront = bendableMaterial(T.right, PAGE_W);
+  const leafFront = bendableMaterial(T.right, PAGE_W, false, PAGE_H / 2);
   const leaf = new Mesh(leafGeo, leafFront.material);
   leaf.castShadow = true;
   leaf.receiveShadow = true;
@@ -742,7 +767,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   leafHinge.add(leaf);
   // Оборот листа: своя текстура и BackSide. Без него лист за -90° показывал
   // пустоту и вдобавок дублировал страницу, лежащую под ним.
-  const leafBackMat = bendableMaterial(T.left, PAGE_W);
+  const leafBackMat = bendableMaterial(T.left, PAGE_W, false, PAGE_H / 2);
   leafBackMat.material.side = BackSide;
   const leafBack = new Mesh(leafGeo.clone(), leafBackMat.material);
   leafBack.castShadow = true;
