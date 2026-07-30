@@ -68,7 +68,7 @@ export function Bestiary() {
   const [phase, setPhase] = useState<Phase>("shut");
   const turnRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<BookScene | null>(null);
-  const pageRef = useRef(0); // сколько листов уже слева
+  const pageRef = useRef(Math.floor(LEAVES / 2)); // сколько листов уже слева
   const btnRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
