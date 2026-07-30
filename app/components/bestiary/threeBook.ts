@@ -493,28 +493,51 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   // ── корешок: полуцилиндр между крышками. Лицевая сторона с тиснением смотрит
   // от зрителя, изнутри видна подкладка — как у настоящей раскрытой книги.
-  const spineGeo = new PlaneGeometry(BLOCK_T + COVER_T * 2, coverH, 24, 1);
-  const spinePos = spineGeo.attributes.position;
+  // ── КОРЕШОК.
+  //
+  // Прежняя версия была построена как ЖЁЛОБ: дуга лежала плашмя под блоком и
+  // раскрывалась вверх. Это форма для развёрнутой книги, а у закрытой корешок
+  // обязан быть полуцилиндром, который обнимает левое ребро и выпуклый НАРУЖУ.
+  // Вдобавок его лицо стояло BackSide, поэтому тиснение читалось зеркально —
+  // буквы шли задом наперёд.
+  //
+  // Теперь это половина цилиндра с вертикальной осью. Дуга идёт от задней крышки
+  // к передней, проходя через самую выступающую точку слева. Радиус равен половине
+  // толщины книги с крышками: только тогда корешок сходится с крышками без
+  // ступеньки.
   const sw = BLOCK_T + COVER_T * 2;
-  const spineR = sw / Math.PI;
+  const spineR = sw / 2;
+  const SPINE_SEG = 28;
+  const spineGeo = new PlaneGeometry(1, coverH, SPINE_SEG, 1);
+  const spinePos = spineGeo.attributes.position;
+  const spineUv = spineGeo.attributes.uv;
   for (let i = 0; i < spinePos.count; i++) {
-    const u = spinePos.getX(i) / sw + 0.5; // 0..1 по ширине
+    // u = 0 у задней крышки, 1 у передней. Угол идёт от -90° до +90°, поэтому
+    // середина дуги приходится ровно на самую левую точку корешка.
+    const u = spineUv.getX(i);
     const a = (u - 0.5) * Math.PI;
-    spinePos.setX(i, spineR * Math.sin(a));
-    spinePos.setZ(i, spineR * (1 - Math.cos(a)));
+    spinePos.setX(i, -spineR * Math.cos(a));
+    spinePos.setZ(i, spineR * Math.sin(a));
   }
   spineGeo.computeVertexNormals();
+
+  // Подкладка: та же дуга чуть внутрь, чтобы с торца не просвечивало насквозь.
   const spine = new Mesh(
-    spineGeo,
-    new MeshStandardMaterial({ color: 0x1a1815, roughness: 0.86, metalness: 0.03 }),
+    spineGeo.clone().scale(0.97, 1, 0.97),
+    new MeshStandardMaterial({ color: 0x14120f, roughness: 0.9, metalness: 0.02, side: BackSide }),
   );
-  // Лицевая сторона корешка с тиснением: смотрит ОТ зрителя, поэтому у раскрытой
-  // книги её не видно, а у закрытой она читается с торца. Раньше эта текстура
-  // грузилась и создавала GPU-объект, но не была отдана ни одному материалу.
+  // Лицо с тиснением смотрит НАРУЖУ, обычной стороной: зеркалить нечего.
   const spineFace = new Mesh(
-    spineGeo.clone(),
-    new MeshStandardMaterial({ map: T.spine, roughness: 0.8, metalness: 0.05, side: BackSide }),
+    spineGeo,
+    new MeshStandardMaterial({
+      map: T.spine,
+      normalMap: T.nCover,
+      normalScale: new Vector2(0.5, 0.5),
+      roughness: 0.72,
+      metalness: 0.18,
+    }),
   );
+  spineFace.castShadow = true;
   spine.receiveShadow = true;
   book.add(spine);
   book.add(spineFace);
