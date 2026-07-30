@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { useLang } from "~/lib/i18n";
 import { prefersReducedMotion } from "~/lib/media";
 import { LEAVES, OPEN_MS, SPREAD_RATIO, TURN_MS } from "~/lib/bestiary";
-import { createBook, type BookScene } from "./bestiary/bookScene";
+import type { BookScene } from "./bestiary/threeBook";
 
 type Phase = "shut" | "opening" | "open" | "closing";
 
@@ -170,14 +170,17 @@ export function Bestiary() {
       load("/img/bestiary/page-left.webp"),
       load("/img/bestiary/page-right.webp"),
       load("/img/bestiary/spine.webp"),
-      load("/img/bestiary/clasp.webp"),
       load("/img/bestiary/strap.webp"),
       load("/img/bestiary/plate.webp"),
     ])
-      .then(([coverFront, endpaper, pageLeft, pageRight, spine, clasp, strap, plate]) => {
+      .then(async ([coverFront, endpaper, pageLeft, pageRight, spine, strap, plate]) => {
+        // Динамический импорт: three уезжает в свой чанк и грузится только при
+        // открытии книги. Первый экран от библиотеки не потяжелел ни на байт —
+        // это было главное возражение против неё, и оно снято технически.
+        const { createBook } = await import("./bestiary/threeBook");
         const cv = turnRef.current;
         if (dead || !cv) return;
-        sceneRef.current = createBook(cv, { coverFront, endpaper, pageLeft, pageRight, spine, clasp, strap, plate });
+        sceneRef.current = createBook(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate });
         paint();
         run(phase === "closing" ? 0 : 1);
       })
