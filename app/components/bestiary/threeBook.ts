@@ -135,6 +135,12 @@ const STRAP_FLAT = 0.028;
 const STRAP_R = 0.03;
 const STRAP_DROP = 0.305;
 const STRAP_R2 = 0.025;
+/**
+ * Прогиб спуска ВНУТРЬ, к бумаге: обрез вогнутый, и натянутый по прямой ремень
+ * висел над ним с просветом — виден был воздух. Старая кожа обминается по
+ * блоку; прогиб гаснет вместе с зажимом при расстёгивании.
+ */
+const STRAP_SAG = 0.016;
 /** «Квадрат» — выступ крышки за обрез блока, у переплётчиков миллиметра три. */
 const SQUARE = 0.028;
 /** Такт раскрытия и такт листания, секунды. Книга тяжёлая: спешка её убивает. */
@@ -337,7 +343,8 @@ function bendableMaterial(
   // истончался в ленту.
   const bendPos = wrap
     ? `transformed.x = min(s, ${STRAP_FLAT.toFixed(4)}) + ${STRAP_R.toFixed(4)} * sin(a1) + d * cos(a1)
-        + ${STRAP_R2.toFixed(4)} * (sin(a) - sin(a1)) + r3 * cos(a) - dir * position.z * sin(a);
+        + ${STRAP_R2.toFixed(4)} * (sin(a) - sin(a1)) + r3 * cos(a) - dir * position.z * sin(a)
+        - ${STRAP_SAG.toFixed(4)} * sin(3.14159 * clamp(d / ${STRAP_DROP.toFixed(4)}, 0.0, 1.0)) * clamp(uBend, 0.0, 1.0);
       transformed.z = position.z * cos(a) + dir * (${STRAP_R.toFixed(4)} * (1.0 - cos(a1)) + d * sin(a1)
         + ${STRAP_R2.toFixed(4)} * (cos(a1) - cos(a)) + r3 * sin(a));`
     : `transformed.x = s * sa;
@@ -467,6 +474,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // блока идут регулярные светлые штрихи, а левая страница уходит в серость.
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.02;
+  // Широкое перо: жёсткая кромка тени рисовала на подиуме резкие прямоугольники.
+  sun.shadow.radius = 5;
   const sc = sun.shadow.camera;
   sc.left = -3.2;
   sc.right = 3.2;
@@ -506,7 +515,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   );
   glow.position.set(0.2, -0.3, -0.06);
   scene.add(glow);
-  const shadowCatch = new Mesh(new PlaneGeometry(7, 7), new ShadowMaterial({ opacity: 0.45 }));
+  // Плотность тени на подиуме живёт в кадре: закрытому тому она даёт вес, а при
+  // раскрытии квадратные тени крышки и блока ездили по заднику «квадратиками».
+  const shadowMat = new ShadowMaterial({ opacity: 0.42 });
+  const shadowCatch = new Mesh(new PlaneGeometry(7, 7), shadowMat);
   shadowCatch.position.set(0.2, -0.3, -0.045);
   shadowCatch.receiveShadow = true;
   scene.add(shadowCatch);
@@ -1055,35 +1067,56 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     normalMap: T.nCatch,
     normalScale: new Vector2(1.1, 1.1),
     displacementMap: catchRelief ? catchRelief.height : undefined,
-    displacementScale: catchRelief ? 0.008 : 0,
-    displacementBias: catchRelief ? -0.0015 : 0,
+    displacementScale: catchRelief ? 0.012 : 0,
+    displacementBias: catchRelief ? -0.002 : 0,
     roughness: 0.45,
     metalness: 0.62,
     alphaTest: 0.5,
   });
   catchMat.alphaToCoverage = true;
-  const catchDark = catchMat.clone();
-  catchDark.color = new Color(0x54492e);
-  catchDark.normalMap = null;
-  catchDark.displacementMap = null;
-  catchDark.displacementScale = 0;
-  // Планка сомасштабна передней фурнитуре и лежит ПОД хвостом ремня: хвост
-  // накрывает её внешний край и упирается в крюк — замок читается застёгнутым.
-  // Слои вложены с уменьшением, литьё с текстурой — внешним.
+  // Застёжка на заднике собрана ЯРУСАМИ, как спереди: под хвостом ремня та же
+  // фигурная бляшка с выдавленным литьём, на ней узкая планка с крюком, и сам
+  // крюк — ТЕЛОМ, латунным клином сквозь прорезь хвоста наружу. Прежняя одинокая
+  // пластинка читалась золотой крошкой.
+  const catchBrass = new MeshStandardMaterial({
+    map: T.plate,
+    normalMap: T.nPlate,
+    normalScale: new Vector2(1.2, 1.2),
+    displacementMap: plateRelief ? plateRelief.height : undefined,
+    displacementScale: plateRelief ? 0.013 : 0,
+    displacementBias: plateRelief ? -0.0025 : 0,
+    roughness: 0.42,
+    metalness: 0.65,
+    alphaTest: 0.5,
+  });
+  catchBrass.alphaToCoverage = true;
+  const catchBrassDark = catchBrass.clone();
+  catchBrassDark.color = new Color(0x6f5f38);
+  catchBrassDark.normalMap = null;
+  catchBrassDark.displacementMap = null;
+  catchBrassDark.displacementScale = 0;
+  const catchPlateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), 72, 66);
+  const hookMat = new MeshStandardMaterial({ color: 0xc9a75a, roughness: 0.34, metalness: 0.82 });
   for (const sy of [0.27, -0.27]) {
     for (const [dz, m, k] of [
-      [-0.005, catchMat, 1],
-      [-0.0035, catchDark, 0.95],
-      [-0.002, catchDark, 0.9],
+      [-0.002, catchBrassDark, 0.92],
+      [-0.0045, catchBrassDark, 0.96],
+      [-0.007, catchBrass, 1],
     ] as const) {
-      const cp = new Mesh(new PlaneGeometry(0.07, 0.172, 40, 96), m);
-      // Rz кладёт длину планки вдоль ремешка (по x), Ry(π) разворачивает лицом
-      // наружу задника. По высоте — как ремни, у середины.
-      cp.rotation.set(0, Math.PI, Math.PI / 2);
-      cp.position.set(0.945, PAGE_H * sy * 0.6, -COVER_T + dz);
+      const cp = new Mesh(catchPlateGeo, m);
+      cp.rotation.set(0, Math.PI, 0);
+      cp.position.set(0.9, PAGE_H * sy * 0.6, -COVER_T + dz);
       cp.scale.setScalar(k);
       book.add(cp);
     }
+    const strip = new Mesh(new PlaneGeometry(0.07, 0.172, 40, 96), catchMat);
+    strip.rotation.set(0, Math.PI, Math.PI / 2);
+    strip.position.set(0.93, PAGE_H * sy * 0.6, -COVER_T - 0.0095);
+    book.add(strip);
+    const hook = new Mesh(new BoxGeometry(0.018, 0.024, 0.02), hookMat);
+    hook.rotation.x = Math.PI / 4;
+    hook.position.set(0.948, PAGE_H * sy * 0.6, -COVER_T - 0.02);
+    book.add(hook);
   }
 
   // ── Угловые оковки: латунные накладки по углам обеих крышек — тем же приёмом,
@@ -1280,6 +1313,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const t = clamp01(open);
     const tw = clamp01(turn);
     const settle = ease(phase(t, 0.15, 1));
+    // Тень на подиуме гаснет по ходу раскрытия: у разворота она почти не нужна,
+    // а движущиеся прямоугольники теней читались артефактом.
+    shadowMat.opacity = 0.42 * (1 - 0.72 * settle);
 
     // Камера: закрытая книга читается объёмной, раскрытая лежит перед зрителем,
     // но наклон не сводится в ноль — в лоб объём исчезает целиком.
