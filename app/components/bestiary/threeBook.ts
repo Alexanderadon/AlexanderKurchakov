@@ -50,7 +50,14 @@ export interface BookTextures {
 }
 
 export interface BookScene {
-  draw(open: number, turn?: number, left?: number, right?: number): void;
+  /**
+   * Ставит ЦЕЛЬ, а не кадр. Сцена гонит к ней сама в своём цикле — от этого
+   * уходит дёрганость: раньше React перерисовывал по событиям, интервалы между
+   * кадрами были неровными, и каждое листание давало рывок.
+   */
+  target(open: number, page: number): void;
+  /** Текущее положение — чтобы снаружи знать, можно ли листать дальше. */
+  readonly state: { open: number; page: number; busy: boolean };
   resize(): void;
   dispose(): void;
 }
@@ -59,10 +66,14 @@ export interface BookScene {
 const PAGE_W = 1;
 /** Пропорция обложки, снятая с ассета 1122×1402. */
 const PAGE_H = PAGE_W / 0.8003;
-const BLOCK_T = 0.155;
-const COVER_T = 0.016;
+const BLOCK_T = 0.29;
+const COVER_T = 0.022;
 /** «Квадрат» — выступ крышки за обрез блока, у переплётчиков миллиметра три. */
 const SQUARE = 0.028;
+/** Такт раскрытия и такт листания, секунды. Книга тяжёлая: спешка её убивает. */
+const OPEN_S = 2.6;
+const TURN_S = 0.85;
+const LEAVES = 6;
 /** Замки отходят до того, как тронется крышка. */
 const CLASP_END = 0.3;
 
@@ -86,12 +97,18 @@ function makeTexture(src: TexImageSource): Texture {
  * правильный свет с тенями — свой шейдер пришлось бы освещать руками, чем я и
  * занимался, пока ловил знаки нормалей.
  */
-function bendableMaterial(map: Texture): {
+function bendableMaterial(map: Texture, cut = false): {
   material: MeshStandardMaterial;
   bend: IUniform<number>;
 } {
   const bend: IUniform<number> = { value: 0 };
-  const material = new MeshStandardMaterial({ map, roughness: 0.92, metalness: 0 });
+  const material = new MeshStandardMaterial({
+    map,
+    roughness: 0.92,
+    metalness: 0,
+    transparent: cut,
+    alphaTest: cut ? 0.5 : 0,
+  });
   // Правим ровно две вставки — нормаль и позицию, — и не трогаем project_vertex
   // и прочие внутренности: их порядок и содержимое меняются между версиями
   // three, а begin_vertex/beginnormal_vertex — публичная точка расширения.
@@ -259,14 +276,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     coverHinge.add(g);
     claspGroups.push(g);
 
-    const plate = new Mesh(new BoxGeometry(plateW, plateW * (386 / 420), 0.012), [
-      leather,
-      leather,
-      leather,
-      leather,
-      paper(T.plate),
-      leather,
-    ]);
+    const plate = new Mesh(new PlaneGeometry(plateW, plateW * (386 / 420)), sheet(T.plate));
     plate.position.set(-plateW * 0.45, 0, 0.006);
     plate.castShadow = true;
     g.add(plate);
@@ -274,7 +284,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const strapW = 0.3;
     const sgeo = new PlaneGeometry(strapW, strapW * (106 / 620), 18, 1);
     sgeo.translate(strapW / 2, 0, 0);
-    const { material, bend } = bendableMaterial(T.strap);
+    const { material, bend } = bendableMaterial(T.strap, true);
     const strap = new Mesh(sgeo, material);
     strap.castShadow = true;
     g.add(strap);
@@ -306,7 +316,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     camera.updateProjectionMatrix();
   }
 
-  function draw(open: number, turn = 0, leftPages = 0, rightPages = 6): void {
+  function render(open: number, turn: number, leftPages: number, rightPages: number): void {
     const t = clamp01(open);
     const tw = clamp01(turn);
     const settle = ease(phase(t, 0.15, 1));
@@ -363,10 +373,58 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   resize();
 
+  // ── Цикл кадров. Живёт всё время, пока сцена жива, и гонит текущие значения к
+  // целевым. Скорость задана в единицах в секунду, а не «за кадр»: на 144 Гц и
+  // на 60 Гц движение одинаковое.
+  const cur = { open: 0, page: 0 };
+  const tgt = { open: 0, page: 0 };
+  const state = { open: 0, page: 0, busy: false };
+  let raf = 0;
+  let last = 0;
+
+  function step(now: number): void {
+    raf = requestAnimationFrame(step);
+    const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
+    last = now;
+
+    // Раскрытие: 1 / OPEN_S секунды на полный ход, с плавным подходом к цели.
+    const openSpeed = 1 / OPEN_S;
+    const dOpen = tgt.open - cur.open;
+    if (Math.abs(dOpen) > 1e-4) {
+      cur.open += Math.sign(dOpen) * Math.min(Math.abs(dOpen), openSpeed * dt);
+    } else {
+      cur.open = tgt.open;
+    }
+
+    // Листание: страница едет к целевой с тем же принципом.
+    const turnSpeed = 1 / TURN_S;
+    const dPage = tgt.page - cur.page;
+    if (Math.abs(dPage) > 1e-4) {
+      cur.page += Math.sign(dPage) * Math.min(Math.abs(dPage), turnSpeed * dt);
+    } else {
+      cur.page = tgt.page;
+    }
+
+    state.open = cur.open;
+    state.page = cur.page;
+    state.busy = Math.abs(dOpen) > 1e-3 || Math.abs(dPage) > 1e-3;
+
+    // Целая часть — сколько листов уже слева, дробная — ход текущего.
+    const whole = Math.floor(cur.page + 1e-6);
+    const frac = cur.page - whole;
+    render(cur.open, frac, whole, Math.max(1, LEAVES - whole));
+  }
+  raf = requestAnimationFrame(step);
+
   return {
-    draw,
+    target(open: number, page: number): void {
+      tgt.open = clamp01(open);
+      tgt.page = Math.max(0, Math.min(LEAVES, page));
+    },
+    state,
     resize,
     dispose(): void {
+      cancelAnimationFrame(raf);
       for (const key of Object.keys(T) as (keyof typeof T)[]) T[key].dispose();
       scene.traverse((o) => {
         if (o instanceof Mesh) {

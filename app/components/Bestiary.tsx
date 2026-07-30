@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "~/lib/i18n";
 import { prefersReducedMotion } from "~/lib/media";
-import { LEAVES, OPEN_MS, SPREAD_RATIO, TURN_MS } from "~/lib/bestiary";
+import { LEAVES, OPEN_MS, SPREAD_RATIO } from "~/lib/bestiary";
 import type { BookScene } from "./bestiary/threeBook";
 
 type Phase = "shut" | "opening" | "open" | "closing";
@@ -20,13 +20,7 @@ export function Bestiary() {
   const [phase, setPhase] = useState<Phase>("shut");
   const turnRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<BookScene | null>(null);
-  const rafRef = useRef(0);
-  const safetyRef = useRef(0);
-  const posRef = useRef(0); // насколько книга раскрыта сейчас, 0..1
-  const turnRafRef = useRef(0);
-  const turnRef2 = useRef(0); // ход текущего листа, 0..1
   const pageRef = useRef(0); // сколько листов уже слева
-  const busyRef = useRef(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
@@ -38,7 +32,6 @@ export function Bestiary() {
   useEffect(
     () => () => {
       timers.current.forEach(clearTimeout);
-      clearTimeout(safetyRef.current);
     },
     [],
   );
@@ -50,107 +43,42 @@ export function Bestiary() {
     after(instant ? 0 : OPEN_MS, () => setPhase("open"));
   }, [phase, after]);
 
-  const paint = useCallback((): void => {
-    sceneRef.current?.draw(posRef.current, turnRef2.current, pageRef.current, LEAVES - pageRef.current);
+  /** Ставим ЦЕЛЬ сцене — она доедет сама в своём цикле кадров. */
+  const aim = useCallback((open: 0 | 1): void => {
+    sceneRef.current?.target(open, pageRef.current);
   }, []);
 
   /**
    * Листание. Тычок по правой половине разворота гонит лист влево, по левой —
    * возвращает назад. Кнопок нет намеренно: книгу листают, тыкая в неё.
+   *
+   * Своей анимации здесь больше нет. Раньше компонент сам гнал requestAnimationFrame
+   * и перерисовывал сцену по событиям — интервалы выходили неровными, и каждое
+   * листание давало рывок. Теперь он только сообщает, куда ехать.
    */
   const flip = useCallback(
     (dir: 1 | -1): void => {
-      if (busyRef.current || phase !== "open") return;
+      const sc = sceneRef.current;
+      if (!sc || phase !== "open" || sc.state.busy) return;
       const next = pageRef.current + dir;
       if (next < 0 || next > LEAVES) return;
-      if (prefersReducedMotion()) {
-        pageRef.current = next;
-        paint();
-        return;
-      }
-      busyRef.current = true;
-      const t0 = performance.now();
-      const step = (now: number): void => {
-        const k = Math.min(1, (now - t0) / TURN_MS);
-        const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
-        turnRef2.current = dir > 0 ? e : 1 - e;
-        paint();
-        if (k < 1) {
-          turnRafRef.current = requestAnimationFrame(step);
-        } else {
-          // Лист доехал — засчитываем его в стопку и обнуляем ход, иначе
-          // следующий переворот стартовал бы с середины.
-          pageRef.current = next;
-          turnRef2.current = 0;
-          busyRef.current = false;
-          paint();
-        }
-      };
-      if (dir < 0) {
-        pageRef.current = next;
-        turnRef2.current = 1;
-      }
-      turnRafRef.current = requestAnimationFrame(step);
+      pageRef.current = next;
+      sc.target(1, next);
     },
-    [phase, paint],
+    [phase],
   );
 
-  /** Гонит сцену от текущего положения к целевому: 0 — закрыта, 1 — раскрыта. */
-  const run = useCallback(
-    (to: 0 | 1): void => {
-      const scene = sceneRef.current;
-      if (!scene) return;
-      if (prefersReducedMotion()) {
-        posRef.current = to;
-        paint();
-        return;
-      }
-      const from = posRef.current;
-      if (from === to) return;
-      const t0 = performance.now();
-      cancelAnimationFrame(rafRef.current);
-      const step = (now: number): void => {
-        const k = Math.min(1, (now - t0) / OPEN_MS);
-        posRef.current = from + (to - from) * k;
-        paint();
-        if (k < 1) {
-          rafRef.current = requestAnimationFrame(step);
-        } else {
-          // Ход дошёл сам — снимаем свою страховку, чтобы она не сработала
-          // потом вхолостую.
-          rafRef.current = 0;
-          clearTimeout(safetyRef.current);
-          safetyRef.current = 0;
-        }
-      };
-      rafRef.current = requestAnimationFrame(step);
-      // Страховка: если цикл кадров встанет (в headless WebKit он до конца не
-      // доходил), книга иначе замрёт на полпути.
-      //
-      // Держим её в ОТДЕЛЬНОМ ref и гасим предыдущую. Раньше страховка жила в
-      // общем списке таймеров: открыл книгу, быстро закрыл — и таймер от первого
-      // хода отменял requestAnimationFrame второго, книга застревала на полпути.
-      clearTimeout(safetyRef.current);
-      safetyRef.current = window.setTimeout(() => {
-        if (rafRef.current) cancelAnimationFrame(rafRef.current);
-        rafRef.current = 0;
-        posRef.current = to;
-        paint();
-      }, OPEN_MS + 260);
-    },
-    [paint],
-  );
 
   const close = useCallback((): void => {
     if (phase !== "open" && phase !== "opening") return;
     const instant = prefersReducedMotion();
     setPhase("closing");
-    run(0);
+    aim(0);
     after(instant ? 0 : OPEN_MS, () => {
       setPhase("shut");
       btnRef.current?.focus();
     });
-  }, [phase, after, run]);
+  }, [phase, after, aim]);
 
   // Сцена переворота живёт, пока книга открыта. Текстуры декодируем до создания
   // контекста: WebGL не умеет ждать картинку, недогруженная приедет пустой.
@@ -181,19 +109,16 @@ export function Bestiary() {
         const cv = turnRef.current;
         if (dead || !cv) return;
         sceneRef.current = createBook(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate });
-        paint();
-        run(phase === "closing" ? 0 : 1);
+        sceneRef.current?.target(phase === "closing" ? 0 : 1, pageRef.current);
       })
       .catch(() => undefined);
     const onResize = (): void => {
       sceneRef.current?.resize();
-      paint();
     };
     window.addEventListener("resize", onResize);
     return () => {
       dead = true;
       window.removeEventListener("resize", onResize);
-      cancelAnimationFrame(rafRef.current);
       sceneRef.current?.dispose();
       sceneRef.current = null;
     };
