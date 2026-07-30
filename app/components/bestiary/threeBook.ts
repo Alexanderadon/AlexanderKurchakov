@@ -415,6 +415,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     render(cur.open, frac, whole, Math.max(1, LEAVES - whole));
   }
   raf = requestAnimationFrame(step);
+  // Метка готовности: по ней и сквозной тест, и замер «клик -> первый кадр».
+  canvas.dataset.ready = "1";
 
   return {
     target(open: number, page: number): void {
