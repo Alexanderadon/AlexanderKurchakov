@@ -364,7 +364,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     normalScale: new Vector2(1.5, 1.5),
     // Кромки бумаги почти белые: контраст со тёмным переплётом и делает книгу
     // книгой. Текстура сама по себе тёмная для нашей сцены, поэтому осветляем.
-    color: 0xf2eee2,
+    color: new Color(3.14, 3.70, 4.72),
     roughness: 0.96,
     metalness: 0,
   });
@@ -386,7 +386,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
           return t;
         })(),
     normalScale: new Vector2(1.3, 1.3),
-    color: 0xf2eee2,
+    color: new Color(3.14, 3.70, 4.72),
     roughness: 0.96,
     metalness: 0,
   });
@@ -412,9 +412,14 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   // ── блок страниц: тоже тело. Обрез по бокам — светлая бумага, сверху страница.
   /**
-   * Выгибает передний обрез дугой. У настоящей стопки кромка не плоская: листы
-   * распушаются к середине толщины и подбираются к крышкам. Плоская грань
-   * читается бруском, а не бумагой.
+   * Форма переднего обреза.
+   *
+   * У книги с КРУГЛЁНЫМ корешком обрез не выпуклый, а ВОГНУТЫЙ: при круглении и
+   * кашировке блок получает выпуклую спинку, и ровно та же бумага с другой стороны
+   * образует ложбину. Я сперва выгнул наружу — знак был противоположный, книга
+   * получала форму, которой у переплёта не бывает.
+   *
+   * Глубина ложбины у настоящего тома примерно вдвое меньше выступа корешка.
    */
   const bowBlock = (g: BoxGeometry): BoxGeometry => {
     const p = g.attributes.position;
@@ -426,7 +431,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       const z = p.getZ(i);
       // Дуга по толщине: максимум выпуклости на середине стопки.
       const k = Math.cos((z / halfT) * Math.PI * 0.5);
-      p.setX(i, x + 0.014 * k);
+      p.setX(i, x - 0.019 * k);
     }
     p.needsUpdate = true;
     g.computeVertexNormals();
