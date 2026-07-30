@@ -97,6 +97,24 @@ const ease = (x: number): number => {
 const phase = (t: number, a: number, b: number): number => clamp01((t - a) / (b - a));
 
 /**
+ * Профиль падения листа. Страницу подхватывают быстро, вертикаль она проходит по
+ * инерции, а на стопку падает с ускорением и коротко колеблется — бумага упругая
+ * и лёгкая. Симметричный разгон-торможение читается механикой: одинаковый ход в
+ * обе половины и мгновенная остановка в конце.
+ */
+function leafFall(x: number): number {
+  const t = clamp01(x);
+  // Подхват: быстрый старт, замедление к вертикали.
+  const lift = 1 - Math.pow(1 - Math.min(1, t / 0.55), 2.4);
+  // Падение: ускорение под собственным весом на второй половине хода.
+  const fall = Math.pow(clamp01((t - 0.45) / 0.55), 1.7);
+  const base = 0.55 * lift + 0.45 * fall;
+  // Затухающее колебание на посадке: два касания, не пружина.
+  const settle = t > 0.86 ? Math.sin((t - 0.86) * 34) * Math.pow(1 - (t - 0.86) / 0.14, 3) * 0.035 : 0;
+  return clamp01(base + settle);
+}
+
+/**
  * Карта нормалей. Отличается от цветной текстуры одним, но принципиальным: её
  * НЕЛЬЗЯ объявлять sRGB. В ней не цвет, а три числа на пиксель — наклон
  * поверхности по осям. Гамма-преобразование исказило бы наклоны, и рельеф
@@ -364,33 +382,53 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   frontCover.castShadow = true;
   coverHinge.add(frontCover);
 
+  // Ответные планки на задней крышке: штырь, за который цепляется ремешок.
+  // Без них замок застёгивался в воздух — «непонятно за что» было буквально.
+  const catchMat = new MeshStandardMaterial({ color: 0x9d8a55, roughness: 0.35, metalness: 0.85 });
+  for (const sy of [0.27, -0.27]) {
+    const post = new Mesh(new BoxGeometry(0.05, 0.05, 0.034), catchMat);
+    post.position.set(PAGE_W + SQUARE * 0.4, PAGE_H * sy, -COVER_T * 0.5);
+    post.castShadow = true;
+    book.add(post);
+  }
+
   const claspGroups: Group[] = [];
   const straps: Mesh[] = [];
   const strapBends: IUniform<number>[] = [];
-  const plateW = 0.14;
+  const plateW = 0.2;
+  const plateT = 0.014;
   for (const sy of [0.27, -0.27]) {
     const g = new Group();
     g.position.set(PAGE_W + SQUARE, PAGE_H * sy, COVER_T);
     coverHinge.add(g);
     claspGroups.push(g);
 
-    const plate = new Mesh(
-      new PlaneGeometry(plateW, plateW * (386 / 420)),
-      new MeshStandardMaterial({
-        map: T.plate,
-        normalMap: T.nPlate,
-        normalScale: new Vector2(1.2, 1.2),
-        roughness: 0.42,
-        metalness: 0.65,
-        transparent: true,
-        alphaTest: 0.5,
-      }),
-    );
-    plate.position.set(-plateW * 0.45, 0, 0.006);
+    // Бляшка — тонкое ТЕЛО, а не плоскость: у плоскости нет толщины, и с торца
+    // замок исчезал в линию. Литая латунь: грани из того же материала, лицо с
+    // картой нормалей.
+    const brass = new MeshStandardMaterial({
+      map: T.plate,
+      normalMap: T.nPlate,
+      normalScale: new Vector2(1.2, 1.2),
+      roughness: 0.42,
+      metalness: 0.65,
+      transparent: true,
+      alphaTest: 0.5,
+    });
+    const brassEdge = new MeshStandardMaterial({ color: 0x8a7748, roughness: 0.38, metalness: 0.8 });
+    const plate = new Mesh(new BoxGeometry(plateW, plateW * (386 / 420), plateT), [
+      brassEdge,
+      brassEdge,
+      brassEdge,
+      brassEdge,
+      brass,
+      brassEdge,
+    ]);
+    plate.position.set(-plateW * 0.42, 0, plateT / 2);
     plate.castShadow = true;
     g.add(plate);
 
-    const strapW = 0.3;
+    const strapW = 0.42;
     const sgeo = new PlaneGeometry(strapW, strapW * (106 / 620), 18, 1);
     sgeo.translate(strapW / 2, 0, 0);
     const { material, bend } = bendableMaterial(T.strap, strapW, true);
@@ -491,16 +529,22 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // Замки отходят первыми, крышка ждёт их.
     const cl = ease(phase(t, 0, CLASP_END));
     for (let i = 0; i < claspGroups.length; i++) {
-      claspGroups[i].rotation.y = -1.35 * cl;
+      // Ремешок сначала распрямляется и только потом отходит: сперва он должен
+      // отцепиться от штыря, а уже затем подниматься.
+      claspGroups[i].rotation.y = -1.5 * ease(phase(t, CLASP_END * 0.45, CLASP_END));
       claspGroups[i].visible = cl < 0.995;
-      strapBends[i].value = 2.4 * (1 - cl);
+      strapBends[i].value = 2.75 * (1 - ease(phase(t, 0, CLASP_END * 0.6)));
     }
 
     coverHinge.rotation.y = -ease(phase(t, CLASP_END, 0.86)) * Math.PI;
     coverHinge.position.z = (BLOCK_T + COVER_T) * (1 - ease(phase(t, 0.45, 1)));
 
     const total = Math.max(1, leftPages + rightPages);
-    const leafPhase = tw > 0 ? tw : ease(phase(t, 0.46, 1));
+    // Ход листа прогоняется через профиль падения: первая треть — подхват,
+    // середина — свободный пролёт, последняя треть — падение с ускорением и
+    // короткое затухающее колебание. Линейный ход читается механикой.
+    const rawLeaf = tw > 0 ? tw : ease(phase(t, 0.46, 1));
+    const leafPhase = leafFall(rawLeaf);
     const leftShare = (leftPages + leafPhase) / total;
     const rightT = 0.01 + BLOCK_T * 0.94 * (1 - leftShare);
     const leftT = 0.01 + BLOCK_T * 0.94 * leftShare;
@@ -577,8 +621,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       if (Math.abs(orb.vYaw) < 0.01) orb.vYaw = 0;
       if (Math.abs(orb.vPitch) < 0.01) orb.vPitch = 0;
     }
-    orb.yaw = Math.max(-1.15, Math.min(1.15, orb.yaw));
-    orb.pitch = Math.max(-0.42, Math.min(0.55, orb.pitch));
+    // Вращение почти по кругу и с заходом ПОД книгу: посмотреть низ тома было
+    // нельзя — предел не пускал камеру ниже уровня стола.
+    orb.yaw = Math.max(-2.6, Math.min(2.6, orb.yaw));
+    orb.pitch = Math.max(-1.0, Math.min(1.15, orb.pitch));
 
     state.open = cur.open;
     state.page = cur.page;
