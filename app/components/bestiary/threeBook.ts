@@ -668,11 +668,17 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   book.add(block);
 
   // ── левая половина блока: появляется, когда листы переходят налево.
+  // Левая стопка живёт в КРЫЛЕ, повёрнутом вместе с крышкой: листы лежат на
+  // форзаце под её текущим углом и едут с ней до самого стола. Пока стопка
+  // сидела в осях книги, она ложилась на пол ПОД ещё опускающейся крышкой и
+  // белым торчала из-за её краёв — листа за корочкой быть не может никогда.
+  const leftWing = new Group();
+  book.add(leftWing);
   const leftHalf = buildHalfBlock(1);
   const leftBlock = leftHalf.mesh;
   leftBlock.position.set(-PAGE_W / 2, 0, 0);
   leftBlock.visible = false;
-  book.add(leftBlock);
+  leftWing.add(leftBlock);
 
   // Верхние страницы обеих стопок — ГНУЩИЕСЯ, а не плоские: лист ныряет в жёлоб
   // тем же спадом DIP_K, каким выточен веер, и лежит на нём с просветом в лист
@@ -689,7 +695,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const leftPage = new Mesh(leftGeo, leftSheet.material);
   leftPage.receiveShadow = true;
   leftPage.visible = false;
-  book.add(leftPage);
+  leftWing.add(leftPage);
 
   // ── корешок: полуцилиндр между крышками. Лицевая сторона с тиснением смотрит
   // от зрителя, изнутри видна подкладка — как у настоящей раскрытой книги.
@@ -1153,6 +1159,11 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // на стол. Прежний спуск по времени начинался раньше вертикали — блок
     // протыкал наклонённую крышку у корешка насквозь.
     coverHinge.position.z = (rightT + PAPER_LIFT * 2) * (1 - ease(phase(rot, 0.5, 1)));
+    // Крыло левой стопки повёрнуто НА ПОЛОБОРОТА ОТ КРЫШКИ: при крышке в −π
+    // крыло в нуле — листы лежат в плоскости стола; на середине хода — под её
+    // углом, на форзаце. Плюс её высота: листы едут на крышке, а не ждут на полу.
+    leftWing.rotation.y = coverHinge.rotation.y + Math.PI;
+    leftWing.position.z = coverHinge.position.z + 0.0006;
 
     // Толщина и веер жёлоба живут в самой геометрии половин: пережим столбцов,
     // а не scale.z — масштаб плющил бы вместе с толщиной и профиль спада.
