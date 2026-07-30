@@ -15,6 +15,44 @@ import type { BookScene } from "./bestiary/threeBook";
 
 type Phase = "shut" | "opening" | "open" | "closing";
 
+const ASSETS = [
+  "/img/bestiary/cover-front.webp",
+  "/img/bestiary/endpaper.webp",
+  "/img/bestiary/page-left.webp",
+  "/img/bestiary/page-right.webp",
+  "/img/bestiary/spine.webp",
+  "/img/bestiary/strap.webp",
+  "/img/bestiary/plate.webp",
+] as const;
+
+function decode(src: string): Promise<HTMLImageElement> {
+  return new Promise((ok, no) => {
+    const im = new Image();
+    im.onload = () => (im.decode ? im.decode().then(() => ok(im), () => ok(im)) : ok(im));
+    im.onerror = no;
+    im.src = src;
+  });
+}
+
+type Warm = { images: HTMLImageElement[]; make: typeof import("./bestiary/threeBook").createBook };
+
+/**
+ * Прогрев. Чанк three (131 КБ) и семь текстур тянутся ОДИН раз на модуль и
+ * заранее — как только плитка подошла к экрану. Без этого по клику начиналась
+ * загрузка с нуля, и пользователь секунд пять смотрел в пустой холст: открытие
+ * книги обязано быть щелчком, другого варианта нет.
+ */
+let warming: Promise<Warm> | null = null;
+function warm(): Promise<Warm> {
+  if (!warming) {
+    warming = Promise.all([
+      Promise.all(ASSETS.map(decode)),
+      import("./bestiary/threeBook"),
+    ]).then(([images, mod]) => ({ images, make: mod.createBook }));
+  }
+  return warming;
+}
+
 export function Bestiary() {
   const { t } = useLang();
   const [phase, setPhase] = useState<Phase>("shut");
@@ -35,6 +73,28 @@ export function Bestiary() {
     },
     [],
   );
+
+  // Прогрев по приближению плитки к экрану: к моменту клика чанк и текстуры уже
+  // в памяти. Запас 600 px — пользователь ещё скроллит, а книга уже готова.
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) {
+      void warm();
+      return;
+    }
+    const io = new IntersectionObserver(
+      (ent) => {
+        if (ent.some((e) => e.isIntersecting)) {
+          void warm();
+          io.disconnect();
+        }
+      },
+      { rootMargin: "600px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const open = useCallback((): void => {
     if (phase !== "shut") return;
@@ -85,30 +145,12 @@ export function Bestiary() {
   useEffect(() => {
     if (phase === "shut") return;
     let dead = false;
-    const load = (src: string): Promise<HTMLImageElement> =>
-      new Promise((ok, no) => {
-        const im = new Image();
-        im.onload = () => (im.decode ? im.decode().then(() => ok(im), () => ok(im)) : ok(im));
-        im.onerror = no;
-        im.src = src;
-      });
-    Promise.all([
-      load("/img/bestiary/cover-front.webp"),
-      load("/img/bestiary/endpaper.webp"),
-      load("/img/bestiary/page-left.webp"),
-      load("/img/bestiary/page-right.webp"),
-      load("/img/bestiary/spine.webp"),
-      load("/img/bestiary/strap.webp"),
-      load("/img/bestiary/plate.webp"),
-    ])
-      .then(async ([coverFront, endpaper, pageLeft, pageRight, spine, strap, plate]) => {
-        // Динамический импорт: three уезжает в свой чанк и грузится только при
-        // открытии книги. Первый экран от библиотеки не потяжелел ни на байт —
-        // это было главное возражение против неё, и оно снято технически.
-        const { createBook } = await import("./bestiary/threeBook");
+    warm()
+      .then(({ images, make }) => {
         const cv = turnRef.current;
         if (dead || !cv) return;
-        sceneRef.current = createBook(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate });
+        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate] = images;
+        sceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate });
         sceneRef.current?.target(phase === "closing" ? 0 : 1, pageRef.current);
       })
       .catch(() => undefined);
