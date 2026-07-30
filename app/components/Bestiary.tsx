@@ -13,7 +13,8 @@ import { prefersReducedMotion } from "~/lib/media";
 import { LEAVES, OPEN_MS, SPREAD_RATIO } from "~/lib/bestiary";
 import type { BookScene } from "./bestiary/threeBook";
 
-type Phase = "shut" | "opening" | "open" | "closing";
+/** peek — книга в модалке, но ещё закрыта: её можно рассмотреть и покрутить. */
+type Phase = "shut" | "peek" | "opening" | "open" | "closing";
 
 const ASSETS = [
   "/img/bestiary/cover-front.webp",
@@ -101,10 +102,14 @@ export function Bestiary() {
 
   const open = useCallback((): void => {
     if (phase !== "shut") return;
-    const instant = prefersReducedMotion();
-    setPhase("opening");
-    after(instant ? 0 : OPEN_MS, () => setPhase("open"));
-  }, [phase, after]);
+    // Ведём в ОСМОТР, а не сразу в раскрытие: том сначала дают рассмотреть.
+    // При выключенных анимациях осматривать нечего — открываем сразу.
+    if (prefersReducedMotion()) {
+      setPhase("open");
+      return;
+    }
+    setPhase("peek");
+  }, [phase]);
 
   /** Ставим ЦЕЛЬ сцене — она доедет сама в своём цикле кадров. */
   const aim = useCallback((open: 0 | 1): void => {
@@ -133,7 +138,7 @@ export function Bestiary() {
 
 
   const close = useCallback((): void => {
-    if (phase !== "open" && phase !== "opening") return;
+    if (phase === "shut" || phase === "closing") return;
     const instant = prefersReducedMotion();
     setPhase("closing");
     aim(0);
@@ -154,7 +159,9 @@ export function Bestiary() {
         if (dead || !cv) return;
         const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate] = images;
         sceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate });
-        sceneRef.current?.target(phase === "closing" ? 0 : 1, pageRef.current);
+        // Раскрываем НЕ сразу: книга ждёт закрытой, её можно покрутить. Открывает
+        // следующий клик — иначе рассмотреть том не успеваешь.
+        sceneRef.current?.target(phase === "open" ? 1 : 0, pageRef.current);
       })
       .catch(() => undefined);
     const onResize = (): void => {
@@ -215,7 +222,7 @@ export function Bestiary() {
 
   // Фокус уводим в диалог, чтобы Escape и стрелки работали сразу, без клика.
   useEffect(() => {
-    if (phase === "opening") dialogRef.current?.focus();
+    if (phase === "peek" || phase === "opening") dialogRef.current?.focus();
   }, [phase]);
 
   // Фон не должен прокручиваться под открытой книгой.
@@ -227,6 +234,55 @@ export function Bestiary() {
       document.body.style.overflow = prev;
     };
   }, [phase]);
+
+  // Указатель: перетаскивание крутит книгу, клик без сдвига действует. Порог в
+  // шесть пикселей — палец на телефоне никогда не стоит идеально ровно, и без
+  // порога каждое касание считалось бы протяжкой.
+  const drag = useRef({ on: false, moved: 0, x: 0, y: 0, t: 0, vx: 0, vy: 0 });
+
+  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { on: true, moved: 0, x: e.clientX, y: e.clientY, t: performance.now(), vx: 0, vy: 0 };
+  }, []);
+
+  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+    const d = drag.current;
+    if (!d.on) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    const dt = Math.max(1, performance.now() - d.t);
+    d.moved += Math.abs(dx) + Math.abs(dy);
+    d.vx = (dx / dt) * 1000;
+    d.vy = (dy / dt) * 1000;
+    d.x = e.clientX;
+    d.y = e.clientY;
+    d.t = performance.now();
+    sceneRef.current?.orbit(dx, dy);
+  }, []);
+
+  const onUp = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>): void => {
+      const d = drag.current;
+      d.on = false;
+      if (d.moved > 6) {
+        sceneRef.current?.release(d.vx, d.vy);
+        return;
+      }
+      const sc = sceneRef.current;
+      if (!sc) return;
+      // Клик по закрытой книге раскрывает её, по раскрытой — листает половиной,
+      // в которую ткнули.
+      if (sc.state.open < 0.02) {
+        setPhase("opening");
+        sc.target(1, pageRef.current);
+        after(OPEN_MS, () => setPhase("open"));
+        return;
+      }
+      const r = e.currentTarget.getBoundingClientRect();
+      flip(e.clientX - r.left > r.width / 2 ? 1 : -1);
+    },
+    [after, flip],
+  );
 
   const live = phase !== "shut";
 
@@ -272,14 +328,15 @@ export function Bestiary() {
                 className="bbook"
                 role="img"
                 aria-label={t.hero.bestiarySpread}
-                onClick={(e) => {
-                  // Половина, по которой ткнули, и задаёт направление —
-                  // ровно как листают настоящую книгу.
-                  const r = e.currentTarget.getBoundingClientRect();
-                  flip(e.clientX - r.left > r.width / 2 ? 1 : -1);
+                onPointerDown={onDown}
+                onPointerMove={onMove}
+                onPointerUp={onUp}
+                onPointerCancel={() => {
+                  drag.current.on = false;
                 }}
               />
 
+              {phase === "peek" && <p className="bhint">{t.hero.bestiaryHint}</p>}
             </div>
 
             {/* Кнопки живут вне .bstage: внутри preserve-3d-сцены WebKit
