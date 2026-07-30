@@ -44,6 +44,7 @@ const RU = {
     bestiaryClose: "закрыть",
     bestiaryTurn: "перевернуть",
     bestiarySpread: "раскрытый разворот бестиария, страницы пока пусты",
+    bestiaryHint: "покрути · нажми, чтобы открыть",
   },
   marquee: ["сайты", "игры", "айдентика", "видео", "шеберлік", "匠心", "мастерство"],
   works: {
@@ -133,6 +134,7 @@ const KZ: Dict = {
     bestiaryClose: "жабу",
     bestiaryTurn: "бетті аудару",
     bestiarySpread: "ашылған бестиарий, беттері әзірге бос",
+    bestiaryHint: "бұрап көр · ашу үшін бас",
   },
   marquee: ["сайттар", "ойындар", "айдентика", "бейне", "шеберлік", "匠心", "өнер"],
   works: {
@@ -220,6 +222,7 @@ const EN: Dict = {
     bestiaryClose: "close",
     bestiaryTurn: "turn the page",
     bestiarySpread: "open bestiary spread, pages are still blank",
+    bestiaryHint: "drag to turn it · tap to open",
   },
   marquee: ["sites", "games", "identity", "video", "шеберлік", "匠心", "mastery"],
   works: {

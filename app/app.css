@@ -173,6 +173,18 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
 @supports not (height:100dvh){
   .bstage{width:min(100%,1180px,calc((100vh - 190px) * var(--spread-ratio)))}
 }
+/* На узком экране сцена ПОРТРЕТНАЯ. Пропорция разворота 1.6:1 превращала холст
+   на телефоне в полоску 390×244 посреди экрана — книга выходила мелочью
+   независимо от того, куда смотрит камера. Сама сцена по узкому холсту
+   переключается на другую постановку: целится в одну страницу, а не в разворот. */
+@media (max-aspect-ratio: 1/1){
+  .bstage{aspect-ratio:.76;width:min(100%,calc((100dvh - 130px) * .76))}
+}
+@supports not (height:100dvh){
+  @media (max-aspect-ratio: 1/1){
+    .bstage{width:min(100%,calc((100vh - 130px) * .76))}
+  }
+}
 .bface{position:absolute;inset:0;margin:auto;width:100%;height:100%;
   object-fit:contain;transform-style:preserve-3d;backface-visibility:hidden}
 
@@ -213,6 +225,13 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
    одной страницы. Событий не ловит — кнопки и фон под ним остаются кликабельны. */
 .bbook{position:absolute;inset:0;width:100%;height:100%;display:block}
 
+/* Подсказка про обращение с книгой: живёт только пока том закрыт. */
+.bhint{position:absolute;left:50%;bottom:-34px;transform:translateX(-50%);z-index:3;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--mut);white-space:nowrap;pointer-events:none;
+  animation:bhintIn .6s var(--ez) .35s both}
+@keyframes bhintIn{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
+@media(max-width:720px){.bhint{bottom:-28px;font-size:10.5px}}
 .bnext,.bclose{z-index:210;font-family:var(--mono);font-size:12px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--lt);
   background:rgba(13,13,11,.72);border:1px solid rgba(207,199,178,.22);

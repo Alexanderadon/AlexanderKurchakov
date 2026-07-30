@@ -22,8 +22,10 @@
 // возражение против библиотеки, и оно снято технически.
 
 import {
+  AgXToneMapping,
   AmbientLight,
   BoxGeometry,
+  EquirectangularReflectionMapping,
   Color,
   DirectionalLight,
   Group,
@@ -31,7 +33,9 @@ import {
   MeshStandardMaterial,
   PCFSoftShadowMap,
   PerspectiveCamera,
+  PMREMGenerator,
   PlaneGeometry,
+  BackSide,
   Scene,
   SRGBColorSpace,
   Texture,
@@ -62,6 +66,10 @@ export interface BookScene {
   target(open: number, page: number): void;
   /** Текущее положение — чтобы снаружи знать, можно ли листать дальше. */
   readonly state: { open: number; page: number; busy: boolean };
+  /** Крутить книгу перетаскиванием: сдвиг в пикселях за кадр движения. */
+  orbit(dx: number, dy: number): void;
+  /** Отпустили — дальше по инерции. */
+  release(vx: number, vy: number): void;
   resize(): void;
   dispose(): void;
 }
@@ -113,7 +121,7 @@ function makeTexture(src: TexImageSource): Texture {
  * правильный свет с тенями — свой шейдер пришлось бы освещать руками, чем я и
  * занимался, пока ловил знаки нормалей.
  */
-function bendableMaterial(map: Texture, cut = false): {
+function bendableMaterial(map: Texture, width: number, cut = false): {
   material: MeshStandardMaterial;
   bend: IUniform<number>;
 } {
@@ -128,11 +136,15 @@ function bendableMaterial(map: Texture, cut = false): {
   // Правим ровно две вставки — нормаль и позицию, — и не трогаем project_vertex
   // и прочие внутренности: их порядок и содержимое меняются между версиями
   // three, а begin_vertex/beginnormal_vertex — публичная точка расширения.
+  // Ширина ПЕРЕДАЁТСЯ, а не берётся от страницы. Раньше стояло PAGE_W/2 и
+  // s = position.x + bw, но геометрия и листа, и ремешка сдвинута так, что x
+  // начинается с НУЛЯ у петли: оба гнулись, будто петля на полметра позади, а
+  // ремешок вдобавок брал радиус чужой ширины и отлетал от бляшки.
   const bendCode = (target: string) => `
     if (uBend > 0.001) {
-      float bw = ${(PAGE_W / 2).toFixed(4)};
-      float s = position.x + bw;            // расстояние от петли
-      float R = (bw * 2.0) / uBend;
+      float wid = ${width.toFixed(4)};
+      float s = position.x;                 // расстояние от петли
+      float R = wid / uBend;
       float a = s / R;
       ${target}
     }`;
@@ -148,7 +160,7 @@ function bendableMaterial(map: Texture, cut = false): {
       .replace(
         "#include <begin_vertex>",
         "#include <begin_vertex>" +
-          bendCode("transformed.x = R * sin(a) - bw;\n      transformed.z += R * (1.0 - cos(a));"),
+          bendCode("transformed.x = R * sin(a);\n      transformed.z += R * (1.0 - cos(a));"),
       );
   };
   return { material, bend };
@@ -163,15 +175,51 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     return null;
   }
   renderer.setClearColor(new Color(0x000000), 0);
+  // AgX держит золото в светах, не выбеливая его: у ACESFilmic тиснение уходило
+  // в жёлтую кашу на ярких участках.
+  renderer.toneMapping = AgXToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
   const scene = new Scene();
+
+  // ── Окружение, построенное кодом: тёплое окно слева-сверху, холодное небо,
+  // тёмный низ. Ноль байт трафика, а материалы получают то, чего два источника
+  // дать не могут — отражения комнаты. Именно от них металл читается металлом, а
+  // кожа перестаёт быть плоской краской.
+  const envCv = document.createElement("canvas");
+  envCv.width = 256;
+  envCv.height = 128;
+  const eg = envCv.getContext("2d");
+  if (eg) {
+    const sky = eg.createLinearGradient(0, 0, 0, 128);
+    sky.addColorStop(0, "#2b2a26");
+    sky.addColorStop(0.45, "#171613");
+    sky.addColorStop(1, "#080807");
+    eg.fillStyle = sky;
+    eg.fillRect(0, 0, 256, 128);
+    // Окно: единственное яркое пятно. Оно и даёт блик на золоте.
+    const win = eg.createRadialGradient(58, 30, 4, 58, 30, 62);
+    win.addColorStop(0, "#fff0d2");
+    win.addColorStop(0.4, "#8d7c58");
+    win.addColorStop(1, "rgba(0,0,0,0)");
+    eg.fillStyle = win;
+    eg.fillRect(0, 0, 256, 128);
+  }
+  const envTex = new Texture(envCv);
+  envTex.mapping = EquirectangularReflectionMapping;
+  envTex.needsUpdate = true;
+  const pmrem = new PMREMGenerator(renderer);
+  const envRT = pmrem.fromEquirectangular(envTex);
+  scene.environment = envRT.texture;
+  envTex.dispose();
+  pmrem.dispose();
   const camera = new PerspectiveCamera(34, 1, 0.5, 40);
 
   // ── свет. Один направленный плюс заполняющий: тени должны читаться, но не
   // проваливать корешок в черноту.
-  const sun = new DirectionalLight(0xfff4e0, 2.1);
+  const sun = new DirectionalLight(0xfff4e0, 1.55);
   sun.position.set(-1.1, 1.7, 2.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
@@ -187,8 +235,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   sc.near = 0.2;
   sc.far = 8;
   scene.add(sun);
-  scene.add(new AmbientLight(0xb9b4a6, 0.62));
+  scene.add(new AmbientLight(0xb9b4a6, 0.22));
 
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const T = {
     cover: makeTexture(tex.coverFront),
     end: makeTexture(tex.endpaper),
@@ -201,6 +250,11 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     nPage: makeNormal(tex.nPage),
     nPlate: makeNormal(tex.nPlate),
   };
+
+  for (const key of ['cover', 'end', 'spine', 'plate'] as const) {
+    T[key].anisotropy = aniso;
+    T[key].needsUpdate = true;
+  }
 
   const paper = (map: Texture): MeshStandardMaterial =>
     new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
@@ -273,9 +327,20 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     spinePos.setZ(i, spineR * (1 - Math.cos(a)));
   }
   spineGeo.computeVertexNormals();
-  const spine = new Mesh(spineGeo, new MeshStandardMaterial({ color: 0x1a1815, roughness: 0.86, metalness: 0.03 }));
+  const spine = new Mesh(
+    spineGeo,
+    new MeshStandardMaterial({ color: 0x1a1815, roughness: 0.86, metalness: 0.03 }),
+  );
+  // Лицевая сторона корешка с тиснением: смотрит ОТ зрителя, поэтому у раскрытой
+  // книги её не видно, а у закрытой она читается с торца. Раньше эта текстура
+  // грузилась и создавала GPU-объект, но не была отдана ни одному материалу.
+  const spineFace = new Mesh(
+    spineGeo.clone(),
+    new MeshStandardMaterial({ map: T.spine, roughness: 0.8, metalness: 0.05, side: BackSide }),
+  );
   spine.receiveShadow = true;
   book.add(spine);
+  book.add(spineFace);
 
   // ── передняя крышка на петле у корешка. Замки — ЕЁ ДЕТИ: поворачивается
   // крышка, они едут с ней сами, без перемножения матриц руками.
@@ -328,7 +393,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const strapW = 0.3;
     const sgeo = new PlaneGeometry(strapW, strapW * (106 / 620), 18, 1);
     sgeo.translate(strapW / 2, 0, 0);
-    const { material, bend } = bendableMaterial(T.strap, true);
+    const { material, bend } = bendableMaterial(T.strap, strapW, true);
     const strap = new Mesh(sgeo, material);
     strap.castShadow = true;
     g.add(strap);
@@ -341,14 +406,28 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   book.add(leafHinge);
   const leafGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
   leafGeo.translate(PAGE_W / 2, 0, 0);
-  const leafFront = bendableMaterial(T.right);
+  const leafFront = bendableMaterial(T.right, PAGE_W);
   const leaf = new Mesh(leafGeo, leafFront.material);
   leaf.castShadow = true;
   leaf.receiveShadow = true;
   leafHinge.add(leaf);
+  // Оборот листа: своя текстура и BackSide. Без него лист за -90° показывал
+  // пустоту и вдобавок дублировал страницу, лежащую под ним.
+  const leafBackMat = bendableMaterial(T.left, PAGE_W);
+  leafBackMat.material.side = BackSide;
+  const leafBack = new Mesh(leafGeo.clone(), leafBackMat.material);
+  leafBack.castShadow = true;
+  leafHinge.add(leafBack);
 
   let w = 2;
   let h = 2;
+  /**
+   * Узкий кадр требует другой постановки. Разворот имеет пропорцию около 1.6:1;
+   * на телефоне в портрете он влезает такой мелочью, что читать нечего. Поэтому
+   * при узком холсте камера идёт не к развороту, а к ОДНОЙ странице — той, с
+   * которой листают, — и держит её во весь кадр.
+   */
+  let narrow = false;
 
   function resize(): void {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -356,6 +435,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     h = Math.max(2, canvas.clientHeight);
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
+    narrow = w / h < 1.15;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
@@ -386,10 +466,21 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // концах, поэтому посадка не рвёт кадр.
     const overshoot = Math.sin(land * Math.PI) * 1.4;
 
-    const pitch = ((20 - 2 * anticip - 9 * swing + overshoot) * Math.PI) / 180;
-    const yaw = ((-16 + 2 * anticip + 14 * swing) * Math.PI) / 180;
-    const dist = 3.62 - 0.16 * anticip - 0.34 * swing + overshoot * 0.02;
-    const lookX = (PAGE_W / 2) * (1 - swing);
+    // Вращение мышью НЕ подменяет постановку, а складывается с ней: срежиссированный
+    // ход остаётся, зритель только смотрит с другой стороны. Влияние слабеет по мере
+    // раскрытия — у разворота своя правильная точка, крутить его незачем.
+    const orbW = 1 - swing * 0.72;
+    const basePitch = narrow ? 16 - 2 * anticip - 8 * swing : 20 - 2 * anticip - 9 * swing;
+    const pitch = ((basePitch + overshoot) * Math.PI) / 180 + orb.pitch * orbW;
+    const baseYaw = narrow ? -9 + 1 * anticip + 8 * swing : -16 + 2 * anticip + 14 * swing;
+    const yaw = (baseYaw * Math.PI) / 180 + orb.yaw * orbW;
+    // В узком кадре подходим заметно ближе и целимся в одну страницу.
+    const dist = narrow
+      ? 2.62 + 0.22 * swing + overshoot * 0.02
+      : 2.78 + 0.34 * swing - 0.06 * anticip + overshoot * 0.02;
+    // Широкий кадр к концу хода смотрит в корешок (виден весь разворот), узкий —
+    // остаётся на правой странице.
+    const lookX = narrow ? PAGE_W * 0.5 : (PAGE_W / 2) * (1 - swing);
     camera.position.set(
       lookX + dist * Math.sin(yaw) * Math.cos(pitch),
       dist * Math.sin(pitch),
@@ -425,10 +516,15 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.0015);
 
     spine.position.set(0, 0, Math.max(0.004, Math.max(rightT, leftT) - spineR));
+    spineFace.position.copy(spine.position);
+    spineFace.position.z -= 0.006;
 
     leafHinge.rotation.y = -leafPhase * Math.PI;
     leafHinge.position.set(0, 0, Math.max(rightT, leftT) + 0.006);
-    leafFront.bend.value = Math.sin(clamp01(leafPhase) * Math.PI) * 1.6;
+    const leafBend = Math.sin(clamp01(leafPhase) * Math.PI) * 1.6;
+    leafFront.bend.value = leafBend;
+    leafBackMat.bend.value = leafBend;
+    leafBack.visible = leaf.visible;
     leaf.visible = leafPhase > 0.002 && leafPhase < 0.996;
 
     renderer.render(scene, camera);
@@ -439,6 +535,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // ── Цикл кадров. Живёт всё время, пока сцена жива, и гонит текущие значения к
   // целевым. Скорость задана в единицах в секунду, а не «за кадр»: на 144 Гц и
   // на 60 Гц движение одинаковое.
+  // Вращение мышью. Держится, а не отскакивает: смысл в том, чтобы дать
+  // рассмотреть том — пружина обратно мешала бы именно этому.
+  const orb = { yaw: 0, pitch: 0, vYaw: 0, vPitch: 0 };
   const cur = { open: 0, page: 0 };
   const tgt = { open: 0, page: 0 };
   const state = { open: 0, page: 0, busy: false };
@@ -468,6 +567,19 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       cur.page = tgt.page;
     }
 
+    // Инерция вращения: скорость гаснет за ~0.4 с, углы упираются в пределы.
+    if (orb.vYaw || orb.vPitch) {
+      orb.yaw += orb.vYaw * dt;
+      orb.pitch += orb.vPitch * dt;
+      const damp = Math.pow(0.02, dt);
+      orb.vYaw *= damp;
+      orb.vPitch *= damp;
+      if (Math.abs(orb.vYaw) < 0.01) orb.vYaw = 0;
+      if (Math.abs(orb.vPitch) < 0.01) orb.vPitch = 0;
+    }
+    orb.yaw = Math.max(-1.15, Math.min(1.15, orb.yaw));
+    orb.pitch = Math.max(-0.42, Math.min(0.55, orb.pitch));
+
     state.open = cur.open;
     state.page = cur.page;
     state.busy = Math.abs(dOpen) > 1e-3 || Math.abs(dPage) > 1e-3;
@@ -487,6 +599,16 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       tgt.page = Math.max(0, Math.min(LEAVES, page));
     },
     state,
+    orbit(dx: number, dy: number): void {
+      orb.yaw -= dx * 0.006;
+      orb.pitch -= dy * 0.005;
+      orb.vYaw = 0;
+      orb.vPitch = 0;
+    },
+    release(vx: number, vy: number): void {
+      orb.vYaw = -vx * 0.006;
+      orb.vPitch = -vy * 0.005;
+    },
     resize,
     dispose(): void {
       cancelAnimationFrame(raf);
@@ -499,6 +621,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
           else m.dispose();
         }
       });
+      envRT.dispose();
       renderer.dispose();
     },
   };
