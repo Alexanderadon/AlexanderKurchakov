@@ -23,6 +23,9 @@ const ASSETS = [
   "/img/bestiary/spine.webp",
   "/img/bestiary/strap.webp",
   "/img/bestiary/plate.webp",
+  "/img/bestiary/normal-cover.webp",
+  "/img/bestiary/normal-page.webp",
+  "/img/bestiary/normal-plate.webp",
 ] as const;
 
 function decode(src: string): Promise<HTMLImageElement> {
@@ -149,8 +152,8 @@ export function Bestiary() {
       .then(({ images, make }) => {
         const cv = turnRef.current;
         if (dead || !cv) return;
-        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate] = images;
-        sceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate });
+        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate] = images;
+        sceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate });
         sceneRef.current?.target(phase === "closing" ? 0 : 1, pageRef.current);
       })
       .catch(() => undefined);

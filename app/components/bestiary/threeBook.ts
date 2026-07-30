@@ -35,6 +35,7 @@ import {
   Scene,
   SRGBColorSpace,
   Texture,
+  Vector2,
   WebGLRenderer,
   type IUniform,
 } from "three";
@@ -47,6 +48,9 @@ export interface BookTextures {
   spine: TexImageSource;
   strap: TexImageSource;
   plate: TexImageSource;
+  nCover: TexImageSource;
+  nPage: TexImageSource;
+  nPlate: TexImageSource;
 }
 
 export interface BookScene {
@@ -83,6 +87,18 @@ const ease = (x: number): number => {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 };
 const phase = (t: number, a: number, b: number): number => clamp01((t - a) / (b - a));
+
+/**
+ * Карта нормалей. Отличается от цветной текстуры одним, но принципиальным: её
+ * НЕЛЬЗЯ объявлять sRGB. В ней не цвет, а три числа на пиксель — наклон
+ * поверхности по осям. Гамма-преобразование исказило бы наклоны, и рельеф
+ * поехал бы не туда.
+ */
+function makeNormal(src: TexImageSource): Texture {
+  const t = new Texture(src as TexImageSource);
+  t.needsUpdate = true;
+  return t;
+}
 
 function makeTexture(src: TexImageSource): Texture {
   const t = new Texture(src as TexImageSource);
@@ -181,13 +197,24 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     spine: makeTexture(tex.spine),
     strap: makeTexture(tex.strap),
     plate: makeTexture(tex.plate),
+    nCover: makeNormal(tex.nCover),
+    nPage: makeNormal(tex.nPage),
+    nPlate: makeNormal(tex.nPlate),
   };
 
   const paper = (map: Texture): MeshStandardMaterial =>
     new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
   /** Лист с рваным краем: зубцы должны быть ВЫРЕЗАНЫ, а не залиты фоном. */
-  const sheet = (map: Texture): MeshStandardMaterial =>
-    new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0, transparent: true, alphaTest: 0.5 });
+  const sheet = (map: Texture, normalMap?: Texture): MeshStandardMaterial =>
+    new MeshStandardMaterial({
+      map,
+      normalMap,
+      normalScale: normalMap ? new Vector2(0.7, 0.7) : undefined,
+      roughness: 0.95,
+      metalness: 0,
+      transparent: true,
+      alphaTest: 0.5,
+    });
   const leather = new MeshStandardMaterial({ color: 0x14130f, roughness: 0.78, metalness: 0.05 });
   const blockSide = new MeshStandardMaterial({ color: 0x6b6659, roughness: 1, metalness: 0 });
 
@@ -225,10 +252,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   // Верхние страницы обеих стопок — плоскости поверх коробок.
   const pageGeo = new PlaneGeometry(PAGE_W, PAGE_H);
-  const rightPage = new Mesh(pageGeo, sheet(T.right));
+  const rightPage = new Mesh(pageGeo, sheet(T.right, T.nPage));
   rightPage.receiveShadow = true;
   book.add(rightPage);
-  const leftPage = new Mesh(pageGeo, sheet(T.left));
+  const leftPage = new Mesh(pageGeo, sheet(T.left, T.nPage));
   leftPage.receiveShadow = true;
   leftPage.visible = false;
   book.add(leftPage);
@@ -259,7 +286,13 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leather,
     leather,
     leather,
-    paper(T.cover),
+    new MeshStandardMaterial({
+      map: T.cover,
+      normalMap: T.nCover,
+      normalScale: new Vector2(1.35, 1.35),
+      roughness: 0.62,
+      metalness: 0.22,
+    }),
     paper(T.end),
   ]);
   frontCover.position.set(coverW / 2 - SQUARE / 2, 0, COVER_T / 2);
@@ -276,7 +309,18 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     coverHinge.add(g);
     claspGroups.push(g);
 
-    const plate = new Mesh(new PlaneGeometry(plateW, plateW * (386 / 420)), sheet(T.plate));
+    const plate = new Mesh(
+      new PlaneGeometry(plateW, plateW * (386 / 420)),
+      new MeshStandardMaterial({
+        map: T.plate,
+        normalMap: T.nPlate,
+        normalScale: new Vector2(1.2, 1.2),
+        roughness: 0.42,
+        metalness: 0.65,
+        transparent: true,
+        alphaTest: 0.5,
+      }),
+    );
     plate.position.set(-plateW * 0.45, 0, 0.006);
     plate.castShadow = true;
     g.add(plate);
