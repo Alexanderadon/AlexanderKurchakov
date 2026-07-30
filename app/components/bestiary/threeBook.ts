@@ -33,12 +33,14 @@ import {
   Group,
   LinearFilter,
   Mesh,
+  MeshDepthMaterial,
   MeshStandardMaterial,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
   PlaneGeometry,
   RepeatWrapping,
+  RGBADepthPacking,
   BackSide,
   Scene,
   SRGBColorSpace,
@@ -167,6 +169,8 @@ function bendableMaterial(
 ): {
   material: MeshStandardMaterial;
   bend: IUniform<number>;
+  /** Тот же изгиб для карты теней — иначе тень рисуется от плоского листа. */
+  depth: MeshDepthMaterial;
 } {
   const bend: IUniform<number> = { value: 0 };
   const material = new MeshStandardMaterial({
@@ -217,7 +221,29 @@ function bendableMaterial(
           bendCode("transformed.x = R * sin(a);\n      transformed.z += dir * R * (1.0 - cos(a));"),
       );
   };
-  return { material, bend };
+  // ── Тень.
+  //
+  // Карта глубины рисуется ОТДЕЛЬНЫМ материалом, который про наш изгиб ничего не
+  // знает. Поэтому поднятый лист отбрасывал тень плоского прямоугольника — она
+  // уходила мимо почти на ширину страницы и ложилась на соседнюю. Собираем такой
+  // же изгиб для глубинного материала и вешаем его на меш через customDepthMaterial.
+  const depth = new MeshDepthMaterial({
+    depthPacking: RGBADepthPacking,
+    map,
+    alphaTest: cut ? 0.5 : 0,
+  });
+  depth.onBeforeCompile = (shader) => {
+    shader.uniforms.uBend = bend;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uBend;")
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>" +
+          bendCode("transformed.x = R * sin(a);\n      transformed.z += dir * R * (1.0 - cos(a));"),
+      );
+  };
+
+  return { material, bend, depth };
 }
 
 export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
@@ -639,7 +665,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // Сегменты нужны шейдеру изгиба, он гнёт по X.
     const sgeo = new BoxGeometry(strapW, strapW * (106 / 620), 0.008, 18, 1, 1);
     sgeo.translate(strapW / 2, 0, 0);
-    const { material, bend } = bendableMaterial(T.strap, strapW, true, -1);
+    const { material, bend, depth: depthOfStrap } = bendableMaterial(T.strap, strapW, true, -1);
     // Рельеф кожи на ремешке: до этого он был единственной поверхностью совсем
     // без карты нормалей — плоская краска рядом с рельефной крышкой.
     material.normalMap = T.nStrap;
@@ -662,6 +688,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       material,
       material,
     ]);
+    strap.customDepthMaterial = depthOfStrap;
     strap.castShadow = true;
     g.add(strap);
     straps.push(strap);
@@ -678,6 +705,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const leaf = new Mesh(leafGeo, leafFront.material);
   leaf.castShadow = true;
   leaf.receiveShadow = true;
+  leaf.customDepthMaterial = leafFront.depth;
   leafHinge.add(leaf);
   // Оборот листа: своя текстура и BackSide. Без него лист за -90° показывал
   // пустоту и вдобавок дублировал страницу, лежащую под ним.
@@ -685,6 +713,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   leafBackMat.material.side = BackSide;
   const leafBack = new Mesh(leafGeo.clone(), leafBackMat.material);
   leafBack.castShadow = true;
+  leafBack.customDepthMaterial = leafBackMat.depth;
   leafHinge.add(leafBack);
 
   let w = 2;
