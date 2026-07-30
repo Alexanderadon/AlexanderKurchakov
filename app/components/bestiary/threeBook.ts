@@ -265,12 +265,12 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const spineGeo = new PlaneGeometry(BLOCK_T + COVER_T * 2, coverH, 24, 1);
   const spinePos = spineGeo.attributes.position;
   const sw = BLOCK_T + COVER_T * 2;
-  const R = sw / Math.PI;
+  const spineR = sw / Math.PI;
   for (let i = 0; i < spinePos.count; i++) {
     const u = spinePos.getX(i) / sw + 0.5; // 0..1 по ширине
     const a = (u - 0.5) * Math.PI;
-    spinePos.setX(i, R * Math.sin(a));
-    spinePos.setZ(i, R * (1 - Math.cos(a)));
+    spinePos.setX(i, spineR * Math.sin(a));
+    spinePos.setZ(i, spineR * (1 - Math.cos(a)));
   }
   spineGeo.computeVertexNormals();
   const spine = new Mesh(spineGeo, new MeshStandardMaterial({ color: 0x1a1815, roughness: 0.86, metalness: 0.03 }));
@@ -367,10 +367,29 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
     // Камера: закрытая книга читается объёмной, раскрытая лежит перед зрителем,
     // но наклон не сводится в ноль — в лоб объём исчезает целиком.
-    const pitch = ((32 - 23 * settle) * Math.PI) / 180;
-    const yaw = ((-14 + 10 * settle) * Math.PI) / 180;
-    const dist = 3.5 - 0.25 * settle;
-    const lookX = (PAGE_W / 2) * (1 - settle);
+    // ── Постановка камеры в три такта, а не одним переходом.
+    //
+    // Один линейный переход давал «полубоком»: камера всё время висела под
+    // случайным промежуточным углом и ни в один момент не стояла правильно.
+    // Такты разнесены во времени и каждый отвечает за свою мысль.
+    //
+    //  A. Пока отходят замки — камера НЕ двигается почти совсем, только медленно
+    //     подъезжает. Это ожидание: книга ещё закрыта, зритель считает секунды.
+    //  B. Крышка идёт — камера поднимается и разворачивается фронтально, следуя
+    //     за раскрытием. Здесь всё движение.
+    //  C. Посадка — короткий перелёт с недоездом и возвратом: том встаёт на место
+    //     не мгновенно, у него есть вес.
+    const anticip = ease(phase(t, 0, CLASP_END));
+    const swing = ease(phase(t, CLASP_END, 0.86));
+    const land = phase(t, 0.86, 1);
+    // Недоезд: камера чуть проскакивает и возвращается. Синус даёт ноль на обоих
+    // концах, поэтому посадка не рвёт кадр.
+    const overshoot = Math.sin(land * Math.PI) * 1.4;
+
+    const pitch = ((20 - 2 * anticip - 9 * swing + overshoot) * Math.PI) / 180;
+    const yaw = ((-16 + 2 * anticip + 14 * swing) * Math.PI) / 180;
+    const dist = 3.62 - 0.16 * anticip - 0.34 * swing + overshoot * 0.02;
+    const lookX = (PAGE_W / 2) * (1 - swing);
     camera.position.set(
       lookX + dist * Math.sin(yaw) * Math.cos(pitch),
       dist * Math.sin(pitch),
@@ -405,7 +424,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leftPage.visible = leftBlock.visible;
     leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.0015);
 
-    spine.position.set(0, 0, Math.max(0.004, rightT - 0.02));
+    spine.position.set(0, 0, Math.max(0.004, Math.max(rightT, leftT) - spineR));
 
     leafHinge.rotation.y = -leafPhase * Math.PI;
     leafHinge.position.set(0, 0, Math.max(rightT, leftT) + 0.006);
