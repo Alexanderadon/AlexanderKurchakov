@@ -22,6 +22,7 @@
 // возражение против библиотеки, и оно снято технически.
 
 import { deriveMaps } from "./derive";
+import { pageMaterial } from "./pageDip";
 import {
   AgXToneMapping,
   AmbientLight,
@@ -470,11 +471,17 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // зеркалить левую страницу поворотом на 180° показывала её ИЗНАНКУ, и текстура
   // пропадала. Правильное решение — своя геометрия с петлёй у корешка для каждой
   // стороны, а не поворот одной и той же.
-  const pageGeo = new PlaneGeometry(PAGE_W, PAGE_H, 40, 1);
-  const rightPage = new Mesh(pageGeo, sheet(T.right, T.nPage));
+  // Геометрия ЦЕНТРИРОВАННАЯ. Сдвиг геометрии к петле ломал левую страницу — она
+  // переставала рисоваться вовсе, хотя оставалась видимой и на правильной высоте.
+  // Расстояние от петли считает шейдер.
+  const rightGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
+  const leftGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
+  const rightSheet = pageMaterial(T.right, T.nPage, 1);
+  const leftSheet = pageMaterial(T.left, T.nPage, -1);
+  const rightPage = new Mesh(rightGeo, rightSheet.material);
   rightPage.receiveShadow = true;
   book.add(rightPage);
-  const leftPage = new Mesh(pageGeo, sheet(T.left, T.nPage));
+  const leftPage = new Mesh(leftGeo, leftSheet.material);
   leftPage.receiveShadow = true;
   leftPage.visible = false;
   book.add(leftPage);
@@ -747,14 +754,17 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
     block.scale.z = Math.max(0.02, rightT / BLOCK_T);
     block.position.set(PAGE_W / 2, 0, rightT / 2);
-    rightPage.position.set(PAGE_W / 2, 0, rightT + 0.0015);
+    rightPage.position.set(PAGE_W / 2, 0, rightT + 0.006);
 
     leftBlock.visible = coverHinge.rotation.y < -Math.PI / 2;
     leftBlock.scale.z = Math.max(0.02, leftT / 0.01);
     leftBlock.position.set(-PAGE_W / 2, 0, leftT / 2);
     leftPage.visible = leftBlock.visible;
-    leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.0015);
+    leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.006);
 
+    const dipAmt = ease(phase(t, 0.55, 0.95));
+    rightSheet.dip.value = rightT * 0.42 * dipAmt;
+    leftSheet.dip.value = leftT * 0.42 * dipAmt;
     const rimHi = Math.max(rightT, leftT);
     const rim = rimHi + (Math.min(rightT, leftT) - rimHi) * ease(phase(t, 0.45, 0.9));
     spine.position.set(0, 0, rim - spineR);
