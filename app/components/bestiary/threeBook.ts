@@ -22,11 +22,12 @@
 // возражение против библиотеки, и оно снято технически.
 
 import { deriveMaps } from "./derive";
-import { pageMaterial } from "./pageDip";
+import { pageMaterial, DIP_K } from "./pageDip";
 import {
   AgXToneMapping,
   AmbientLight,
   BoxGeometry,
+  ClampToEdgeWrapping,
   EquirectangularReflectionMapping,
   Color,
   DirectionalLight,
@@ -102,6 +103,17 @@ const PAGE_W = 1;
 const PAGE_H = PAGE_W * 1.4459;
 const BLOCK_T = 0.29;
 const COVER_T = 0.022;
+/** Толщина одного листа: даже пустая стопка не схлопывается в плоскость. */
+const SHEET_T = 0.004;
+/** Просвет между верхней страницей и веером стопки — толщина листа бумаги. */
+const PAPER_LIFT = 0.0015;
+/**
+ * Ремешок замка: длина прямого участка от корня до угла крышки и радиус самого
+ * угла. Дальше ремень идёт прямо вниз вдоль обреза — см. режим wrap в
+ * bendableMaterial.
+ */
+const STRAP_FLAT = 0.131;
+const STRAP_R = 0.03;
 /** «Квадрат» — выступ крышки за обрез блока, у переплётчиков миллиметра три. */
 const SQUARE = 0.028;
 /** Такт раскрытия и такт листания, секунды. Книга тяжёлая: спешка её убивает. */
@@ -201,13 +213,33 @@ function bendableMaterial(
    * закручивались наружу, в пустоту, и висели в воздухе отдельными скобами.
    */
   dir: 1 | -1 = 1,
+  /**
+   * Режим РЕМЕШКА: прямо до угла крышки → дуга радиуса STRAP_R на углу → прямо
+   * вниз вдоль обреза; uBend — доля зажима 0..1. Бумажная «дуга от корня» ремню
+   * не годится: на 192° закрутки формула s·sin(a)/a складывает кончик назад за
+   * корень, и хвост ремешка уходил ВНУТРЬ блока — с торца книги ремни просто
+   * исчезали.
+   */
+  wrap = false,
 ): {
   material: MeshStandardMaterial;
   bend: IUniform<number>;
+  /**
+   * Подъём от пола жёлоба к стопке — тот же профиль, что у лежащих страниц
+   * (pageDip). Лист обязан ВЫХОДИТЬ из ложбины и ложиться в такую же: пока он
+   * был плоским, а страницы под ним с прогибом, он на входе и выходе нырял под
+   * них.
+   */
+  dip: IUniform<number>;
   /** Тот же изгиб для карты теней — иначе тень рисуется от плоского листа. */
   depth: MeshDepthMaterial;
 } {
   const bend: IUniform<number> = { value: 0 };
+  const dip: IUniform<number> = { value: 0 };
+  // Крутизна та же, что у лежащей страницы и веера блока (DIP_K): при разной
+  // лист и страница под ним расходятся формой, и в жёлобе открывается щель.
+  const dipCode = `
+    transformed.z += uDip * (1.0 - exp(-position.x * ${DIP_K.toFixed(1)}));`;
   const material = new MeshStandardMaterial({
     map,
     roughness: 0.92,
@@ -231,8 +263,17 @@ function bendableMaterial(
   // Угол растёт по степени: a = uBend·(s/wid)^1.7. Радиус берётся как Reff = s/a,
   // поэтому длина дуги остаётся равной s — бумага не растягивается, и это
   // отличает настоящий изгиб от простого поворота.
-  const bendCode = (target: string) => `
-    if (uBend > 0.001) {
+  // Переменные изгиба. У бумаги — прогрессивная дуга с веером, у ремешка —
+  // кусочный обход угла крышки.
+  const bendVars = wrap
+    ? `
+      float s = position.x;
+      float q = 1.5708 * clamp(uBend, 0.0, 1.0);
+      float rem = max(s - ${STRAP_FLAT.toFixed(4)}, 0.0);
+      float a = min(rem / ${STRAP_R.toFixed(4)}, q);
+      float rem2 = max(rem - a * ${STRAP_R.toFixed(4)}, 0.0);
+      float dir = ${dir.toFixed(1)};`
+    : `
       float wid = ${width.toFixed(4)};
       float s = position.x;                 // расстояние от петли
       float u = clamp(s / wid, 0.0, 1.0);
@@ -243,14 +284,39 @@ function bendableMaterial(
       float v = ${halfH > 0 ? `clamp(position.y / ${halfH.toFixed(4)}, -1.0, 1.0)` : `0.0`};
       float fan = mix(1.32, 0.62, 0.5 + 0.5 * v);
       float a = uBend * fan * pow(u, 1.7);
-      float R = a > 0.0005 ? s / a : 1.0e6;
-      float dir = ${dir.toFixed(1)};
+      // Радиус НЕ вычисляем. Точка на дуге — это s·sin(a)/a и s·(1−cos a)/a, и обе
+      // дроби при a→0 стремятся к конечному пределу (к s и к 0). Прежний код брал
+      // R = s/a, а при малом угле подменял его на 1e6 — и тогда x = 1e6·sin(a)
+      // улетал на пятьсот единиц вместо того, чтобы остаться равным s. Столбец у
+      // петли выстреливал за горизонт белыми полосами: 260 мс из каждых 850 мс
+      // переворота и ещё 60 мс на ремешках при открывании. Ряды по высоте порог
+      // проходили вразнобой из-за веера — оттого «зубцы», а не одна плита.
+      float sa = a > 1.0e-4 ? sin(a) / a : 1.0 - a * a / 6.0;
+      float ca = a > 1.0e-4 ? (1.0 - cos(a)) / a : a * 0.5;
+      float dir = ${dir.toFixed(1)};`;
+  // Смещение вершин. Бумаге — дуга и ПРОВИС свободного края (у краёв по высоте
+  // сильнее, чем в середине; считается после изгиба, поэтому с ним не спорит).
+  const bendPos = wrap
+    ? `transformed.x = min(s, ${STRAP_FLAT.toFixed(4)}) + ${STRAP_R.toFixed(4)} * sin(a) + rem2 * cos(a);
+      transformed.z += dir * (${STRAP_R.toFixed(4)} * (1.0 - cos(a)) + rem2 * sin(a));`
+    : `transformed.x = s * sa;
+      transformed.z += dir * s * ca;
+      transformed.z -= dir * uBend * 0.045 * pow(u, 2.2) * (0.3 + 0.7 * abs(v));`;
+  const bendCode = (target: string) => `
+    if (uBend > 0.001) {${bendVars}
       ${target}
     }`;
+  // Ширина, полувысота и знак ВШИТЫ в исходник шейдера, а ключ кэша программ
+  // three собирает только из параметров материала. Два одинаково настроенных
+  // материала с разной вшитой геометрией получили бы одну программу — так уже
+  // случилось со страницами (см. pageDip).
+  const key = `bend${width}|${halfH}|${dir}|${cut ? 1 : 0}|${wrap ? "w" : "p"}`;
+  material.customProgramCacheKey = () => key;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uBend = bend;
+    shader.uniforms.uDip = dip;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform float uBend;")
+      .replace("#include <common>", "#include <common>\nuniform float uBend;\nuniform float uDip;")
       .replace(
         "#include <beginnormal_vertex>",
         "#include <beginnormal_vertex>" +
@@ -259,14 +325,7 @@ function bendableMaterial(
       .replace(
         "#include <begin_vertex>",
         "#include <begin_vertex>" +
-          bendCode(
-            "transformed.x = R * sin(a);\n" +
-              "      transformed.z += dir * R * (1.0 - cos(a));\n" +
-              // ПРОВИС свободного края под собственным весом. Без него лист жёсткий:
-              // у бумаги дальний от петли край обвисает, и у краёв по высоте сильнее,
-              // чем в середине. Считается ПОСЛЕ изгиба, поэтому с ним не спорит.
-              "      transformed.z -= dir * uBend * 0.045 * pow(u, 2.2) * (0.3 + 0.7 * abs(v));",
-          ),
+          bendCode(bendPos) + dipCode,
       );
   };
   // ── Тень.
@@ -280,25 +339,20 @@ function bendableMaterial(
     map,
     alphaTest: cut ? 0.5 : 0,
   });
+  depth.customProgramCacheKey = () => key + "|depth";
   depth.onBeforeCompile = (shader) => {
     shader.uniforms.uBend = bend;
+    shader.uniforms.uDip = dip;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform float uBend;")
+      .replace("#include <common>", "#include <common>\nuniform float uBend;\nuniform float uDip;")
       .replace(
         "#include <begin_vertex>",
         "#include <begin_vertex>" +
-          bendCode(
-            "transformed.x = R * sin(a);\n" +
-              "      transformed.z += dir * R * (1.0 - cos(a));\n" +
-              // ПРОВИС свободного края под собственным весом. Без него лист жёсткий:
-              // у бумаги дальний от петли край обвисает, и у краёв по высоте сильнее,
-              // чем в середине. Считается ПОСЛЕ изгиба, поэтому с ним не спорит.
-              "      transformed.z -= dir * uBend * 0.045 * pow(u, 2.2) * (0.3 + 0.7 * abs(v));",
-          ),
+          bendCode(bendPos) + dipCode,
       );
   };
 
-  return { material, bend, depth };
+  return { material, bend, dip, depth };
 }
 
 export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
@@ -426,51 +480,33 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     return m;
   };
   const leather = new MeshStandardMaterial({ color: 0x14130f, roughness: 0.78, metalness: 0.05 });
-  // Обрез блока: настоящая текстура кромок с картой нормалей. Процедурная
-  // версия (edgeMaps.ts) осталась запасным путём — она гарантирует стыковку и
-  // работает без файлов, но нарисованное волокно бумаги точнее.
-  const edges: { map: Texture; normal: Texture } = { map: T.foredge, normal: T.nForedge };
-  for (const t of [edges.map, edges.normal]) {
+  // Обрез блока: текстура кромок (линии листов уложены по её ВЫСОТЕ). Развёртка
+  // пишется прямо в геометрии веера: v — доля толщины стопки, u — путь вдоль
+  // грани. Прежние повороты и repeat на самой текстуре складывались друг с
+  // другом, и кромки растягивались в смазанный парус без единой линии.
+  //
+  // Осветление умеренное: старый множитель (3.14, 3.70, 4.72) выбивал бурую
+  // бумагу в сине-белый пластик и съедал весь рисунок кромок.
+  for (const t of [T.foredge, T.nForedge]) {
     t.wrapS = RepeatWrapping;
-    t.wrapT = RepeatWrapping;
-    t.repeat.set(9, 1); // сотни тонких кромок вместо нескольких широких полос
+    t.wrapT = ClampToEdgeWrapping;
+    t.anisotropy = aniso;
     t.needsUpdate = true;
   }
+  const edgeMat = new MeshStandardMaterial({
+    map: T.foredge,
+    normalMap: T.nForedge,
+    normalScale: new Vector2(0.95, 0.95),
+    color: new Color(1.6, 1.56, 1.44),
+    roughness: 0.92,
+    metalness: 0,
+  });
   // Переплёт: сторона, где блок сшит. Тёмная, матовая, без кромок.
   const binding = new MeshStandardMaterial({ color: 0x24211b, roughness: 0.95, metalness: 0 });
-  const blockSide = new MeshStandardMaterial({ color: 0x6b6659, roughness: 1, metalness: 0 });
-  const edgeMat = new MeshStandardMaterial({
-    map: edges.map,
-    normalMap: edges.normal,
-    normalScale: new Vector2(1.5, 1.5),
-    // Кромки бумаги почти белые: контраст со тёмным переплётом и делает книгу
-    // книгой. Текстура сама по себе тёмная для нашей сцены, поэтому осветляем.
-    color: new Color(3.14, 3.70, 4.72),
-    roughness: 0.96,
-    metalness: 0,
-  });
-  // Верх и низ блока показывают те же кромки, но повёрнутые: там стопка видна
-  // поперёк. Клонируем текстуру, иначе поворот уедет и на переднем обрезе.
-  const edgeCross = new MeshStandardMaterial({
-    map: (() => {
-      const t = edges.map.clone();
-          t.rotation = Math.PI / 2;
-          t.center.set(0.5, 0.5);
-          t.needsUpdate = true;
-          return t;
-        })(),
-    normalMap: (() => {
-      const t = edges.normal.clone();
-          t.rotation = Math.PI / 2;
-          t.center.set(0.5, 0.5);
-          t.needsUpdate = true;
-          return t;
-        })(),
-    normalScale: new Vector2(1.3, 1.3),
-    color: new Color(3.14, 3.70, 4.72),
-    roughness: 0.96,
-    metalness: 0,
-  });
+  // Верх блока под страницей и его низ — та же бумага, что и страницы: всё, что
+  // выглядывает в прорехи рваного края, должно читаться бумагой, а не серым
+  // картоном, который рисовал вдоль обреза сплошную серую ленту.
+  const paperTop = new MeshStandardMaterial({ color: 0xd8d1c0, roughness: 1, metalness: 0 });
 
   const book = new Group();
   scene.add(book);
@@ -505,64 +541,109 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
    *
    * Глубина ложбины у настоящего тома примерно вдвое меньше выступа корешка.
    */
-  const bowBlock = (g: BoxGeometry): BoxGeometry => {
+  /**
+   * Половина блока — ВЕЕР листов, а не коробка.
+   *
+   * Столбец бумаги на расстоянии s от жёлоба имеет высоту h(s) = T·(1−exp(−K·s)):
+   * ноль у сшивки, полная толщина к обрезу. Спад тот же, что у страницы (pageDip)
+   * и у ложбины листа — одна константа DIP_K, поэтому страница, лист и стопка
+   * нигде не расходятся формой. Обе половины приходят в ноль В ОДНОЙ точке жёлоба,
+   * и сквозной щели между ними не остаётся ни при какой закладке.
+   *
+   * Веер существует только у РАСКРЫТОЙ книги: доля carve гасит спад до плоского
+   * кирпича при закрывании — у закрытого тома жёлоба нет, и прежняя вечная
+   * канава светила белым клином из-под крышки у корешка.
+   *
+   * Пережимается ВЕСЬ столбец: каждая вершина хранит свои доли s01/z01 и встаёт
+   * на h(s)·z01. Прежний код смещал один верхний ряд коробки — боковые грани
+   * заворачивались под него валиком, а торец у жёлоба оставался стеной.
+   */
+  const buildHalfBlock = (gutterAt: -1 | 1): { mesh: Mesh; update: (T: number, carve: number) => void } => {
+    const g = new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T, 56, 1, 14);
+    g.translate(0, 0, BLOCK_T / 2); // низ на нуле: толщина растёт вверх
     const p = g.attributes.position;
-    const halfW = PAGE_W / 2;
-    const halfT = BLOCK_T / 2;
-    for (let i = 0; i < p.count; i++) {
+    const uv = g.attributes.uv;
+    const idx = g.index;
+    const n = p.count;
+    const s01 = new Float32Array(n); // доля пути от жёлоба к обрезу
+    const z01 = new Float32Array(n); // доля толщины, 0 низ — 1 верх
+    for (let i = 0; i < n; i++) {
       const x = p.getX(i);
-      if (Math.abs(x - halfW) > 1e-4) continue;   // трогаем только передний обрез
-      const z = p.getZ(i);
-      // Дуга по толщине: максимум выпуклости на середине стопки.
-      const k = Math.cos((z / halfT) * Math.PI * 0.5);
-      p.setX(i, x - 0.019 * k);
+      s01[i] = gutterAt < 0 ? x / PAGE_W + 0.5 : 0.5 - x / PAGE_W;
+      z01[i] = p.getZ(i) / BLOCK_T;
     }
-    p.needsUpdate = true;
-    g.computeVertexNormals();
-    return g;
+    // Вогнутый передний обрез: у круглёного корешка та же бумага с другой
+    // стороны образует ложбину. Дуга по толщине, максимум на середине стопки.
+    // Смещение по x статично — пережим столбцов меняет только z.
+    for (let i = 0; i < n; i++) {
+      if (s01[i] < 1 - 1e-4) continue;
+      p.setX(i, p.getX(i) + gutterAt * 0.019 * Math.sin(z01[i] * Math.PI));
+    }
+    // Развёртка кромок: v — доля толщины (линии листов в текстуре лежат по её
+    // высоте), u — путь вдоль грани с повтором под пропорцию куска ~2.5:1.
+    // Верх и низ блока (грани 4 и 5) — бумага без текстуры, их не трогаем.
+    if (idx) {
+      for (const grp of g.groups) {
+        const face = grp.materialIndex ?? 0;
+        if (face > 3) continue;
+        const seen = new Set<number>();
+        for (let k = grp.start; k < grp.start + grp.count; k++) {
+          const vi = idx.getX(k);
+          if (seen.has(vi)) continue;
+          seen.add(vi);
+          // Повтор 1:1 — растяжение линий вдоль грани незаметно (они и так
+          // тянутся вдоль), а видимый шов от тайлинга заметен сразу.
+          const along = face < 2 ? p.getY(vi) / PAGE_H + 0.5 : s01[vi];
+          uv.setXY(vi, along, z01[vi]);
+        }
+      }
+      uv.needsUpdate = true;
+    }
+    const mats = [
+      gutterAt < 0 ? edgeMat : binding, // +x
+      gutterAt < 0 ? binding : edgeMat, // -x
+      edgeMat,                          // +y: верхний обрез
+      edgeMat,                          // -y: нижний обрез
+      paperTop,                         // +z: под верхней страницей
+      paperTop,                         // -z: низ
+    ];
+    const mesh = new Mesh(g, mats);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    let lastT = -1;
+    let lastCarve = -1;
+    const update = (T: number, carve: number): void => {
+      if (Math.abs(T - lastT) < 1e-4 && Math.abs(carve - lastCarve) < 1e-4) return;
+      lastT = T;
+      lastCarve = carve;
+      for (let i = 0; i < n; i++) {
+        const h = T * (1 - carve + carve * (1 - Math.exp(-DIP_K * s01[i] * PAGE_W)));
+        p.setZ(i, h * z01[i]);
+      }
+      p.needsUpdate = true;
+      g.computeVertexNormals();
+    };
+    update(BLOCK_T, 0);
+    return { mesh, update };
   };
 
-  const block = new Mesh(bowBlock(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T, 1, 1, 14)), [
-    edgeCross,    // +x: передний обрез — UV этой грани повёрнуты
-    binding,      // -x: КОРЕШКОВАЯ сторона, книга здесь сшита — обреза нет
-    edgeMat,      // +y: верхний обрез
-    edgeMat,      // -y: нижний обрез
-    blockSide,    // +z: под верхней страницей
-    blockSide,    // -z: низ
-  ]);
-  block.castShadow = true;
-  block.receiveShadow = true;
+  const rightHalf = buildHalfBlock(-1);
+  const block = rightHalf.mesh;
+  block.position.set(PAGE_W / 2, 0, 0);
   book.add(block);
 
   // ── левая половина блока: появляется, когда листы переходят налево.
-  const leftBlock = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, 0.01), [
-    binding,      // +x: корешковая сторона левой стопки
-    edgeCross,    // -x: передний обрез левой стопки, смотрит наружу
-    edgeMat,
-    edgeMat,
-    blockSide,
-    blockSide,
-  ]);
-  leftBlock.castShadow = true;
-  leftBlock.receiveShadow = true;
+  const leftHalf = buildHalfBlock(1);
+  const leftBlock = leftHalf.mesh;
+  leftBlock.position.set(-PAGE_W / 2, 0, 0);
   leftBlock.visible = false;
   book.add(leftBlock);
 
-  // Верхние страницы обеих стопок — ГНУЩИЕСЯ, а не плоские. У настоящей книги
-  // лист уходит в жёлоб дугой: у корешка ныряет вниз, к внешнему обрезу
-  // выпрямляется. Две плоские плиты с щелью посередине и читались как «страницы
-  // не связаны, это не разворот».
-  //
-  // Сетка по X обязательна: у плоскости из одного квада гнуть нечего. Геометрия
-  // сдвинута так, что x = 0 приходится на петлю у корешка — этого ждёт шейдер
-  // изгиба.
-  // Сетка по X — задел под изгиб в жёлоб. Сам изгиб пока выключен: попытка
-  // зеркалить левую страницу поворотом на 180° показывала её ИЗНАНКУ, и текстура
-  // пропадала. Правильное решение — своя геометрия с петлёй у корешка для каждой
-  // стороны, а не поворот одной и той же.
-  // Геометрия ЦЕНТРИРОВАННАЯ. Сдвиг геометрии к петле ломал левую страницу — она
-  // переставала рисоваться вовсе, хотя оставалась видимой и на правильной высоте.
-  // Расстояние от петли считает шейдер.
+  // Верхние страницы обеих стопок — ГНУЩИЕСЯ, а не плоские: лист ныряет в жёлоб
+  // тем же спадом DIP_K, каким выточен веер, и лежит на нём с просветом в лист
+  // бумаги. Сетка по X обязательна — у плоскости из одного квада гнуть нечего.
+  // Геометрия ЦЕНТРИРОВАННАЯ, расстояние от петли считает шейдер по знаку side:
+  // зеркалить одну страницу поворотом на 180° нельзя, к зрителю встаёт изнанка.
   const rightGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
   const leftGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
   const rightSheet = pageMaterial(T.right, T.nPage, 1);
@@ -597,7 +678,6 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // шире самих крышек.
   const spineRz = sw / 2;      // полуось по толщине
   const spineRx = sw * 0.17;   // выступ наружу
-  const spineR = spineRz;      // для посадки по глубине
   const SPINE_SEG = 28;
   const spineGeo = new PlaneGeometry(1, coverH, SPINE_SEG, 1);
   const spinePos = spineGeo.attributes.position;
@@ -607,7 +687,11 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // середина дуги приходится ровно на самую левую точку корешка.
     const u = spineUv.getX(i);
     const a = (u - 0.5) * Math.PI;
-    spinePos.setX(i, -spineRx * Math.cos(a));
+    // Концы дуги ПОДВОРАЧИВАЮТСЯ под крышки за рубчик: кожа корешка у настоящего
+    // тома заходит на картон. Дуга, кончавшаяся на x = 0, оставляла у жёлоба
+    // светлую щель — в неё был виден торец блока во всю высоту книги.
+    const tuck = (GROOVE + 0.006) * Math.sin(a) * Math.sin(a);
+    spinePos.setX(i, -spineRx * Math.cos(a) + tuck);
     spinePos.setZ(i, spineRz * Math.sin(a));
   }
   spineGeo.computeVertexNormals();
@@ -633,19 +717,26 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   book.add(spine);
   book.add(spineFace);
 
-  // Каптал — плетёная лента у корешка сверху и снизу. Мелочь, но именно она
-  // выдаёт ручной переплёт: без неё блок просто упирается в корешок.
+  // Каптал — плетёная лента на торце корешка сверху и снизу. Мелочь, но именно
+  // она выдаёт ручной переплёт: без неё блок просто упирается в корешок.
+  //
+  // Лента лежит ПОПЕРЁК тома: длинная ось — по толщине книги (z), короткая — по
+  // ширине (x). Прежняя постановка клала длину вдоль крышки, и полоса торчала в
+  // воздух слева от корешка парящей планкой.
   const headbandMat = new MeshStandardMaterial({
     map: T.headband,
     roughness: 0.85,
     metalness: 0,
-    transparent: true,
     alphaTest: 0.4,
   });
+  headbandMat.alphaToCoverage = true;
   const headbands: Mesh[] = [];
   for (const sy of [1, -1]) {
-    const hb = new Mesh(new PlaneGeometry(BLOCK_T * 0.92, 0.034), headbandMat);
-    hb.rotation.x = -Math.PI / 2 * sy;
+    const hb = new Mesh(new PlaneGeometry(sw * 0.94, 0.048), headbandMat);
+    // Порядок эйлеров XYZ: сперва z кладёт длину ленты поперёк, затем x
+    // разворачивает плоскость горизонтально, лицом вверх (низ — вниз).
+    hb.rotation.z = Math.PI / 2;
+    hb.rotation.x = (-Math.PI / 2) * sy;
     headbands.push(hb);
     book.add(hb);
   }
@@ -689,7 +780,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const plateT = 0.014;
   for (const sy of [0.27, -0.27]) {
     const g = new Group();
-    g.position.set(GROOVE + PAGE_W + SQUARE - 0.145, PAGE_H * sy * 0.72, COVER_T);
+    // Корень стоит так, чтобы прямой участок STRAP_FLAT кончался ровно на углу
+    // крышки: спуск ремня тогда идёт по обрезу, а не внутри блока и не в воздухе.
+    g.position.set(GROOVE + coverW - STRAP_FLAT - STRAP_R + 0.004, PAGE_H * sy * 0.72, COVER_T);
     coverHinge.add(g);
     claspGroups.push(g);
 
@@ -705,25 +798,43 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       transparent: true,
       alphaTest: 0.5,
     });
-    const brassEdge = new MeshStandardMaterial({ color: 0x8a7748, roughness: 0.38, metalness: 0.8 });
-    const plate = new Mesh(new BoxGeometry(plateW, plateW * (386 / 420), plateT), [
-      brassEdge,
-      brassEdge,
-      brassEdge,
-      brassEdge,
-      brass,
-      brassEdge,
-    ]);
-    plate.position.set(-plateW * 0.42, 0, plateT / 2);
-    plate.castShadow = true;
+    // Бляшка — ДВА вырезанных по альфе лица, а не коробка.
+    //
+    // Коробка давала толщину, но её четыре торца — сплошные прямоугольники по
+    // границе, а лицо вырезано по силуэту фигурной накладки. Всё, что торчало за
+    // силуэт, читалось тонкой золотой рамкой вокруг замка и двумя прутками,
+    // уходящими поперёк тиснения. Два лица с разносом в ту же толщину дают тот же
+    // объём на этом размере и ничего лишнего не показывают.
+    brass.transparent = false;
+    brass.alphaToCoverage = true;
+    const brassBack = brass.clone();
+    brassBack.color = new Color(0x6f5f38);
+    brassBack.metalness = 0.8;
+    brassBack.normalMap = null;
+    const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420));
+    const plate = new Group();
+    plate.position.set(-plateW * 0.42, 0, 0);
+    for (const [z, mat] of [[plateT, brass], [0, brassBack]] as const) {
+      const face = new Mesh(plateGeo, mat);
+      face.position.z = z;
+      face.castShadow = true;
+      plate.add(face);
+    }
     g.add(plate);
 
-    const strapW = 0.52;
+    // Длина ремешка выверена под обход: прямой участок до угла, четверть дуги на
+    // углу и спуск вдоль обреза до нижней крышки — кончик не торчит из-под тома.
+    const strapW = 0.48;
     // Ремешок — тонкая КОРОБКА с сеткой по длине: плоскость с торца исчезала.
     // Сегменты нужны шейдеру изгиба, он гнёт по X.
-    const sgeo = new BoxGeometry(strapW, strapW * (106 / 620), 0.008, 18, 1, 1);
+    const strapH = strapW * (106 / 620);
+    const sgeo = new BoxGeometry(strapW, strapH, 0.008, 18, 1, 1);
     sgeo.translate(strapW / 2, 0, 0);
-    const { material, bend, depth: depthOfStrap } = bendableMaterial(T.strap, strapW, true, -1);
+    // Полувысота НУЛЕВАЯ намеренно: веер — свойство бумажного листа. Последний
+    // аргумент — режим wrap: ремень обходит угол крышки, а не гнётся дугой от
+    // корня (см. bendableMaterial).
+    const { material, bend, depth: depthOfStrap } =
+      bendableMaterial(T.strap, strapW, true, 0, -1, true);
     // Рельеф кожи на ремешке: до этого он был единственной поверхностью совсем
     // без карты нормалей — плоская краска рядом с рельефной крышкой.
     material.normalMap = T.nStrap;
@@ -733,7 +844,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // ремешка натягивалась и на боковые грани, вытягиваясь там в яркую нить:
     // вокруг замка шла проволочная обводка. Изгиб общий, поэтому торцевой
     // материал берёт ТОТ ЖЕ параметр гиба — иначе грани поехали бы отдельно.
-    const edgeSkin = bendableMaterial(T.strap, strapW, false, -1);
+    const edgeSkin = bendableMaterial(T.strap, strapW, false, 0, -1, true);
     edgeSkin.material.color.setHex(0x2a241c);
     edgeSkin.material.map = null;
     edgeSkin.material.roughness = 0.95;
@@ -759,7 +870,18 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   book.add(leafHinge);
   const leafGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 16);
   leafGeo.translate(PAGE_W / 2, 0, 0);
-  const leafFront = bendableMaterial(T.right, PAGE_W, false, PAGE_H / 2);
+  // Лист режется по альфе ТАК ЖЕ, как лежащие страницы. Без этого он оставался
+  // honest-to-god прямоугольником: у страницы под ним край рваный, и в каждую
+  // выемку зубца был виден угол листа — вдоль обреза шла гребёнка белых плашек.
+  // Прозрачность при этом выключаем и режем покрытием пикселя, как у страниц:
+  // с transparent порядок отрисовки начинает зависеть от угла камеры.
+  const cutLeaf = (m: { material: MeshStandardMaterial }): void => {
+    m.material.transparent = false;
+    m.material.alphaToCoverage = true;
+    m.material.needsUpdate = true;
+  };
+  const leafFront = bendableMaterial(T.right, PAGE_W, true, PAGE_H / 2);
+  cutLeaf(leafFront);
   const leaf = new Mesh(leafGeo, leafFront.material);
   leaf.castShadow = true;
   leaf.receiveShadow = true;
@@ -767,7 +889,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   leafHinge.add(leaf);
   // Оборот листа: своя текстура и BackSide. Без него лист за -90° показывал
   // пустоту и вдобавок дублировал страницу, лежащую под ним.
-  const leafBackMat = bendableMaterial(T.left, PAGE_W, false, PAGE_H / 2);
+  const leafBackMat = bendableMaterial(T.left, PAGE_W, true, PAGE_H / 2);
+  cutLeaf(leafBackMat);
   leafBackMat.material.side = BackSide;
   const leafBack = new Mesh(leafGeo.clone(), leafBackMat.material);
   leafBack.castShadow = true;
@@ -825,14 +948,19 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // ход остаётся, зритель только смотрит с другой стороны. Влияние слабеет по мере
     // раскрытия — у разворота своя правильная точка, крутить его незачем.
     const orbW = 1 - swing * 0.72;
-    const basePitch = narrow ? 16 - 2 * anticip - 8 * swing : 20 - 2 * anticip - 9 * swing;
+    // Раскрытая книга НЕ выводится строго в лоб: толщина шла бы вдоль взгляда и
+    // проецировалась в ничто — том читался бы двумя листами бумаги на столе.
+    // К развороту камера ПОДНИМАЕТСЯ (~25° тангажа при ~12° рысканья) и отходит:
+    // сверху видны оба веера стопок, обрезы и канты крышек — толщина читается,
+    // разворот целиком в кадре и с воздухом по краям.
+    const basePitch = narrow ? 16 - 2 * anticip + 5 * swing : 20 - 2 * anticip + 7 * swing;
     const pitch = ((basePitch + overshoot) * Math.PI) / 180 + orb.pitch * orbW;
-    const baseYaw = narrow ? -9 + 1 * anticip + 8 * swing : -16 + 2 * anticip + 14 * swing;
+    const baseYaw = narrow ? -9 + 1 * anticip + 3 * swing : -16 + 2 * anticip + 4 * swing;
     const yaw = (baseYaw * Math.PI) / 180 + orb.yaw * orbW;
     // В узком кадре подходим заметно ближе и целимся в одну страницу.
     const dist = narrow
-      ? 2.62 + 0.22 * swing + overshoot * 0.02
-      : 2.78 + 0.34 * swing - 0.06 * anticip + overshoot * 0.02;
+      ? 2.62 + 0.5 * swing + overshoot * 0.02
+      : 2.78 + 0.55 * swing - 0.06 * anticip + overshoot * 0.02;
     // Широкий кадр к концу хода смотрит в корешок (виден весь разворот), узкий —
     // остаётся на правой странице.
     const lookX = narrow ? PAGE_W * 0.5 : (PAGE_W / 2) * (1 - swing);
@@ -843,9 +971,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     );
     camera.lookAt(lookX, 0, 0);
 
-    // Замки отходят первыми, крышка ждёт их.
+    // Замки отходят первыми, крышка ждёт их. Зажим ремешка — доля 0..1: единица
+    // значит «обнимает угол и лежит на обрезе», ноль — ремень прямой.
     const cl = ease(phase(t, 0, CLASP_END));
-    const strapCurl = 3.35 * (1 - ease(phase(t, 0, CLASP_END * 0.6)));
+    const strapCurl = 1 - ease(phase(t, 0, CLASP_END * 0.6));
     for (const sb of strapBends) sb.value = strapCurl;
     for (let i = 0; i < claspGroups.length; i++) {
       // Ремешок сначала распрямляется и только потом отходит: сперва он должен
@@ -856,14 +985,20 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }
 
     coverHinge.rotation.y = -ease(phase(t, CLASP_END, 0.86)) * Math.PI;
-    coverHinge.position.z = (BLOCK_T + COVER_T) * (1 - ease(phase(t, 0.45, 1)));
 
     const total = Math.max(1, leftPages + rightPages);
     // Ход листа прогоняется через профиль падения: первая треть — подхват,
     // середина — свободный пролёт, последняя треть — падение с ускорением и
     // короткое затухающее колебание. Линейный ход читается механикой.
-    const rawLeaf = tw > 0 ? tw : ease(phase(t, 0.46, 1));
-    const leafPhase = leafFall(rawLeaf);
+    //
+    // Раньше при отсутствии переворота сюда подставлялось РАСКРЫТИЕ: пока книга
+    // открывалась, лист перелетал слева направо и оставался лежать слева. Но
+    // номер страницы при этом не менялся, и лишний лист навсегда оседал в левой
+    // доле. Отсюда вся кривизна: на середине книги стопки стояли 4:2 вместо 3:3,
+    // на нулевой странице слева уже лежала шестая часть блока, а на последней
+    // доля переваливала за единицу и ПРАВАЯ толщина уходила в минус — правая
+    // страница проваливалась под крышки. Лист летит только когда листают.
+    const leafPhase = leafFall(tw);
     // Доля левой стопки гасится при ЗАКРЫВАНИИ. Иначе у закрытой книги половина
     // толщины остаётся слева, за пределами крышки: том стоит с торчащей плитой
     // сбоку. Физически верно — закрытая книга это одна стопка под крышкой, где бы
@@ -871,43 +1006,83 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // вертикаль и левая стопка вообще становится видимой.
     const spread = ease(phase(t, 0.5, 0.92));
     const leftShare = ((leftPages + leafPhase) / total) * spread;
-    const rightT = 0.01 + BLOCK_T * 0.94 * (1 - leftShare);
-    const leftT = 0.01 + BLOCK_T * 0.94 * leftShare;
+    // Две доли в СУММЕ дают ровно толщину блока. Прежние 0.01 + 0.94·BLOCK_T
+    // недобирали 0.007, а крышка вдобавок стояла на BLOCK_T + COVER_T — на целую
+    // толщину картона выше бумаги. Вместе это давало 0.029 воздуха под крышкой:
+    // десятую часть блока, из-за которой у закрытой книги обрез торчал из-под
+    // переплёта.
+    const rightT = Math.max(SHEET_T, BLOCK_T * (1 - leftShare));
+    const leftT = Math.max(SHEET_T, BLOCK_T * leftShare);
+    // Крышка лежит на самой бумаге, а не на константе. Два просвета: один под
+    // страницей, один над ней — в одной плоскости с крышкой страница мерцала бы.
+    coverHinge.position.z = (rightT + PAPER_LIFT * 2) * (1 - ease(phase(t, 0.45, 1)));
 
-    block.scale.z = Math.max(0.02, rightT / BLOCK_T);
-    block.position.set(PAGE_W / 2, 0, rightT / 2);
-    rightPage.position.set(PAGE_W / 2, 0, rightT + 0.006);
+    // Толщина и веер жёлоба живут в самой геометрии половин: пережим столбцов,
+    // а не scale.z — масштаб плющил бы вместе с толщиной и профиль спада.
+    rightHalf.update(rightT, spread);
+    leftHalf.update(leftT, spread);
 
     leftBlock.visible = coverHinge.rotation.y < -Math.PI / 2;
-    leftBlock.scale.z = Math.max(0.02, leftT / 0.01);
-    leftBlock.position.set(-PAGE_W / 2, 0, leftT / 2);
     leftPage.visible = leftBlock.visible;
-    leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.006);
 
-    const dipAmt = ease(phase(t, 0.55, 0.95));
-    rightSheet.dip.value = rightT * 0.42 * dipAmt;
-    leftSheet.dip.value = leftT * 0.42 * dipAmt;
+    // ── ЖЁЛОБ. Страница повторяет веер своей стопки: база страницы — верх веера
+    // у обреза T·(1−carve), прогиб — T·carve тем же спадом DIP_K. Обе половины
+    // ныряют в одну точку сшивки, поэтому щели между ними нет. При закрывании
+    // спад гаснет вместе с веером, и страница ложится плоско под крышку — прежняя
+    // константная посадка на GUTTER топила её внутри закрытой стопки.
+    rightPage.position.set(PAGE_W / 2, 0, rightT * (1 - spread) + PAPER_LIFT);
+    leftPage.position.set(-PAGE_W / 2, 0, leftT * (1 - spread) + PAPER_LIFT);
+    rightSheet.dip.value = rightT * spread;
+    leftSheet.dip.value = leftT * spread;
     const rimHi = Math.max(rightT, leftT);
     const rim = rimHi + (Math.min(rightT, leftT) - rimHi) * ease(phase(t, 0.45, 0.9));
-    spine.position.set(0, 0, rim - spineR);
-    // Капталы сидят на торцах блока у самого корешка и едут за его толщиной.
+    // Корешок РАСПРЯМЛЯЕТСЯ. У закрытой книги это полуцилиндр во всю толщину, у
+    // раскрытой — он лежит между крышками почти плоско. Пока высота была
+    // постоянной, у разворота дуга поднималась до верха стопок и в жёлобе была
+    // видна НАРУЖНАЯ, тиснёная сторона корешка: посреди раскрытой книги шла
+    // золочёная полоса с бинтами, то есть спина тома изнутри.
+    const flat = 1 - ease(phase(t, 0.5, 0.95));
+    const squash = Math.max(COVER_T / (spineRz * 2), flat);
+    spine.scale.z = squash;
+    spineFace.scale.z = squash;
+    // Центр дуги — середина ВСЕГО тома с крышками: (низ −COVER_T + верх
+    // rim + COVER_T)/2 = rim/2. Прежняя посадка rim − R центрировала дугу по
+    // одному блоку: торец передней крышки оставался голым, а снизу дуга выходила
+    // за заднюю крышку ровно на толщину картона.
+    spine.position.set(0, 0, (rim / 2) * flat - (COVER_T / 2) * (1 - flat));
+    // Капталы: лента сжимается по длине вместе с корешком (её длинная ось —
+    // локальный x, после поворотов он лежит вдоль толщины тома).
     for (let i = 0; i < headbands.length; i++) {
       const sy = i === 0 ? 1 : -1;
       const hb = headbands[i];
-      hb.position.set(-spineRx * 0.45, (PAGE_H / 2) * sy * 0.995, spine.position.z);
-      hb.scale.set(spine.scale.x, 1, 1);
+      hb.position.set(-spineRx * 0.3 * flat, (PAGE_H / 2 + 0.005) * sy, spine.position.z);
+      hb.scale.x = squash;
     }
     spineFace.position.copy(spine.position);
     spineFace.position.z -= 0.006;
 
     leafHinge.rotation.y = -leafPhase * Math.PI;
-    // Петля листа сидит в ЖЁЛОБЕ — посередине между стопками. Прежнее
-    // max(rightT, leftT) держало её на высокой стопке, и при разных толщинах лист
-    // висел над целью, а в конце гас, не долетев до неё.
-    leafHinge.position.set(0, 0, (rightT + leftT) * 0.5 + 0.006);
-    const leafBend = Math.sin(clamp01(leafPhase) * Math.PI) * 1.6;
+    // Петля листа сидит на линии сшивки — в той же точке, куда ныряют оба веера
+    // и обе страницы. Любая другая высота отрывает лист от стопок на концах хода.
+    leafHinge.position.set(0, 0, 0.004);
+    const lift = Math.sin(clamp01(leafPhase) * Math.PI);
+    const leafBend = lift * 1.6;
     leafFront.bend.value = leafBend;
     leafBackMat.bend.value = leafBend;
+    // Ложбина листа гаснет к вертикали: в воздухе жёлоба нет. На концах хода лист
+    // повторяет профиль той стопки, к которой прилегает, — иначе он на входе и
+    // выходе ныряет под лежащую страницу.
+    //
+    // Ложбина задаётся в ЛОКАЛЬНЫХ осях листа, а петля к концу хода повёрнута на
+    // ~180°: локальный +z там смотрит ВНИЗ. Со знаком «плюс до конца» лист на
+    // подлёте вдавливался в левую стопку на всю глубину ложбины. cos(πφ) даёт
+    // плюс на правой половине хода, минус на левой, а его квадрат — то самое
+    // квадратичное гашение веса к вертикали: лист держится вровень со стопкой,
+    // пока от неё почти не оторвался.
+    const lc = Math.cos(clamp01(leafPhase) * Math.PI);
+    const leafDip = lc * Math.abs(lc) * (rightT + leafPhase * (leftT - rightT)) * spread;
+    leafFront.dip.value = leafDip;
+    leafBackMat.dip.value = leafDip;
     leaf.visible = leafPhase > 0.002 && leafPhase < 0.998;
     leafBack.visible = leaf.visible;
 
@@ -974,11 +1149,19 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // Целая часть — сколько листов уже слева, дробная — ход текущего.
     const whole = Math.floor(cur.page + 1e-6);
     const frac = cur.page - whole;
-    render(cur.open, frac, whole, Math.max(1, LEAVES - whole));
+    // Правую долю НЕ подпираем единицей. С подпоркой на последней странице сумма
+    // становилась семёркой вместо шестёрки, и слева оказывалось 6/7 блока: у
+    // дочитанной книги справа оставалась заметная стопка из ниоткуда.
+    render(cur.open, frac, whole, LEAVES - whole);
   }
   raf = requestAnimationFrame(step);
   // Метка готовности: по ней и сквозной тест, и замер «клик -> первый кадр».
   canvas.dataset.ready = "1";
+  // Дев-шов: стенду нужно мерить фактические высоты мешей, а не пересчитывать
+  // формулы на бумаге. Пересчёт уже дважды показывал не то, что рисует шейдер.
+  if (import.meta.env.DEV) {
+    (canvas as unknown as { __scene?: Scene }).__scene = scene;
+  }
 
   return {
     target(open: number, page: number): void {

@@ -170,6 +170,11 @@ export function Bestiary() {
         // Раскрываем НЕ сразу: книга ждёт закрытой, её можно покрутить. Открывает
         // следующий клик — иначе рассмотреть том не успеваешь.
         sceneRef.current?.target(phase === "open" ? 1 : 0, pageRef.current);
+        // Дев-шов для стенда: середину переворота кликами не поймать — она длится
+        // 850 мс, а снимок кадра занимает столько же. В сборку не попадает.
+        if (import.meta.env.DEV) {
+          (window as unknown as { __book?: BookScene | null }).__book = sceneRef.current;
+        }
       })
       .catch(() => undefined);
     const onResize = (): void => {
