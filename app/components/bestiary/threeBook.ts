@@ -21,6 +21,7 @@
 // книгу открывают. Первый экран не потяжелел ни на байт — это было главное
 // возражение против библиотеки, и оно снято технически.
 
+import { makeEdgeMaps } from "./edgeMaps";
 import {
   AgXToneMapping,
   AmbientLight,
@@ -288,7 +289,42 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       alphaTest: 0.5,
     });
   const leather = new MeshStandardMaterial({ color: 0x14130f, roughness: 0.78, metalness: 0.05 });
+  // Обрез блока: кромки листов с рельефом. Прежде это была однотонная плита
+  // #6b6659 — самая большая пустая поверхность во всей сцене.
+  const edges = makeEdgeMaps();
   const blockSide = new MeshStandardMaterial({ color: 0x6b6659, roughness: 1, metalness: 0 });
+  const edgeMat = edges
+    ? new MeshStandardMaterial({
+        map: edges.map,
+        normalMap: edges.normal,
+        normalScale: new Vector2(1.6, 1.6),
+        roughness: 0.96,
+        metalness: 0,
+      })
+    : blockSide;
+  // Верх и низ блока показывают те же кромки, но повёрнутые: там стопка видна
+  // поперёк. Клонируем текстуру, иначе поворот уедет и на переднем обрезе.
+  const edgeCross = edges
+    ? new MeshStandardMaterial({
+        map: (() => {
+          const t = edges.map.clone();
+          t.rotation = Math.PI / 2;
+          t.center.set(0.5, 0.5);
+          t.needsUpdate = true;
+          return t;
+        })(),
+        normalMap: (() => {
+          const t = edges.normal.clone();
+          t.rotation = Math.PI / 2;
+          t.center.set(0.5, 0.5);
+          t.needsUpdate = true;
+          return t;
+        })(),
+        normalScale: new Vector2(1.4, 1.4),
+        roughness: 0.96,
+        metalness: 0,
+      })
+    : blockSide;
 
   const book = new Group();
   scene.add(book);
@@ -310,13 +346,27 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   book.add(backCover);
 
   // ── блок страниц: тоже тело. Обрез по бокам — светлая бумага, сверху страница.
-  const block = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T), blockSide);
+  const block = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T), [
+    edgeMat,      // +x: передний обрез
+    blockSide,    // -x: сторона корешка, её не видно
+    edgeCross,    // +y: верхний обрез
+    edgeCross,    // -y: нижний обрез
+    blockSide,    // +z: под верхней страницей
+    blockSide,    // -z: низ
+  ]);
   block.castShadow = true;
   block.receiveShadow = true;
   book.add(block);
 
   // ── левая половина блока: появляется, когда листы переходят налево.
-  const leftBlock = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, 0.01), blockSide);
+  const leftBlock = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, 0.01), [
+    blockSide,
+    edgeMat,      // -x: обрез левой стопки смотрит наружу, влево
+    edgeCross,
+    edgeCross,
+    blockSide,
+    blockSide,
+  ]);
   leftBlock.castShadow = true;
   leftBlock.receiveShadow = true;
   leftBlock.visible = false;
