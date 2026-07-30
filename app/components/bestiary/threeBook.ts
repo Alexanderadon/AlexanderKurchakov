@@ -1,0 +1,382 @@
+// Книга на Three.js. Заменяет сцену, написанную руками.
+//
+// Почему переехали. Своя сцена была оправдана, пока речь шла о перспективе и двух
+// поворотах. Но внутри книги будет игра, а к этому моменту я уже третью итерацию
+// ловил один и тот же класс ошибок: знаки нормалей, порядок отрисовки, куски,
+// проходящие сквозь друг друга, толщина, собранная из трёх полосок. Всё это
+// движок держит сам, и держит правильно.
+//
+// Что даёт переезд помимо избавления от этих багов:
+//  - граф сцены: замки просто дети крышки, а не результат перемножения матриц
+//    руками. Крышка поворачивается — замки едут с ней, и это не надо
+//    поддерживать;
+//  - настоящие тела: крышки и блок — коробки, а не плоскости с приделанными
+//    торцами. Толщина есть по построению, а не имитируется;
+//  - карты теней: тень листа на странице и тень тома на столе считаются, а не
+//    рисуются вручную полупрозрачными квадами в правильном порядке;
+//  - рейкастинг для будущей игры: попадание курсора по объекту, а не арифметика
+//    по долям холста.
+//
+// Вес: three грузится ОТДЕЛЬНЫМ чанком по динамическому импорту, только когда
+// книгу открывают. Первый экран не потяжелел ни на байт — это было главное
+// возражение против библиотеки, и оно снято технически.
+
+import {
+  AmbientLight,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  PCFSoftShadowMap,
+  PerspectiveCamera,
+  PlaneGeometry,
+  Scene,
+  SRGBColorSpace,
+  Texture,
+  WebGLRenderer,
+  type IUniform,
+} from "three";
+
+export interface BookTextures {
+  coverFront: TexImageSource;
+  endpaper: TexImageSource;
+  pageLeft: TexImageSource;
+  pageRight: TexImageSource;
+  spine: TexImageSource;
+  strap: TexImageSource;
+  plate: TexImageSource;
+}
+
+export interface BookScene {
+  draw(open: number, turn?: number, left?: number, right?: number): void;
+  resize(): void;
+  dispose(): void;
+}
+
+/** Ширина страницы принята за единицу; остальное считается от неё. */
+const PAGE_W = 1;
+/** Пропорция обложки, снятая с ассета 1122×1402. */
+const PAGE_H = PAGE_W / 0.8003;
+const BLOCK_T = 0.155;
+const COVER_T = 0.016;
+/** «Квадрат» — выступ крышки за обрез блока, у переплётчиков миллиметра три. */
+const SQUARE = 0.028;
+/** Замки отходят до того, как тронется крышка. */
+const CLASP_END = 0.3;
+
+const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
+const ease = (x: number): number => {
+  const t = clamp01(x);
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+};
+const phase = (t: number, a: number, b: number): number => clamp01((t - a) / (b - a));
+
+function makeTexture(src: TexImageSource): Texture {
+  const t = new Texture(src as TexImageSource);
+  t.colorSpace = SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
+
+/**
+ * Материал бумаги, умеющий гнуться. Изгиб вносится в вершинный шейдер
+ * StandardMaterial через onBeforeCompile: так лист получает и деформацию, и
+ * правильный свет с тенями — свой шейдер пришлось бы освещать руками, чем я и
+ * занимался, пока ловил знаки нормалей.
+ */
+function bendableMaterial(map: Texture): {
+  material: MeshStandardMaterial;
+  bend: IUniform<number>;
+} {
+  const bend: IUniform<number> = { value: 0 };
+  const material = new MeshStandardMaterial({ map, roughness: 0.92, metalness: 0 });
+  // Правим ровно две вставки — нормаль и позицию, — и не трогаем project_vertex
+  // и прочие внутренности: их порядок и содержимое меняются между версиями
+  // three, а begin_vertex/beginnormal_vertex — публичная точка расширения.
+  const bendCode = (target: string) => `
+    if (uBend > 0.001) {
+      float bw = ${(PAGE_W / 2).toFixed(4)};
+      float s = position.x + bw;            // расстояние от петли
+      float R = (bw * 2.0) / uBend;
+      float a = s / R;
+      ${target}
+    }`;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uBend = bend;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uBend;")
+      .replace(
+        "#include <beginnormal_vertex>",
+        "#include <beginnormal_vertex>" +
+          bendCode("objectNormal = normalize(vec3(-sin(a), 0.0, cos(a)));"),
+      )
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>" +
+          bendCode("transformed.x = R * sin(a) - bw;\n      transformed.z += R * (1.0 - cos(a));"),
+      );
+  };
+  return { material, bend };
+}
+
+export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
+  let renderer: WebGLRenderer;
+  try {
+    renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true });
+  } catch {
+    canvas.dataset.bookError = "webgl недоступен";
+    return null;
+  }
+  renderer.setClearColor(new Color(0x000000), 0);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = PCFSoftShadowMap;
+
+  const scene = new Scene();
+  const camera = new PerspectiveCamera(34, 1, 0.5, 40);
+
+  // ── свет. Один направленный плюс заполняющий: тени должны читаться, но не
+  // проваливать корешок в черноту.
+  const sun = new DirectionalLight(0xfff4e0, 2.1);
+  sun.position.set(-1.1, 1.7, 2.6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  // Смещение обязательно: без него поверхность затеняет саму себя, и по краям
+  // блока идут регулярные светлые штрихи, а левая страница уходит в серость.
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.02;
+  const sc = sun.shadow.camera;
+  sc.left = -2.2;
+  sc.right = 2.2;
+  sc.top = 2.2;
+  sc.bottom = -2.2;
+  sc.near = 0.2;
+  sc.far = 8;
+  scene.add(sun);
+  scene.add(new AmbientLight(0xb9b4a6, 0.62));
+
+  const T = {
+    cover: makeTexture(tex.coverFront),
+    end: makeTexture(tex.endpaper),
+    left: makeTexture(tex.pageLeft),
+    right: makeTexture(tex.pageRight),
+    spine: makeTexture(tex.spine),
+    strap: makeTexture(tex.strap),
+    plate: makeTexture(tex.plate),
+  };
+
+  const paper = (map: Texture): MeshStandardMaterial =>
+    new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
+  /** Лист с рваным краем: зубцы должны быть ВЫРЕЗАНЫ, а не залиты фоном. */
+  const sheet = (map: Texture): MeshStandardMaterial =>
+    new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0, transparent: true, alphaTest: 0.5 });
+  const leather = new MeshStandardMaterial({ color: 0x14130f, roughness: 0.78, metalness: 0.05 });
+  const blockSide = new MeshStandardMaterial({ color: 0x6b6659, roughness: 1, metalness: 0 });
+
+  const book = new Group();
+  scene.add(book);
+
+  const coverW = PAGE_W + SQUARE;
+  const coverH = PAGE_H + SQUARE * 2;
+
+  // ── задняя крышка: коробка, а не плоскость. Толщина есть по построению.
+  const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T), [
+    leather,
+    leather,
+    leather,
+    leather,
+    paper(T.end),
+    leather,
+  ]);
+  backCover.position.set(coverW / 2 - SQUARE / 2, 0, -COVER_T / 2);
+  backCover.receiveShadow = true;
+  book.add(backCover);
+
+  // ── блок страниц: тоже тело. Обрез по бокам — светлая бумага, сверху страница.
+  const block = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T), blockSide);
+  block.castShadow = true;
+  block.receiveShadow = true;
+  book.add(block);
+
+  // ── левая половина блока: появляется, когда листы переходят налево.
+  const leftBlock = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, 0.01), blockSide);
+  leftBlock.castShadow = true;
+  leftBlock.receiveShadow = true;
+  leftBlock.visible = false;
+  book.add(leftBlock);
+
+  // Верхние страницы обеих стопок — плоскости поверх коробок.
+  const pageGeo = new PlaneGeometry(PAGE_W, PAGE_H);
+  const rightPage = new Mesh(pageGeo, sheet(T.right));
+  rightPage.receiveShadow = true;
+  book.add(rightPage);
+  const leftPage = new Mesh(pageGeo, sheet(T.left));
+  leftPage.receiveShadow = true;
+  leftPage.visible = false;
+  book.add(leftPage);
+
+  // ── корешок: полуцилиндр между крышками. Лицевая сторона с тиснением смотрит
+  // от зрителя, изнутри видна подкладка — как у настоящей раскрытой книги.
+  const spineGeo = new PlaneGeometry(BLOCK_T + COVER_T * 2, coverH, 24, 1);
+  const spinePos = spineGeo.attributes.position;
+  const sw = BLOCK_T + COVER_T * 2;
+  const R = sw / Math.PI;
+  for (let i = 0; i < spinePos.count; i++) {
+    const u = spinePos.getX(i) / sw + 0.5; // 0..1 по ширине
+    const a = (u - 0.5) * Math.PI;
+    spinePos.setX(i, R * Math.sin(a));
+    spinePos.setZ(i, R * (1 - Math.cos(a)));
+  }
+  spineGeo.computeVertexNormals();
+  const spine = new Mesh(spineGeo, new MeshStandardMaterial({ color: 0x1a1815, roughness: 0.86, metalness: 0.03 }));
+  spine.receiveShadow = true;
+  book.add(spine);
+
+  // ── передняя крышка на петле у корешка. Замки — ЕЁ ДЕТИ: поворачивается
+  // крышка, они едут с ней сами, без перемножения матриц руками.
+  const coverHinge = new Group();
+  book.add(coverHinge);
+  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T), [
+    leather,
+    leather,
+    leather,
+    leather,
+    paper(T.cover),
+    paper(T.end),
+  ]);
+  frontCover.position.set(coverW / 2 - SQUARE / 2, 0, COVER_T / 2);
+  frontCover.castShadow = true;
+  coverHinge.add(frontCover);
+
+  const claspGroups: Group[] = [];
+  const straps: Mesh[] = [];
+  const strapBends: IUniform<number>[] = [];
+  const plateW = 0.14;
+  for (const sy of [0.27, -0.27]) {
+    const g = new Group();
+    g.position.set(PAGE_W + SQUARE, PAGE_H * sy, COVER_T);
+    coverHinge.add(g);
+    claspGroups.push(g);
+
+    const plate = new Mesh(new BoxGeometry(plateW, plateW * (386 / 420), 0.012), [
+      leather,
+      leather,
+      leather,
+      leather,
+      paper(T.plate),
+      leather,
+    ]);
+    plate.position.set(-plateW * 0.45, 0, 0.006);
+    plate.castShadow = true;
+    g.add(plate);
+
+    const strapW = 0.3;
+    const sgeo = new PlaneGeometry(strapW, strapW * (106 / 620), 18, 1);
+    sgeo.translate(strapW / 2, 0, 0);
+    const { material, bend } = bendableMaterial(T.strap);
+    const strap = new Mesh(sgeo, material);
+    strap.castShadow = true;
+    g.add(strap);
+    straps.push(strap);
+    strapBends.push(bend);
+  }
+
+  // ── переворачиваемый лист: плоскость, гнущаяся в шейдере.
+  const leafHinge = new Group();
+  book.add(leafHinge);
+  const leafGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
+  leafGeo.translate(PAGE_W / 2, 0, 0);
+  const leafFront = bendableMaterial(T.right);
+  const leaf = new Mesh(leafGeo, leafFront.material);
+  leaf.castShadow = true;
+  leaf.receiveShadow = true;
+  leafHinge.add(leaf);
+
+  let w = 2;
+  let h = 2;
+
+  function resize(): void {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    w = Math.max(2, canvas.clientWidth);
+    h = Math.max(2, canvas.clientHeight);
+    renderer.setPixelRatio(dpr);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  function draw(open: number, turn = 0, leftPages = 0, rightPages = 6): void {
+    const t = clamp01(open);
+    const tw = clamp01(turn);
+    const settle = ease(phase(t, 0.15, 1));
+
+    // Камера: закрытая книга читается объёмной, раскрытая лежит перед зрителем,
+    // но наклон не сводится в ноль — в лоб объём исчезает целиком.
+    const pitch = ((32 - 23 * settle) * Math.PI) / 180;
+    const yaw = ((-14 + 10 * settle) * Math.PI) / 180;
+    const dist = 3.5 - 0.25 * settle;
+    const lookX = (PAGE_W / 2) * (1 - settle);
+    camera.position.set(
+      lookX + dist * Math.sin(yaw) * Math.cos(pitch),
+      dist * Math.sin(pitch),
+      dist * Math.cos(yaw) * Math.cos(pitch),
+    );
+    camera.lookAt(lookX, 0, 0);
+
+    // Замки отходят первыми, крышка ждёт их.
+    const cl = ease(phase(t, 0, CLASP_END));
+    for (let i = 0; i < claspGroups.length; i++) {
+      claspGroups[i].rotation.y = -1.35 * cl;
+      claspGroups[i].visible = cl < 0.995;
+      strapBends[i].value = 2.4 * (1 - cl);
+    }
+
+    coverHinge.rotation.y = -ease(phase(t, CLASP_END, 0.86)) * Math.PI;
+    coverHinge.position.z = (BLOCK_T + COVER_T) * (1 - ease(phase(t, 0.45, 1)));
+
+    const total = Math.max(1, leftPages + rightPages);
+    const leafPhase = tw > 0 ? tw : ease(phase(t, 0.46, 1));
+    const leftShare = (leftPages + leafPhase) / total;
+    const rightT = 0.01 + BLOCK_T * 0.94 * (1 - leftShare);
+    const leftT = 0.01 + BLOCK_T * 0.94 * leftShare;
+
+    block.scale.z = Math.max(0.02, rightT / BLOCK_T);
+    block.position.set(PAGE_W / 2, 0, rightT / 2);
+    rightPage.position.set(PAGE_W / 2, 0, rightT + 0.0015);
+
+    leftBlock.visible = coverHinge.rotation.y < -Math.PI / 2;
+    leftBlock.scale.z = Math.max(0.02, leftT / 0.01);
+    leftBlock.position.set(-PAGE_W / 2, 0, leftT / 2);
+    leftPage.visible = leftBlock.visible;
+    leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.0015);
+
+    spine.position.set(0, 0, Math.max(0.004, rightT - 0.02));
+
+    leafHinge.rotation.y = -leafPhase * Math.PI;
+    leafHinge.position.set(0, 0, Math.max(rightT, leftT) + 0.006);
+    leafFront.bend.value = Math.sin(clamp01(leafPhase) * Math.PI) * 1.6;
+    leaf.visible = leafPhase > 0.002 && leafPhase < 0.996;
+
+    renderer.render(scene, camera);
+  }
+
+  resize();
+
+  return {
+    draw,
+    resize,
+    dispose(): void {
+      for (const key of Object.keys(T) as (keyof typeof T)[]) T[key].dispose();
+      scene.traverse((o) => {
+        if (o instanceof Mesh) {
+          o.geometry.dispose();
+          const m = o.material;
+          if (Array.isArray(m)) m.forEach((x) => x.dispose());
+          else m.dispose();
+        }
+      });
+      renderer.dispose();
+    },
+  };
+}
