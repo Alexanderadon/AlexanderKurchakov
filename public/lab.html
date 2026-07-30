@@ -1,0 +1,163 @@
+<!doctype html>
+<!--
+  Стенд книги. НЕ часть сайта.
+
+  Отдельная страница в обход приложения: ни роутов, ни root.tsx, ни прелоадера.
+  Сайт о ней не знает и сломаться от неё не может — это просто HTML-файл, который
+  Vite отдаёт в режиме разработки и который импортирует модуль сцены напрямую.
+
+  Зачем. Проверка одной правки через сайт стоила сборки, запуска, скролла, клика
+  по плитке и ожидания анимации — минуты три. Здесь книга висит одна, поза
+  ставится ползунками мгновенно, камера фиксирована: видно ровно то, что
+  изменилось.
+
+  Открывать: npm run dev, затем http://localhost:5173/lab.html
+-->
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Стенд книги</title>
+    <style>
+      :root { color-scheme: dark; --gold: #c2ad79; --line: rgba(196,196,192,.12); }
+      * { box-sizing: border-box; margin: 0; padding: 0 }
+      body {
+        min-height: 100dvh; background: #0b0b0a; color: #c4c4c0; padding: 16px;
+        font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+        display: grid; grid-template-rows: 1fr auto; gap: 14px;
+      }
+      #stage { position: relative; width: min(100%, 1120px); aspect-ratio: 1.599; margin: 0 auto }
+      canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab }
+      canvas:active { cursor: grabbing }
+      #panel { width: min(100%, 820px); margin: 0 auto; display: grid; gap: 11px }
+      label { display: grid; gap: 5px; letter-spacing: .09em; text-transform: uppercase; color: #7e7c74 }
+      b { color: var(--gold); font-weight: 500 }
+      input[type=range] { width: 100%; accent-color: var(--gold) }
+      .row { display: flex; gap: 8px; flex-wrap: wrap }
+      button {
+        padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px;
+        background: none; color: inherit; font: inherit; cursor: pointer;
+      }
+      button:hover { background: rgba(255,255,255,.06) }
+      #err { color: #d08a6a; white-space: pre-wrap }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="book"></canvas></div>
+    <div id="panel">
+      <label>раскрытие <b id="vOpen">1.00</b>
+        <input id="rOpen" type="range" min="0" max="1" step="0.01" value="1" />
+      </label>
+      <label>страница <b id="vPage">3</b>
+        <input id="rPage" type="range" min="0" max="6" step="1" value="3" />
+      </label>
+      <div class="row">
+        <button id="anim">раскрыть с анимацией</button>
+        <button id="prev">← лист</button>
+        <button id="next">лист →</button>
+        <button id="reset">сбросить поворот</button>
+      </div>
+      <div id="err"></div>
+    </div>
+
+    <script type="module">
+      // Импорт исходника напрямую: правишь сцену — стенд обновляется мгновенно
+      // через горячую замену, без пересборки сайта.
+      import { createBook } from "/app/components/bestiary/threeBook.ts";
+
+      const SRC = [
+        "cover-front", "endpaper", "page-left", "page-right", "spine", "strap", "plate",
+        "normal-cover", "normal-page", "normal-plate",
+        "foredge", "foredge-normal", "headband", "strap-normal", "catch", "catch-normal",
+      ];
+
+      const load = (name) =>
+        new Promise((ok, no) => {
+          const i = new Image();
+          i.onload = () => ok(i);
+          i.onerror = () => no(new Error(name));
+          i.src = `/img/bestiary/${name}.webp`;
+        });
+
+      const err = document.getElementById("err");
+      let scene = null;
+
+      try {
+        const im = await Promise.all(SRC.map(load));
+        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate,
+          nCover, nPage, nPlate, foredge, nForedge, headband, nStrap, catchPlate, nCatch] = im;
+        scene = createBook(document.getElementById("book"), {
+          coverFront, endpaper, pageLeft, pageRight, spine, strap, plate,
+          nCover, nPage, nPlate, foredge, nForedge, headband, nStrap, catchPlate, nCatch,
+        });
+        if (!scene) throw new Error("сцена не создалась — нет WebGL?");
+      } catch (e) {
+        err.textContent = "не удалось: " + e.message;
+      }
+
+      const rOpen = document.getElementById("rOpen");
+      const rPage = document.getElementById("rPage");
+      const vOpen = document.getElementById("vOpen");
+      const vPage = document.getElementById("vPage");
+
+      // Ползунки ставят позу МГНОВЕННО: ждать 2.6 с на каждый сдвиг бессмысленно.
+      const apply = () => {
+        vOpen.textContent = (+rOpen.value).toFixed(2);
+        vPage.textContent = rPage.value;
+        scene?.pose(+rOpen.value, +rPage.value);
+      };
+      rOpen.addEventListener("input", apply);
+      rPage.addEventListener("input", apply);
+      apply();
+
+      document.getElementById("anim").addEventListener("click", (e) => {
+        // Живой ход, как на сайте: ставим цель, сцена доезжает сама.
+        const to = +rOpen.value > 0.5 ? 0 : 1;
+        scene?.target(to, +rPage.value);
+        rOpen.value = String(to);
+        vOpen.textContent = to.toFixed(2);
+        e.currentTarget.textContent = to ? "закрыть с анимацией" : "раскрыть с анимацией";
+      });
+      document.getElementById("prev").addEventListener("click", () => {
+        rPage.value = String(Math.max(0, +rPage.value - 1));
+        scene?.target(+rOpen.value, +rPage.value);
+        vPage.textContent = rPage.value;
+      });
+      document.getElementById("next").addEventListener("click", () => {
+        rPage.value = String(Math.min(6, +rPage.value + 1));
+        scene?.target(+rOpen.value, +rPage.value);
+        vPage.textContent = rPage.value;
+      });
+      document.getElementById("reset").addEventListener("click", () => {
+        // Возврат в исходный ракурс: докручиваем накопленный поворот обратно.
+        scene?.orbit(-1e5, -1e5);
+        scene?.orbit(1e5 * 0, 0);
+      });
+
+      // Поворот перетаскиванием.
+      const cv = document.getElementById("book");
+      let drag = null;
+      cv.addEventListener("pointerdown", (e) => {
+        cv.setPointerCapture(e.pointerId);
+        drag = { x: e.clientX, y: e.clientY, t: performance.now(), vx: 0, vy: 0 };
+      });
+      cv.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const dt = Math.max(1, performance.now() - drag.t);
+        drag.vx = ((e.clientX - drag.x) / dt) * 1000;
+        drag.vy = ((e.clientY - drag.y) / dt) * 1000;
+        scene?.orbit(e.clientX - drag.x, e.clientY - drag.y);
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        drag.t = performance.now();
+      });
+      cv.addEventListener("pointerup", () => {
+        if (drag) scene?.release(drag.vx, drag.vy);
+        drag = null;
+      });
+
+      window.addEventListener("resize", () => scene?.resize());
+    </script>
+  </body>
+</html>

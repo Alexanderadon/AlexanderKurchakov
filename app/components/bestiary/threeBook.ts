@@ -74,6 +74,11 @@ export interface BookScene {
   target(open: number, page: number): void;
   /** Текущее положение — чтобы снаружи знать, можно ли листать дальше. */
   readonly state: { open: number; page: number; busy: boolean };
+  /**
+   * Мгновенно ставит позу, без хода к цели. Нужно стенду: там смотрят статичное
+   * состояние, и ждать 2.6 с на каждый сдвиг ползунка бессмысленно.
+   */
+  pose(open: number, page: number): void;
   /** Крутить книгу перетаскиванием: сдвиг в пикселях за кадр движения. */
   orbit(dx: number, dy: number): void;
   /** Отпустили — дальше по инерции. */
@@ -787,6 +792,12 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       tgt.page = Math.max(0, Math.min(LEAVES, page));
     },
     state,
+    pose(open: number, page: number): void {
+      cur.open = clamp01(open);
+      cur.page = Math.max(0, Math.min(LEAVES, page));
+      tgt.open = cur.open;
+      tgt.page = cur.page;
+    },
     orbit(dx: number, dy: number): void {
       orb.yaw -= dx * 0.006;
       orb.pitch -= dy * 0.005;
