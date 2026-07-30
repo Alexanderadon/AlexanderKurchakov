@@ -88,6 +88,12 @@ export interface BookScene {
   orbit(dx: number, dy: number): void;
   /** Отпустили — дальше по инерции. */
   release(vx: number, vy: number): void;
+  /**
+   * Сброс накопленного поворота в ноль. Компенсировать «докруткой» через orbit
+   * нельзя: он клампует углы, и попытка стенда вернуть камеру парой orbit(±1e5)
+   * просто вбивала её в угловые пределы — все «сбросы» смотрели сверху-сзади.
+   */
+  resetView(): void;
   resize(): void;
   dispose(): void;
 }
@@ -108,12 +114,16 @@ const SHEET_T = 0.004;
 /** Просвет между верхней страницей и веером стопки — толщина листа бумаги. */
 const PAPER_LIFT = 0.0015;
 /**
- * Ремешок замка: длина прямого участка от корня до угла крышки и радиус самого
- * угла. Дальше ремень идёт прямо вниз вдоль обреза — см. режим wrap в
- * bendableMaterial.
+ * Ремешок замка, кусочный обход тома (режим wrap в bendableMaterial): прямо от
+ * корня до угла крышки → дуга R на углу → спуск DROP вдоль обреза → дуга R2 под
+ * нижний угол → хвост ложится на изнанку задней крышки, где его ждёт ответная
+ * планка. DROP выведен из посадки: корень лежит на верхе передней крышки
+ * (BLOCK_T + 2·PAPER_LIFT + COVER_T), хвост — под задней (−COVER_T − полремня).
  */
 const STRAP_FLAT = 0.131;
 const STRAP_R = 0.03;
+const STRAP_DROP = 0.286;
+const STRAP_R2 = 0.025;
 /** «Квадрат» — выступ крышки за обрез блока, у переплётчиков миллиметра три. */
 const SQUARE = 0.028;
 /** Такт раскрытия и такт листания, секунды. Книга тяжёлая: спешка её убивает. */
@@ -269,9 +279,14 @@ function bendableMaterial(
     ? `
       float s = position.x;
       float q = 1.5708 * clamp(uBend, 0.0, 1.0);
-      float rem = max(s - ${STRAP_FLAT.toFixed(4)}, 0.0);
-      float a = min(rem / ${STRAP_R.toFixed(4)}, q);
-      float rem2 = max(rem - a * ${STRAP_R.toFixed(4)}, 0.0);
+      float r = max(s - ${STRAP_FLAT.toFixed(4)}, 0.0);
+      float a1 = min(r / ${STRAP_R.toFixed(4)}, q);
+      float r1 = max(r - a1 * ${STRAP_R.toFixed(4)}, 0.0);
+      float d = min(r1, ${STRAP_DROP.toFixed(4)});
+      float r2 = max(r1 - d, 0.0);
+      float a2 = min(r2 / ${STRAP_R2.toFixed(4)}, q);
+      float r3 = max(r2 - a2 * ${STRAP_R2.toFixed(4)}, 0.0);
+      float a = a1 + a2;
       float dir = ${dir.toFixed(1)};`
     : `
       float wid = ${width.toFixed(4)};
@@ -297,8 +312,10 @@ function bendableMaterial(
   // Смещение вершин. Бумаге — дуга и ПРОВИС свободного края (у краёв по высоте
   // сильнее, чем в середине; считается после изгиба, поэтому с ним не спорит).
   const bendPos = wrap
-    ? `transformed.x = min(s, ${STRAP_FLAT.toFixed(4)}) + ${STRAP_R.toFixed(4)} * sin(a) + rem2 * cos(a);
-      transformed.z += dir * (${STRAP_R.toFixed(4)} * (1.0 - cos(a)) + rem2 * sin(a));`
+    ? `transformed.x = min(s, ${STRAP_FLAT.toFixed(4)}) + ${STRAP_R.toFixed(4)} * sin(a1) + d * cos(a1)
+        + ${STRAP_R2.toFixed(4)} * (sin(a) - sin(a1)) + r3 * cos(a);
+      transformed.z += dir * (${STRAP_R.toFixed(4)} * (1.0 - cos(a1)) + d * sin(a1)
+        + ${STRAP_R2.toFixed(4)} * (cos(a1) - cos(a)) + r3 * sin(a));`
     : `transformed.x = s * sa;
       transformed.z += dir * s * ca;
       transformed.z -= dir * uBend * 0.045 * pow(u, 2.2) * (0.3 + 0.7 * abs(v));`;
@@ -822,9 +839,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }
     g.add(plate);
 
-    // Длина ремешка выверена под обход: прямой участок до угла, четверть дуги на
-    // углу и спуск вдоль обреза до нижней крышки — кончик не торчит из-под тома.
-    const strapW = 0.48;
+    // Длина ремешка выверена под обход: прямой участок, угол крышки, спуск по
+    // обрезу, нижний угол и короткий хвост на изнанке задней крышки — к планке.
+    const strapW = 0.52;
     // Ремешок — тонкая КОРОБКА с сеткой по длине: плоскость с торца исчезала.
     // Сегменты нужны шейдеру изгиба, он гнёт по X.
     const strapH = strapW * (106 / 620);
@@ -863,6 +880,29 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     straps.push(strap);
     strapBends.push(bend);
     strapBends.push(edgeSkin.bend);
+  }
+
+  // Ответная планка замка: латунь с крюком на ИЗНАНКЕ задней крышки — туда
+  // приходит хвост ремешка. Задняя крышка неподвижна, поэтому планки — дети
+  // книги, а не петли: при открывании остаются на месте. Текстура планки была
+  // загружена с самого начала, но после переезда на three её никто не ставил
+  // в сцену — замок висел без ответной части.
+  const catchMat = new MeshStandardMaterial({
+    map: T.catchPlate,
+    normalMap: T.nCatch,
+    normalScale: new Vector2(1.1, 1.1),
+    roughness: 0.45,
+    metalness: 0.62,
+    alphaTest: 0.5,
+  });
+  catchMat.alphaToCoverage = true;
+  for (const sy of [0.27, -0.27]) {
+    const cp = new Mesh(new PlaneGeometry(0.052, 0.127), catchMat);
+    // Rz кладёт длину планки вдоль ремешка (по x), Ry(π) разворачивает лицом
+    // вниз — планка смотрит в пол, как и весь низ тома.
+    cp.rotation.set(0, Math.PI, Math.PI / 2);
+    cp.position.set(0.957, PAGE_H * sy * 0.72, -COVER_T - 0.0008);
+    book.add(cp);
   }
 
   // ── переворачиваемый лист: плоскость, гнущаяся в шейдере.
@@ -1184,6 +1224,12 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     release(vx: number, vy: number): void {
       orb.vYaw = -vx * 0.006;
       orb.vPitch = -vy * 0.005;
+    },
+    resetView(): void {
+      orb.yaw = 0;
+      orb.pitch = 0;
+      orb.vYaw = 0;
+      orb.vPitch = 0;
     },
     resize,
     dispose(): void {

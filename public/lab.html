@@ -129,11 +129,9 @@
         scene?.target(+rOpen.value, +rPage.value);
         vPage.textContent = rPage.value;
       });
-      document.getElementById("reset").addEventListener("click", () => {
-        // Возврат в исходный ракурс: докручиваем накопленный поворот обратно.
-        scene?.orbit(-1e5, -1e5);
-        scene?.orbit(1e5 * 0, 0);
-      });
+      // Прямой сброс: пара orbit(±1e5) не возвращала камеру, а вбивала углы в
+      // клампы — «сброс» смотрел сверху-сзади, и все боковые ракурсы совпадали.
+      document.getElementById("reset").addEventListener("click", () => scene?.resetView());
 
       // Поворот перетаскиванием.
       const cv = document.getElementById("book");
