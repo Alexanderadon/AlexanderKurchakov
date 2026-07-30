@@ -117,14 +117,14 @@ const phase = (t: number, a: number, b: number): number => clamp01((t - a) / (b 
  */
 function leafFall(x: number): number {
   const t = clamp01(x);
-  // Подхват: быстрый старт, замедление к вертикали.
-  const lift = 1 - Math.pow(1 - Math.min(1, t / 0.55), 2.4);
-  // Падение: ускорение под собственным весом на второй половине хода.
-  const fall = Math.pow(clamp01((t - 0.45) / 0.55), 1.7);
-  const base = 0.55 * lift + 0.45 * fall;
-  // Затухающее колебание на посадке: два касания, не пружина.
-  const settle = t > 0.86 ? Math.sin((t - 0.86) * 34) * Math.pow(1 - (t - 0.86) / 0.14, 3) * 0.035 : 0;
-  return clamp01(base + settle);
+  // Перекос времени: первая половина хода идёт быстрее второй. Это и даёт
+  // ощущение, что лист подхватили, а дальше он летит сам.
+  const u = Math.pow(t, 0.8);
+  // Сглаживание пятой степени. У обычного сглаживания нулевая только СКОРОСТЬ на
+  // концах, а ускорение прыгает — глаз читает это как толчок в начале и стоп в
+  // конце. Здесь ноль и у скорости, и у ускорения: движение начинается и кончается
+  // незаметно.
+  return u * u * u * (u * (u * 6 - 15) + 10);
 }
 
 /**
@@ -171,12 +171,22 @@ function bendableMaterial(map: Texture, width: number, cut = false): {
   // s = position.x + bw, но геометрия и листа, и ремешка сдвинута так, что x
   // начинается с НУЛЯ у петли: оба гнулись, будто петля на полметра позади, а
   // ремешок вдобавок брал радиус чужой ширины и отлетал от бляшки.
+  // ПРОГРЕССИВНЫЙ изгиб вместо равномерной дуги.
+  //
+  // Дуга постоянного радиуса гнёт лист как жесть: кривизна одинакова у петли и у
+  // свободного края. Настоящая бумага ведёт себя иначе — у корешка она держится
+  // почти плоско, а закручивается тем сильнее, чем дальше от петли.
+  //
+  // Угол растёт по степени: a = uBend·(s/wid)^1.7. Радиус берётся как Reff = s/a,
+  // поэтому длина дуги остаётся равной s — бумага не растягивается, и это
+  // отличает настоящий изгиб от простого поворота.
   const bendCode = (target: string) => `
     if (uBend > 0.001) {
       float wid = ${width.toFixed(4)};
       float s = position.x;                 // расстояние от петли
-      float R = wid / uBend;
-      float a = s / R;
+      float u = clamp(s / wid, 0.0, 1.0);
+      float a = uBend * pow(u, 1.7);
+      float R = a > 0.0005 ? s / a : 1.0e6;
       ${target}
     }`;
   material.onBeforeCompile = (shader) => {
@@ -253,16 +263,16 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const sun = new DirectionalLight(0xfff4e0, 1.55);
   sun.position.set(-1.1, 1.7, 2.6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048);
   // Смещение обязательно: без него поверхность затеняет саму себя, и по краям
   // блока идут регулярные светлые штрихи, а левая страница уходит в серость.
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.02;
   const sc = sun.shadow.camera;
-  sc.left = -2.2;
-  sc.right = 2.2;
-  sc.top = 2.2;
-  sc.bottom = -2.2;
+  sc.left = -3.2;
+  sc.right = 3.2;
+  sc.top = 3.2;
+  sc.bottom = -3.2;
   sc.near = 0.2;
   sc.far = 8;
   scene.add(sun);
@@ -499,29 +509,6 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   frontCover.castShadow = true;
   coverHinge.add(frontCover);
 
-  // Ответные планки на задней крышке: штырь, за который цепляется ремешок.
-  // Без них замок застёгивался в воздух — «непонятно за что» было буквально.
-  const catchMat = new MeshStandardMaterial({
-    map: T.catchPlate,
-    normalMap: T.nCatch,
-    normalScale: new Vector2(1.2, 1.2),
-    roughness: 0.4,
-    metalness: 0.72,
-    transparent: true,
-    alphaTest: 0.5,
-  });
-  const catchW = 0.09;
-  for (const sy of [0.27, -0.27]) {
-    // Планка лежит НА задней крышке, у самого обреза: именно туда приходит
-    // ремешок. Процедурные штыри, стоявшие тут раньше, роль обозначали, но
-    // читались кубиками.
-    const plateBack = new Mesh(new PlaneGeometry(catchW, catchW * 2.4), catchMat);
-    plateBack.position.set(PAGE_W + SQUARE - catchW * 0.5, PAGE_H * sy, 0.001);
-    plateBack.rotation.z = Math.PI / 2;
-    plateBack.castShadow = true;
-    book.add(plateBack);
-  }
-
   const claspGroups: Group[] = [];
   const straps: Mesh[] = [];
   const strapBends: IUniform<number>[] = [];
@@ -559,7 +546,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     g.add(plate);
 
     const strapW = 0.42;
-    const sgeo = new PlaneGeometry(strapW, strapW * (106 / 620), 18, 1);
+    // Ремешок — тонкая КОРОБКА с сеткой по длине: плоскость с торца исчезала.
+    // Сегменты нужны шейдеру изгиба, он гнёт по X.
+    const sgeo = new BoxGeometry(strapW, strapW * (106 / 620), 0.008, 18, 1, 1);
     sgeo.translate(strapW / 2, 0, 0);
     const { material, bend } = bendableMaterial(T.strap, strapW, true);
     // Рельеф кожи на ремешке: до этого он был единственной поверхностью совсем
@@ -716,8 +705,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const leafBend = Math.sin(clamp01(leafPhase) * Math.PI) * 1.6;
     leafFront.bend.value = leafBend;
     leafBackMat.bend.value = leafBend;
+    leaf.visible = leafPhase > 0.002 && leafPhase < 0.998;
     leafBack.visible = leaf.visible;
-    leaf.visible = leafPhase > 0.002 && leafPhase < 0.996;
 
     renderer.render(scene, camera);
     canvas.dataset.bookState = cur.open.toFixed(3) + ':' + cur.page.toFixed(2);
