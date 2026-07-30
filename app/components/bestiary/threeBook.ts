@@ -323,6 +323,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     t.repeat.set(3, 1); // обрез длинный, плитка повторяется вдоль него
     t.needsUpdate = true;
   }
+  // Переплёт: сторона, где блок сшит. Тёмная, матовая, без кромок.
+  const binding = new MeshStandardMaterial({ color: 0x24211b, roughness: 0.95, metalness: 0 });
   const blockSide = new MeshStandardMaterial({ color: 0x6b6659, roughness: 1, metalness: 0 });
   const edgeMat = new MeshStandardMaterial({
     map: edges.map,
@@ -375,7 +377,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // ── блок страниц: тоже тело. Обрез по бокам — светлая бумага, сверху страница.
   const block = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T), [
     edgeCross,    // +x: передний обрез — UV этой грани повёрнуты
-    edgeCross,    // -x: стена жёлоба
+    binding,      // -x: КОРЕШКОВАЯ сторона, книга здесь сшита — обреза нет
     edgeMat,      // +y: верхний обрез
     edgeMat,      // -y: нижний обрез
     blockSide,    // +z: под верхней страницей
@@ -387,8 +389,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   // ── левая половина блока: появляется, когда листы переходят налево.
   const leftBlock = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, 0.01), [
-    edgeCross,    // +x: стена жёлоба слева
-    edgeCross,    // -x: обрез левой стопки смотрит наружу
+    binding,      // +x: корешковая сторона левой стопки
+    edgeCross,    // -x: передний обрез левой стопки, смотрит наружу
     edgeMat,
     edgeMat,
     blockSide,
