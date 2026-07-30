@@ -21,7 +21,7 @@
 // книгу открывают. Первый экран не потяжелел ни на байт — это было главное
 // возражение против библиотеки, и оно снято технически.
 
-import { makeEdgeMaps } from "./edgeMaps";
+import { deriveMaps } from "./derive";
 import {
   AgXToneMapping,
   AmbientLight,
@@ -36,6 +36,7 @@ import {
   PerspectiveCamera,
   PMREMGenerator,
   PlaneGeometry,
+  RepeatWrapping,
   BackSide,
   Scene,
   SRGBColorSpace,
@@ -56,6 +57,12 @@ export interface BookTextures {
   nCover: TexImageSource;
   nPage: TexImageSource;
   nPlate: TexImageSource;
+  foredge: TexImageSource;
+  nForedge: TexImageSource;
+  headband: TexImageSource;
+  nStrap: TexImageSource;
+  catchPlate: TexImageSource;
+  nCatch: TexImageSource;
 }
 
 export interface BookScene {
@@ -268,12 +275,24 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     nCover: makeNormal(tex.nCover),
     nPage: makeNormal(tex.nPage),
     nPlate: makeNormal(tex.nPlate),
+    foredge: makeTexture(tex.foredge),
+    nForedge: makeNormal(tex.nForedge),
+    headband: makeTexture(tex.headband),
+    nStrap: makeNormal(tex.nStrap),
+    catchPlate: makeTexture(tex.catchPlate),
+    nCatch: makeNormal(tex.nCatch),
   };
 
   for (const key of ['cover', 'end', 'spine', 'plate'] as const) {
     T[key].anisotropy = aniso;
     T[key].needsUpdate = true;
   }
+
+  // Карты рельефа обложки выводятся ИЗ её цветной текстуры. Сгенерированная
+  // отдельно карта нормалей совпадала с рисунком на 0.12 по корреляции — то есть
+  // почти не совпадала: свет ложился по одному узору, золото нарисовано по
+  // другому, и это читалось кашей. У выведенной совпадение 0.533.
+  const coverRelief = deriveMaps(tex.coverFront, 768, 2.6);
 
   const paper = (map: Texture): MeshStandardMaterial =>
     new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
@@ -289,42 +308,45 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       alphaTest: 0.5,
     });
   const leather = new MeshStandardMaterial({ color: 0x14130f, roughness: 0.78, metalness: 0.05 });
-  // Обрез блока: кромки листов с рельефом. Прежде это была однотонная плита
-  // #6b6659 — самая большая пустая поверхность во всей сцене.
-  const edges = makeEdgeMaps();
+  // Обрез блока: настоящая текстура кромок с картой нормалей. Процедурная
+  // версия (edgeMaps.ts) осталась запасным путём — она гарантирует стыковку и
+  // работает без файлов, но нарисованное волокно бумаги точнее.
+  const edges: { map: Texture; normal: Texture } = { map: T.foredge, normal: T.nForedge };
+  for (const t of [edges.map, edges.normal]) {
+    t.wrapS = RepeatWrapping;
+    t.wrapT = RepeatWrapping;
+    t.repeat.set(3, 1); // обрез длинный, плитка повторяется вдоль него
+    t.needsUpdate = true;
+  }
   const blockSide = new MeshStandardMaterial({ color: 0x6b6659, roughness: 1, metalness: 0 });
-  const edgeMat = edges
-    ? new MeshStandardMaterial({
-        map: edges.map,
-        normalMap: edges.normal,
-        normalScale: new Vector2(1.6, 1.6),
-        roughness: 0.96,
-        metalness: 0,
-      })
-    : blockSide;
+  const edgeMat = new MeshStandardMaterial({
+    map: edges.map,
+    normalMap: edges.normal,
+    normalScale: new Vector2(1.5, 1.5),
+    roughness: 0.96,
+    metalness: 0,
+  });
   // Верх и низ блока показывают те же кромки, но повёрнутые: там стопка видна
   // поперёк. Клонируем текстуру, иначе поворот уедет и на переднем обрезе.
-  const edgeCross = edges
-    ? new MeshStandardMaterial({
-        map: (() => {
-          const t = edges.map.clone();
+  const edgeCross = new MeshStandardMaterial({
+    map: (() => {
+      const t = edges.map.clone();
           t.rotation = Math.PI / 2;
           t.center.set(0.5, 0.5);
           t.needsUpdate = true;
           return t;
         })(),
-        normalMap: (() => {
-          const t = edges.normal.clone();
+    normalMap: (() => {
+      const t = edges.normal.clone();
           t.rotation = Math.PI / 2;
           t.center.set(0.5, 0.5);
           t.needsUpdate = true;
           return t;
         })(),
-        normalScale: new Vector2(1.4, 1.4),
-        roughness: 0.96,
-        metalness: 0,
-      })
-    : blockSide;
+    normalScale: new Vector2(1.3, 1.3),
+    roughness: 0.96,
+    metalness: 0,
+  });
 
   const book = new Group();
   scene.add(book);
@@ -410,19 +432,46 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   book.add(spine);
   book.add(spineFace);
 
+  // Каптал — плетёная лента у корешка сверху и снизу. Мелочь, но именно она
+  // выдаёт ручной переплёт: без неё блок просто упирается в корешок.
+  const headbandMat = new MeshStandardMaterial({
+    map: T.headband,
+    roughness: 0.85,
+    metalness: 0,
+    transparent: true,
+    alphaTest: 0.4,
+  });
+  const headbands: Mesh[] = [];
+  for (const sy of [1, -1]) {
+    const hb = new Mesh(new PlaneGeometry(BLOCK_T * 0.92, 0.034), headbandMat);
+    hb.rotation.x = -Math.PI / 2 * sy;
+    headbands.push(hb);
+    book.add(hb);
+  }
+
   // ── передняя крышка на петле у корешка. Замки — ЕЁ ДЕТИ: поворачивается
   // крышка, они едут с ней сами, без перемножения матриц руками.
   const coverHinge = new Group();
   book.add(coverHinge);
-  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T), [
+  // Коробка ПОДРАЗДЕЛЕНА: у грани с одной вершиной на угол смещать нечего, а
+  // displacement двигает именно вершины. 160×200 на лицевой грани — тиснение
+  // начинает ломать силуэт и отбрасывать собственную тень, чего карта нормалей
+  // не умеет в принципе.
+  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, 160, 200, 1), [
     leather,
     leather,
     leather,
     leather,
     new MeshStandardMaterial({
       map: T.cover,
-      normalMap: T.nCover,
-      normalScale: new Vector2(1.35, 1.35),
+      normalMap: coverRelief ? coverRelief.normal : T.nCover,
+      normalScale: new Vector2(0.85, 0.85),
+      displacementMap: coverRelief ? coverRelief.height : undefined,
+      // Высота тиснения на настоящей книге — полмиллиметра при странице 30 см,
+      // то есть примерно 0.0017 в наших единицах. Берём втрое больше: на экране
+      // полмиллиметра не читается, а втрое — уже да, и ещё не карикатура.
+      displacementScale: coverRelief ? 0.005 : 0,
+      displacementBias: coverRelief ? -0.0015 : 0,
       roughness: 0.62,
       metalness: 0.22,
     }),
@@ -434,12 +483,25 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   // Ответные планки на задней крышке: штырь, за который цепляется ремешок.
   // Без них замок застёгивался в воздух — «непонятно за что» было буквально.
-  const catchMat = new MeshStandardMaterial({ color: 0x9d8a55, roughness: 0.35, metalness: 0.85 });
+  const catchMat = new MeshStandardMaterial({
+    map: T.catchPlate,
+    normalMap: T.nCatch,
+    normalScale: new Vector2(1.2, 1.2),
+    roughness: 0.4,
+    metalness: 0.72,
+    transparent: true,
+    alphaTest: 0.5,
+  });
+  const catchW = 0.09;
   for (const sy of [0.27, -0.27]) {
-    const post = new Mesh(new BoxGeometry(0.05, 0.05, 0.034), catchMat);
-    post.position.set(PAGE_W + SQUARE * 0.4, PAGE_H * sy, -COVER_T * 0.5);
-    post.castShadow = true;
-    book.add(post);
+    // Планка лежит НА задней крышке, у самого обреза: именно туда приходит
+    // ремешок. Процедурные штыри, стоявшие тут раньше, роль обозначали, но
+    // читались кубиками.
+    const plateBack = new Mesh(new PlaneGeometry(catchW, catchW * 2.4), catchMat);
+    plateBack.position.set(PAGE_W + SQUARE - catchW * 0.5, PAGE_H * sy, 0.001);
+    plateBack.rotation.z = Math.PI / 2;
+    plateBack.castShadow = true;
+    book.add(plateBack);
   }
 
   const claspGroups: Group[] = [];
@@ -482,6 +544,11 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const sgeo = new PlaneGeometry(strapW, strapW * (106 / 620), 18, 1);
     sgeo.translate(strapW / 2, 0, 0);
     const { material, bend } = bendableMaterial(T.strap, strapW, true);
+    // Рельеф кожи на ремешке: до этого он был единственной поверхностью совсем
+    // без карты нормалей — плоская краска рядом с рельефной крышкой.
+    material.normalMap = T.nStrap;
+    material.normalScale = new Vector2(1.15, 1.15);
+    material.needsUpdate = true;
     const strap = new Mesh(sgeo, material);
     strap.castShadow = true;
     g.add(strap);
@@ -610,6 +677,11 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.0015);
 
     spine.position.set(0, 0, Math.max(0.004, Math.max(rightT, leftT) - spineR));
+    // Капталы сидят на торцах блока у самого корешка и едут за его толщиной.
+    for (let i = 0; i < headbands.length; i++) {
+      const sy = i === 0 ? 1 : -1;
+      headbands[i].position.set(BLOCK_T * 0.1, (PAGE_H / 2) * sy, Math.max(rightT, leftT) * 0.5);
+    }
     spineFace.position.copy(spine.position);
     spineFace.position.z -= 0.006;
 

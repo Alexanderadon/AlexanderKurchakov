@@ -27,6 +27,12 @@ const ASSETS = [
   "/img/bestiary/normal-cover.webp",
   "/img/bestiary/normal-page.webp",
   "/img/bestiary/normal-plate.webp",
+  "/img/bestiary/foredge.webp",
+  "/img/bestiary/foredge-normal.webp",
+  "/img/bestiary/headband.webp",
+  "/img/bestiary/strap-normal.webp",
+  "/img/bestiary/catch.webp",
+  "/img/bestiary/catch-normal.webp",
 ] as const;
 
 function decode(src: string): Promise<HTMLImageElement> {
@@ -157,8 +163,10 @@ export function Bestiary() {
       .then(({ images, make }) => {
         const cv = turnRef.current;
         if (dead || !cv) return;
-        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate] = images;
-        sceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate });
+        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
+          foredge, nForedge, headband, nStrap, catchPlate, nCatch] = images;
+        sceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
+          foredge, nForedge, headband, nStrap, catchPlate, nCatch });
         // Раскрываем НЕ сразу: книга ждёт закрытой, её можно покрутить. Открывает
         // следующий клик — иначе рассмотреть том не успеваешь.
         sceneRef.current?.target(phase === "open" ? 1 : 0, pageRef.current);
