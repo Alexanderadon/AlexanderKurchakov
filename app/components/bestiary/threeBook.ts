@@ -30,6 +30,7 @@ import {
   Color,
   DirectionalLight,
   Group,
+  LinearFilter,
   Mesh,
   MeshStandardMaterial,
   PCFSoftShadowMap,
@@ -312,16 +313,25 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const paper = (map: Texture): MeshStandardMaterial =>
     new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
   /** Лист с рваным краем: зубцы должны быть ВЫРЕЗАНЫ, а не залиты фоном. */
-  const sheet = (map: Texture, normalMap?: Texture): MeshStandardMaterial =>
-    new MeshStandardMaterial({
+  const sheet = (map: Texture, normalMap?: Texture): MeshStandardMaterial => {
+    map.generateMipmaps = false;
+    map.minFilter = LinearFilter;
+    map.needsUpdate = true;
+    const m = new MeshStandardMaterial({
       map,
       normalMap,
       normalScale: normalMap ? new Vector2(0.7, 0.7) : undefined,
       roughness: 0.95,
       metalness: 0,
-      transparent: true,
+      transparent: false,
       alphaTest: 0.5,
     });
+    // Срез через ПОКРЫТИЕ пикселя, а не через жёсткий порог: сглаживание кадра
+    // само решает, какая доля пикселя закрыта, и рваная кромка выходит ровной, а
+    // не ступенчатой. Работает только при включённом сглаживании — оно у нас есть.
+    m.alphaToCoverage = true;
+    return m;
+  };
   const leather = new MeshStandardMaterial({ color: 0x14130f, roughness: 0.78, metalness: 0.05 });
   // Обрез блока: настоящая текстура кромок с картой нормалей. Процедурная
   // версия (edgeMaps.ts) осталась запасным путём — она гарантирует стыковку и
