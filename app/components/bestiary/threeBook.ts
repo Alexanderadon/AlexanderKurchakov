@@ -506,7 +506,14 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // толщины книги с крышками: только тогда корешок сходится с крышками без
   // ступеньки.
   const sw = BLOCK_T + COVER_T * 2;
-  const spineR = sw / 2;
+  // Дуга корешка — ЭЛЛИПС, а не полукруг. По толщине она обязана пройти всю
+  // книгу (иначе не сойдётся с крышками), а НАРУЖУ выпирать лишь слегка: у
+  // настоящего тома выступ корешка около шестой части толщины. Полукруг давал
+  // выступ 0.167 — почти пол-толщины, и с торца книга показывала чёрный диск
+  // шире самих крышек.
+  const spineRz = sw / 2;      // полуось по толщине
+  const spineRx = sw * 0.17;   // выступ наружу
+  const spineR = spineRz;      // для посадки по глубине
   const SPINE_SEG = 28;
   const spineGeo = new PlaneGeometry(1, coverH, SPINE_SEG, 1);
   const spinePos = spineGeo.attributes.position;
@@ -516,8 +523,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // середина дуги приходится ровно на самую левую точку корешка.
     const u = spineUv.getX(i);
     const a = (u - 0.5) * Math.PI;
-    spinePos.setX(i, -spineR * Math.cos(a));
-    spinePos.setZ(i, spineR * Math.sin(a));
+    spinePos.setX(i, -spineRx * Math.cos(a));
+    spinePos.setZ(i, spineRz * Math.sin(a));
   }
   spineGeo.computeVertexNormals();
 
@@ -799,7 +806,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // Капталы сидят на торцах блока у самого корешка и едут за его толщиной.
     for (let i = 0; i < headbands.length; i++) {
       const sy = i === 0 ? 1 : -1;
-      headbands[i].position.set(BLOCK_T * 0.1, (PAGE_H / 2) * sy, Math.max(rightT, leftT) * 0.5);
+      const hb = headbands[i];
+      hb.position.set(-spineRx * 0.45, (PAGE_H / 2) * sy * 0.995, spine.position.z);
+      hb.scale.set(spine.scale.x, 1, 1);
     }
     spineFace.position.copy(spine.position);
     spineFace.position.z -= 0.006;
