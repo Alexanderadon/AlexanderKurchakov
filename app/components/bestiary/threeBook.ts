@@ -93,8 +93,13 @@ export interface BookScene {
 
 /** Ширина страницы принята за единицу; остальное считается от неё. */
 const PAGE_W = 1;
-/** Пропорция обложки, снятая с ассета 1122×1402. */
-const PAGE_H = PAGE_W / 0.8003;
+/**
+ * Пропорция снята с обложки 1043×1508 — готический канон для фолианта.
+ * Прежние 1:1.2495 были сняты со старого ассета 1122×1402 и оказались слишком
+ * квадратными: настоящая средневековая страница заметно уже и выше.
+ * Менять это число без новой обложки нельзя — тиснение растянется.
+ */
+const PAGE_H = PAGE_W * 1.4459;
 const BLOCK_T = 0.29;
 const COVER_T = 0.022;
 /** «Квадрат» — выступ крышки за обрез блока, у переплётчиков миллиметра три. */
@@ -659,7 +664,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const plateT = 0.014;
   for (const sy of [0.27, -0.27]) {
     const g = new Group();
-    g.position.set(PAGE_W + SQUARE - 0.145, PAGE_H * sy, COVER_T);
+    g.position.set(GROOVE + PAGE_W + SQUARE - 0.145, PAGE_H * sy * 0.72, COVER_T);
     coverHinge.add(g);
     claspGroups.push(g);
 
