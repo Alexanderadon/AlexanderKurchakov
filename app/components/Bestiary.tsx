@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { useLang } from "~/lib/i18n";
 import { prefersReducedMotion } from "~/lib/media";
 import { LEAVES, OPEN_MS, SPREAD_RATIO } from "~/lib/bestiary";
+import { bookCreak, bookRustle } from "~/lib/bookSounds";
 import type { BookScene } from "./bestiary/threeBook";
 
 /** peek — книга в модалке, но ещё закрыта: её можно рассмотреть и покрутить. */
@@ -138,6 +139,8 @@ export function Bestiary() {
       if (next < 0 || next > LEAVES) return;
       pageRef.current = next;
       sc.target(1, next);
+      // Шелест уважает reduced motion: кому не нужна анимация, тому и звук её.
+      if (!prefersReducedMotion()) bookRustle();
     },
     [phase],
   );
@@ -148,6 +151,7 @@ export function Bestiary() {
     const instant = prefersReducedMotion();
     setPhase("closing");
     aim(0);
+    if (!instant) bookCreak();
     after(instant ? 0 : OPEN_MS, () => {
       setPhase("shut");
       btnRef.current?.focus();
@@ -288,10 +292,14 @@ export function Bestiary() {
       if (sc.state.open < 0.02) {
         setPhase("opening");
         sc.target(1, pageRef.current);
+        if (!prefersReducedMotion()) bookCreak();
         after(OPEN_MS, () => setPhase("open"));
         return;
       }
       const r = e.currentTarget.getBoundingClientRect();
+      // Точка подхвата по высоте: лист закручивается сильнее с той стороны,
+      // за которую его взяли.
+      sc.turnFrom(1 - 2 * ((e.clientY - r.top) / r.height));
       flip(e.clientX - r.left > r.width / 2 ? 1 : -1);
     },
     [after, flip],

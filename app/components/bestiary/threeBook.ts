@@ -43,6 +43,7 @@ import {
   RepeatWrapping,
   RGBADepthPacking,
   BackSide,
+  DoubleSide,
   Scene,
   ShadowMaterial,
   SRGBColorSpace,
@@ -85,6 +86,12 @@ export interface BookScene {
    * состояние, и ждать 2.6 с на каждый сдвиг ползунка бессмысленно.
    */
   pose(open: number, page: number): void;
+  /**
+   * Точка подхвата следующего листа по высоте: -1 низ, +1 верх. Зовётся перед
+   * target() с новой страницей; лист закручивается сильнее с той стороны, за
+   * которую его взяли.
+   */
+  turnFrom(fromY: number): void;
   /** Крутить книгу перетаскиванием: сдвиг в пикселях за кадр движения. */
   orbit(dx: number, dy: number): void;
   /** Отпустили — дальше по инерции. */
@@ -245,11 +252,19 @@ function bendableMaterial(
    * них.
    */
   dip: IUniform<number>;
+  /**
+   * Веер листа: базовая крутизна и перекос по высоте. Управляются снаружи —
+   * лист подхватывают за точку тычка, и каждый переворот летит чуть по-своему.
+   */
+  fanBase: IUniform<number>;
+  fanTilt: IUniform<number>;
   /** Тот же изгиб для карты теней — иначе тень рисуется от плоского листа. */
   depth: MeshDepthMaterial;
 } {
   const bend: IUniform<number> = { value: 0 };
   const dip: IUniform<number> = { value: 0 };
+  const fanBase: IUniform<number> = { value: 0.97 };
+  const fanTilt: IUniform<number> = { value: 0.35 };
   // Крутизна та же, что у лежащей страницы и веера блока (DIP_K): при разной
   // лист и страница под ним расходятся формой, и в жёлобе открывается щель.
   const dipCode = `
@@ -299,9 +314,10 @@ function bendableMaterial(
       // ВЕЕР. Линия сгиба у настоящего листа НЕ параллельна корешку: у одного
       // края он зажат туже, к другому завёрт раскрывается. Форма ближе к конусу
       // с вершиной у корешка, чем к цилиндру. Без веера лист читается свёрнутым
-      // жестяным листом.
+      // жестяным листом. База и перекос конуса — юниформы: перекос ставится от
+      // точки подхвата, база дрожит от переворота к перевороту.
       float v = ${halfH > 0 ? `clamp(position.y / ${halfH.toFixed(4)}, -1.0, 1.0)` : `0.0`};
-      float fan = mix(1.32, 0.62, 0.5 + 0.5 * v);
+      float fan = uFanBase - uFanTilt * v;
       float a = uBend * fan * pow(u, 1.7);
       // Радиус НЕ вычисляем. Точка на дуге — это s·sin(a)/a и s·(1−cos a)/a, и обе
       // дроби при a→0 стремятся к конечному пределу (к s и к 0). Прежний код брал
@@ -336,8 +352,13 @@ function bendableMaterial(
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uBend = bend;
     shader.uniforms.uDip = dip;
+    shader.uniforms.uFanBase = fanBase;
+    shader.uniforms.uFanTilt = fanTilt;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform float uBend;\nuniform float uDip;")
+      .replace(
+        "#include <common>",
+        "#include <common>\nuniform float uBend;\nuniform float uDip;\nuniform float uFanBase;\nuniform float uFanTilt;",
+      )
       .replace(
         "#include <beginnormal_vertex>",
         "#include <beginnormal_vertex>" +
@@ -364,8 +385,13 @@ function bendableMaterial(
   depth.onBeforeCompile = (shader) => {
     shader.uniforms.uBend = bend;
     shader.uniforms.uDip = dip;
+    shader.uniforms.uFanBase = fanBase;
+    shader.uniforms.uFanTilt = fanTilt;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform float uBend;\nuniform float uDip;")
+      .replace(
+        "#include <common>",
+        "#include <common>\nuniform float uBend;\nuniform float uDip;\nuniform float uFanBase;\nuniform float uFanTilt;",
+      )
       .replace(
         "#include <begin_vertex>",
         "#include <begin_vertex>" +
@@ -373,7 +399,7 @@ function bendableMaterial(
       );
   };
 
-  return { material, bend, dip, depth };
+  return { material, bend, dip, fanBase, fanTilt, depth };
 }
 
 export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
@@ -553,13 +579,52 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const coverH = PAGE_H + SQUARE * 2;
 
   // ── задняя крышка: коробка, а не плоскость. Толщина есть по построению.
+  //
+  // Снаружи — СЛЕПОЕ тиснение: тот же штамп, что на лицевой, но без золота.
+  // Гладкая кожа с тыла выдавала заготовку.
+  //
+  // Ориентация выяснена опытом: задняя грань коробки показывает карту БЕЗ
+  // зеркала (поворот на 180° при первой попытке ставил заголовок вверх ногами).
+  // Оригинальные карты дают прямой макет того же панельного штампа. Вдавленность
+  // слепого тиснения — инверсия R и G у нормалей разом (наклоны разворачиваются,
+  // выступ читается ямой) плюс отрицательный displacement: штамп давит в кожу.
+  const recessNormal = (t: Texture): Texture => {
+    const img = t.image as HTMLCanvasElement;
+    const cv = document.createElement("canvas");
+    cv.width = img.width;
+    cv.height = img.height;
+    const g2 = cv.getContext("2d");
+    if (!g2) return t;
+    g2.drawImage(img, 0, 0);
+    const d = g2.getImageData(0, 0, cv.width, cv.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      d.data[i] = 255 - d.data[i];
+      d.data[i + 1] = 255 - d.data[i + 1];
+    }
+    g2.putImageData(d, 0, 0);
+    const nt = new Texture(cv);
+    nt.needsUpdate = true;
+    return nt;
+  };
+  const backTooling = coverRelief
+    ? new MeshStandardMaterial({
+        color: 0x1a1712,
+        normalMap: recessNormal(coverRelief.normal),
+        normalScale: new Vector2(1.25, 1.25),
+        displacementMap: coverRelief.height,
+        displacementScale: -0.004,
+        displacementBias: 0.001,
+        roughness: 0.74,
+        metalness: 0.04,
+      })
+    : leather;
   const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, 160, 200, 1), [
     leather,
     leather,
     leather,
     leather,
     paper(T.end),
-    leather,
+    backTooling,
   ]);
   backCover.position.set(GROOVE + coverW / 2, 0, -COVER_T / 2);
   backCover.receiveShadow = true;
@@ -969,6 +1034,153 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }
   }
 
+  // ── Угловые оковки: латунные накладки по углам обеих крышек — тем же приёмом,
+  // что бляшки замков: вырезанные по альфе слои, вложенные с уменьшением.
+  // Текстура рисуется кодом: щиток с огивой, гравировка по контуру, трилистник
+  // у угла и две заклёпки на лапах.
+  const cornerTex = (() => {
+    const S = 256;
+    const cv = document.createElement("canvas");
+    cv.width = S;
+    cv.height = S;
+    const g = cv.getContext("2d");
+    if (!g) return null;
+    const shape = (): void => {
+      g.beginPath();
+      g.moveTo(3, 3);
+      g.lineTo(S * 0.94, 3);
+      g.lineTo(S * 0.99, S * 0.1);
+      g.quadraticCurveTo(S * 0.52, S * 0.2, S * 0.34, S * 0.34);
+      g.quadraticCurveTo(S * 0.2, S * 0.52, S * 0.1, S * 0.99);
+      g.lineTo(3, S * 0.94);
+      g.closePath();
+    };
+    const grad = g.createLinearGradient(0, 0, S * 0.62, S * 0.62);
+    grad.addColorStop(0, "#d9b568");
+    grad.addColorStop(0.55, "#a8874a");
+    grad.addColorStop(1, "#6f5730");
+    g.fillStyle = grad;
+    shape();
+    g.fill();
+    g.lineWidth = S * 0.016;
+    g.strokeStyle = "rgba(46,35,16,0.9)";
+    shape();
+    g.stroke();
+    // Гравированная линия параллельно контуру.
+    g.save();
+    g.translate(S * 0.045, S * 0.045);
+    g.scale(0.85, 0.85);
+    g.lineWidth = S * 0.014;
+    g.strokeStyle = "rgba(56,42,18,0.75)";
+    shape();
+    g.stroke();
+    g.restore();
+    // Трилистник у самого угла — пробит насквозь.
+    g.globalCompositeOperation = "destination-out";
+    for (const [tx, ty] of [
+      [0.2, 0.115],
+      [0.115, 0.2],
+      [0.205, 0.205],
+    ] as const) {
+      g.beginPath();
+      g.arc(S * tx, S * ty, S * 0.042, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalCompositeOperation = "source-over";
+    // Заклёпки на лапах.
+    for (const [rx, ry] of [
+      [0.79, 0.1],
+      [0.1, 0.79],
+    ] as const) {
+      const rr = S * 0.05;
+      const rg = g.createRadialGradient(S * rx - rr * 0.35, S * ry - rr * 0.35, rr * 0.15, S * rx, S * ry, rr);
+      rg.addColorStop(0, "#f0d489");
+      rg.addColorStop(0.7, "#96793f");
+      rg.addColorStop(1, "#4a3819");
+      g.beginPath();
+      g.arc(S * rx, S * ry, rr, 0, Math.PI * 2);
+      g.fillStyle = rg;
+      g.fill();
+    }
+    const t = new Texture(cv);
+    t.colorSpace = SRGBColorSpace;
+    t.anisotropy = aniso;
+    t.needsUpdate = true;
+    return t;
+  })();
+  if (cornerTex) {
+    const cornerBrass = new MeshStandardMaterial({
+      map: cornerTex,
+      metalness: 0.78,
+      roughness: 0.38,
+      alphaTest: 0.5,
+    });
+    cornerBrass.alphaToCoverage = true;
+    const cornerDark = cornerBrass.clone();
+    cornerDark.color = new Color(0x8a7748);
+    const CORNER_S = 0.17;
+    const cornerGeo = new PlaneGeometry(CORNER_S, CORNER_S);
+    // Слои начинаются ВЫШЕ гребней displacement-тиснения кожи (+0.0055), иначе
+    // рельеф прорастает сквозь латунь.
+    const addCorners = (back: boolean): void => {
+      const cx0 = GROOVE + CORNER_S / 2 - 0.006;
+      const cx1 = GROOVE + coverW - CORNER_S / 2 + 0.006;
+      const cy = coverH / 2 - CORNER_S / 2 + 0.006;
+      const spots: Array<[number, number, number]> = [
+        [cx0, cy, 0],
+        [cx1, cy, -Math.PI / 2],
+        [cx1, -cy, Math.PI],
+        [cx0, -cy, Math.PI / 2],
+      ];
+      for (const [x, y, rz] of spots) {
+        for (const [dz, m, k] of [
+          [0.008, cornerBrass, 1],
+          [0.0055, cornerDark, 0.955],
+          [0.003, cornerDark, 0.91],
+        ] as const) {
+          const c = new Mesh(cornerGeo, m);
+          if (back) {
+            // Ry(π) зеркалит плоскость по x, знак поворота уголка меняется.
+            c.rotation.set(0, Math.PI, -rz);
+            c.position.set(x, y, -COVER_T - dz);
+            book.add(c);
+          } else {
+            c.rotation.set(0, 0, rz);
+            c.position.set(x, y, COVER_T + dz);
+            coverHinge.add(c);
+          }
+          c.scale.setScalar(k);
+          c.castShadow = true;
+        }
+      }
+    };
+    addCorners(false);
+    addCorners(true);
+  }
+
+  // ── Ляссе: шёлковая закладка. У закрытого тома выныривает из-под нижнего
+  // обреза на середине толщины и свисает; у раскрытого хвост выскальзывает
+  // из-под низа жёлоба на стол. Верхний конец УТОПЛЕН в блок: линия входа
+  // читается «между листами», и крепление не нужно.
+  const ribbonGeo = new PlaneGeometry(0.055, 0.42, 1, 18);
+  {
+    const rp = ribbonGeo.attributes.position;
+    for (let i = 0; i < rp.count; i++) {
+      const v = rp.getY(i) / 0.42 + 0.5; // 1 — верх (в блоке), 0 — кончик
+      // Лёгкий увод в сторону и волна по глубине: прямая лента читается
+      // бумажной полосой, шёлк обязан висеть с ленцой.
+      rp.setX(i, rp.getX(i) + Math.sin((1 - v) * 2.4) * 0.03 * (1 - v));
+      rp.setZ(i, Math.sin((1 - v) * Math.PI) * 0.014);
+    }
+    ribbonGeo.computeVertexNormals();
+  }
+  const ribbon = new Mesh(
+    ribbonGeo,
+    new MeshStandardMaterial({ color: 0x8f2430, roughness: 0.52, metalness: 0, side: DoubleSide }),
+  );
+  ribbon.castShadow = true;
+  book.add(ribbon);
+
   // ── переворачиваемый лист: плоскость, гнущаяся в шейдере.
   const leafHinge = new Group();
   book.add(leafHinge);
@@ -1222,9 +1434,20 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // и обе страницы. Любая другая высота отрывает лист от стопок на концах хода.
     leafHinge.position.set(0, 0, 0.004);
     const lift = Math.sin(clamp01(leafPhase) * Math.PI);
-    const leafBend = lift * 1.6;
+    const leafBend = lift * turnFx.amp;
     leafFront.bend.value = leafBend;
     leafBackMat.bend.value = leafBend;
+    leafFront.fanBase.value = turnFx.base;
+    leafFront.fanTilt.value = turnFx.tilt;
+    leafBackMat.fanBase.value = turnFx.base;
+    leafBackMat.fanTilt.value = turnFx.tilt;
+    // Ляссе едет между позами: у закрытой книги висит из-под нижнего обреза на
+    // середине толщины, у раскрытой — хвост выскальзывает из-под низа жёлоба.
+    ribbon.position.set(
+      0.6 - 0.53 * spread,
+      -PAGE_H / 2 - 0.13 - 0.03 * spread,
+      rightT * 0.45 * (1 - spread) + 0.006 * spread,
+    );
     // Ложбина листа гаснет к вертикали: в воздухе жёлоба нет. На концах хода лист
     // повторяет профиль той стопки, к которой прилегает, — иначе он на входе и
     // выходе ныряет под лежащую страницу.
@@ -1254,6 +1477,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // Вращение мышью. Держится, а не отскакивает: смысл в том, чтобы дать
   // рассмотреть том — пружина обратно мешала бы именно этому.
   const orb = { yaw: 0, pitch: 0, vYaw: 0, vPitch: 0 };
+  // Характер текущего переворота: база и перекос веера, амплитуда изгиба.
+  // hint — точка подхвата (-1 низ … +1 верх), приходит из turnFrom() перед
+  // листанием; остальное разыгрывается заново на каждый лист.
+  const turnFx = { base: 0.97, tilt: 0.3, amp: 1.6, hint: 0 };
   // Маятники ремешков и накопленный толчок от вращения книги: физика ремней
   // живёт в кадровом цикле вместе со всем остальным движением.
   const claspSwing = [
@@ -1329,8 +1556,21 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   return {
     target(open: number, page: number): void {
+      const p = Math.max(0, Math.min(LEAVES, page));
+      if (p !== tgt.page) {
+        // Каждый лист летит чуть по-своему: живая книга не умеет повторяться.
+        // Перекос конуса ставится от точки подхвата: ткнули сверху — сильнее
+        // закручивается верх, снизу — низ.
+        turnFx.base = 0.94 + Math.random() * 0.08;
+        turnFx.tilt = Math.max(-0.55, Math.min(0.55, 0.3 - 0.45 * turnFx.hint + (Math.random() - 0.5) * 0.2));
+        turnFx.amp = 1.5 + Math.random() * 0.28;
+        turnFx.hint = 0;
+      }
       tgt.open = clamp01(open);
-      tgt.page = Math.max(0, Math.min(LEAVES, page));
+      tgt.page = p;
+    },
+    turnFrom(fromY: number): void {
+      turnFx.hint = Math.max(-1, Math.min(1, fromY));
     },
     state,
     pose(open: number, page: number): void {
