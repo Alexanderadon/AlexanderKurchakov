@@ -105,6 +105,11 @@ const TURN_S = 0.85;
 const LEAVES = 6;
 /** Замки отходят до того, как тронется крышка. */
 const CLASP_END = 0.3;
+/**
+ * Рубчик (фальц) — жёлоб между корешком и крышкой, по нему крышка сгибается.
+ * У переплётчиков его ширина равна толщине картона.
+ */
+const GROOVE = COVER_T;
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 const ease = (x: number): number => {
@@ -455,7 +460,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     paper(T.end),
     leather,
   ]);
-  backCover.position.set(coverW / 2 - SQUARE / 2, 0, -COVER_T / 2);
+  backCover.position.set(GROOVE + coverW / 2 - SQUARE / 2, 0, -COVER_T / 2);
   backCover.receiveShadow = true;
   book.add(backCover);
 
@@ -643,7 +648,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }),
     paper(T.end),
   ]);
-  frontCover.position.set(coverW / 2 - SQUARE / 2, 0, COVER_T / 2);
+  frontCover.position.set(GROOVE + coverW / 2 - SQUARE / 2, 0, COVER_T / 2);
   frontCover.castShadow = true;
   coverHinge.add(frontCover);
 
