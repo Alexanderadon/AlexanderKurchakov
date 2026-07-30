@@ -351,7 +351,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   for (const t of [edges.map, edges.normal]) {
     t.wrapS = RepeatWrapping;
     t.wrapT = RepeatWrapping;
-    t.repeat.set(3, 1); // обрез длинный, плитка повторяется вдоль него
+    t.repeat.set(9, 1); // сотни тонких кромок вместо нескольких широких полос
     t.needsUpdate = true;
   }
   // Переплёт: сторона, где блок сшит. Тёмная, матовая, без кромок.
@@ -361,6 +361,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     map: edges.map,
     normalMap: edges.normal,
     normalScale: new Vector2(1.5, 1.5),
+    // Кромки бумаги почти белые: контраст со тёмным переплётом и делает книгу
+    // книгой. Текстура сама по себе тёмная для нашей сцены, поэтому осветляем.
+    color: 0xf2eee2,
     roughness: 0.96,
     metalness: 0,
   });
@@ -382,6 +385,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
           return t;
         })(),
     normalScale: new Vector2(1.3, 1.3),
+    color: 0xf2eee2,
     roughness: 0.96,
     metalness: 0,
   });
@@ -406,7 +410,29 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   book.add(backCover);
 
   // ── блок страниц: тоже тело. Обрез по бокам — светлая бумага, сверху страница.
-  const block = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T), [
+  /**
+   * Выгибает передний обрез дугой. У настоящей стопки кромка не плоская: листы
+   * распушаются к середине толщины и подбираются к крышкам. Плоская грань
+   * читается бруском, а не бумагой.
+   */
+  const bowBlock = (g: BoxGeometry): BoxGeometry => {
+    const p = g.attributes.position;
+    const halfW = PAGE_W / 2;
+    const halfT = BLOCK_T / 2;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      if (Math.abs(x - halfW) > 1e-4) continue;   // трогаем только передний обрез
+      const z = p.getZ(i);
+      // Дуга по толщине: максимум выпуклости на середине стопки.
+      const k = Math.cos((z / halfT) * Math.PI * 0.5);
+      p.setX(i, x + 0.014 * k);
+    }
+    p.needsUpdate = true;
+    g.computeVertexNormals();
+    return g;
+  };
+
+  const block = new Mesh(bowBlock(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T, 1, 1, 14)), [
     edgeCross,    // +x: передний обрез — UV этой грани повёрнуты
     binding,      // -x: КОРЕШКОВАЯ сторона, книга здесь сшита — обреза нет
     edgeMat,      // +y: верхний обрез
