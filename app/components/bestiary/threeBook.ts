@@ -33,6 +33,7 @@ import {
   DirectionalLight,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshDepthMaterial,
   MeshStandardMaterial,
   PCFSoftShadowMap,
@@ -43,6 +44,7 @@ import {
   RGBADepthPacking,
   BackSide,
   Scene,
+  ShadowMaterial,
   SRGBColorSpace,
   Texture,
   Vector2,
@@ -386,7 +388,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // AgX держит золото в светах, не выбеливая его: у ACESFilmic тиснение уходило
   // в жёлтую кашу на ярких участках.
   renderer.toneMapping = AgXToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
@@ -443,7 +445,41 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   sc.near = 0.2;
   sc.far = 8;
   scene.add(sun);
-  scene.add(new AmbientLight(0xb9b4a6, 0.22));
+  scene.add(new AmbientLight(0xb9b4a6, 0.17));
+  // Контровик: холодный луч сзади-справа отсекает силуэт от черноты и даёт
+  // вторую искру на золоте. Без него тёмная кожа тонула в фоне целиком.
+  const rim = new DirectionalLight(0xbcd2ea, 0.5);
+  rim.position.set(2.6, 0.7, -2.0);
+  scene.add(rim);
+
+  // ── Подиум. Книга в пустоте не имеет веса: тёплое пятно света позади и
+  // НАСТОЯЩАЯ тень тома на нём дают опору. Пятно — градиент кодом, тень ловит
+  // отдельная плоскость с ShadowMaterial чуть ближе пятна.
+  const glowCv = document.createElement("canvas");
+  glowCv.width = 256;
+  glowCv.height = 256;
+  const gg = glowCv.getContext("2d");
+  if (gg) {
+    const rad = gg.createRadialGradient(128, 116, 10, 128, 128, 126);
+    rad.addColorStop(0, "rgba(66,59,47,0.5)");
+    rad.addColorStop(0.55, "rgba(38,35,29,0.26)");
+    rad.addColorStop(1, "rgba(0,0,0,0)");
+    gg.fillStyle = rad;
+    gg.fillRect(0, 0, 256, 256);
+  }
+  const glowTex = new Texture(glowCv);
+  glowTex.colorSpace = SRGBColorSpace;
+  glowTex.needsUpdate = true;
+  const glow = new Mesh(
+    new PlaneGeometry(7, 7),
+    new MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false }),
+  );
+  glow.position.set(0.2, -0.3, -0.06);
+  scene.add(glow);
+  const shadowCatch = new Mesh(new PlaneGeometry(7, 7), new ShadowMaterial({ opacity: 0.45 }));
+  shadowCatch.position.set(0.2, -0.3, -0.045);
+  shadowCatch.receiveShadow = true;
+  scene.add(shadowCatch);
 
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const T = {
@@ -701,14 +737,19 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     new MeshStandardMaterial({ color: 0x14120f, roughness: 0.9, metalness: 0.02, side: BackSide }),
   );
   // Лицо с тиснением смотрит НАРУЖУ, обычной стороной: зеркалить нечего.
+  // Рельеф и золото корешка — из ЕГО СОБСТВЕННОЙ текстуры: раньше сюда была
+  // прикручена карта нормалей обложки, и свет ложился по чужому рисунку.
+  const spineRelief = deriveMaps(tex.spine, 512, 2.4);
   const spineFace = new Mesh(
     spineGeo,
     new MeshStandardMaterial({
       map: T.spine,
-      normalMap: T.nCover,
-      normalScale: new Vector2(0.5, 0.5),
-      roughness: 0.72,
-      metalness: 0.18,
+      normalMap: spineRelief ? spineRelief.normal : T.nCover,
+      normalScale: new Vector2(0.8, 0.8),
+      metalnessMap: spineRelief ? spineRelief.metal : undefined,
+      roughnessMap: spineRelief ? spineRelief.rough : undefined,
+      roughness: spineRelief ? 1 : 0.72,
+      metalness: spineRelief ? 1 : 0.18,
     }),
   );
   spineFace.castShadow = true;
@@ -756,15 +797,21 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     new MeshStandardMaterial({
       map: T.cover,
       normalMap: coverRelief ? coverRelief.normal : T.nCover,
-      normalScale: new Vector2(0.85, 0.85),
+      normalScale: new Vector2(1.0, 1.0),
       displacementMap: coverRelief ? coverRelief.height : undefined,
       // Высота тиснения на настоящей книге — полмиллиметра при странице 30 см,
-      // то есть примерно 0.0017 в наших единицах. Берём втрое больше: на экране
-      // полмиллиметра не читается, а втрое — уже да, и ещё не карикатура.
-      displacementScale: coverRelief ? 0.005 : 0,
-      displacementBias: coverRelief ? -0.0015 : 0,
-      roughness: 0.62,
-      metalness: 0.22,
+      // то есть примерно 0.0017 в наших единицах. Берём вчетверо: на экране
+      // полмиллиметра не читается, а вчетверо — уже да, и ещё не карикатура.
+      displacementScale: coverRelief ? 0.0075 : 0,
+      displacementBias: coverRelief ? -0.002 : 0,
+      // Оба параметра в единице: их значения целиком живут в выведенных картах —
+      // кожа остаётся матовым диэлектриком, а тиснение становится НАСТОЯЩИМ
+      // металлом и ловит окружение. С одним общим числом на всю крышку золото
+      // было краской: блестело ровно так же, как кожа под ним.
+      metalnessMap: coverRelief ? coverRelief.metal : undefined,
+      roughnessMap: coverRelief ? coverRelief.rough : undefined,
+      roughness: coverRelief ? 1 : 0.62,
+      metalness: coverRelief ? 1 : 0.22,
     }),
     paper(T.end),
   ]);
@@ -814,14 +861,18 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420));
     const plate = new Group();
     plate.position.set(-plateW * 0.42, 0, 0);
-    for (const [z, mat] of [
-      [plateT, brass],
-      [plateT * 0.67, brassBack],
-      [plateT * 0.33, brassBack],
-      [0, brassBack],
+    // Нижние слои ВЛОЖЕНЫ с уменьшением: одинаковые силуэты на косом ракурсе
+    // разъезжались параллаксом, и бляшка двоилась призраком. Ступенька внутрь
+    // читается фаской литья, а не вторым контуром.
+    for (const [z, mat, k] of [
+      [plateT, brass, 1],
+      [plateT * 0.67, brassBack, 0.97],
+      [plateT * 0.33, brassBack, 0.94],
+      [0, brassBack, 0.91],
     ] as const) {
       const face = new Mesh(plateGeo, mat);
       face.position.z = z;
+      face.scale.setScalar(k);
       face.castShadow = true;
       plate.add(face);
     }
@@ -1078,9 +1129,14 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // Доля левой стопки гасится при ЗАКРЫВАНИИ. Иначе у закрытой книги половина
     // толщины остаётся слева, за пределами крышки: том стоит с торчащей плитой
     // сбоку. Физически верно — закрытая книга это одна стопка под крышкой, где бы
-    // ни была закладка. Порог 0.5 совпадает с моментом, когда крышка проходит
-    // вертикаль и левая стопка вообще становится видимой.
-    const spread = ease(phase(t, 0.5, 0.92));
+    // ни была закладка.
+    //
+    // Начало сдвинуто к ПОСАДКЕ крышки: листы уходят налево, когда крышке до
+    // стола меньше сантиметра. Пока порог стоял на вертикали (0.5), стопка
+    // ложилась на пол под ещё опускающейся крышкой и торчала белым из-за её
+    // краёв. Так и у настоящей книги: перекинутые листы падают на крышку в самом
+    // конце её хода, а не повисают в воздухе на полпути.
+    const spread = ease(phase(t, 0.66, 0.95));
     const leftShare = ((leftPages + leafPhase) / total) * spread;
     // Две доли в СУММЕ дают ровно толщину блока. Прежние 0.01 + 0.94·BLOCK_T
     // недобирали 0.007, а крышка вдобавок стояла на BLOCK_T + COVER_T — на целую
@@ -1293,6 +1349,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     resize,
     dispose(): void {
       cancelAnimationFrame(raf);
+      glowTex.dispose();
       for (const key of Object.keys(T) as (keyof typeof T)[]) T[key].dispose();
       scene.traverse((o) => {
         if (o instanceof Mesh) {
