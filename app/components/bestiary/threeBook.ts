@@ -116,12 +116,15 @@ const PAPER_LIFT = 0.0015;
  * Ремешок замка, кусочный обход тома (режим wrap в bendableMaterial): прямо от
  * корня до угла крышки → дуга R на углу → спуск DROP вдоль обреза → дуга R2 под
  * нижний угол → хвост ложится на изнанку задней крышки, где его ждёт ответная
- * планка. DROP выведен из посадки: корень лежит на верхе передней крышки
- * (BLOCK_T + 2·PAPER_LIFT + COVER_T), хвост — под задней (−COVER_T − полремня).
+ * планка. DROP выведен из посадки: ремень лежит на верхе передней крышки
+ * (BLOCK_T + 2·PAPER_LIFT + COVER_T + полремня), хвост — под задней.
+ *
+ * Прямой участок КОРОТКИЙ: фурнитура сидит у самого обреза. С длинным корень
+ * уезжал к середине крышки, и бляшки закрывали готическое тиснение.
  */
-const STRAP_FLAT = 0.131;
+const STRAP_FLAT = 0.028;
 const STRAP_R = 0.03;
-const STRAP_DROP = 0.286;
+const STRAP_DROP = 0.294;
 const STRAP_R2 = 0.025;
 /** «Квадрат» — выступ крышки за обрез блока, у переплётчиков миллиметра три. */
 const SQUARE = 0.028;
@@ -769,7 +772,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   frontCover.castShadow = true;
   coverHinge.add(frontCover);
 
-  const claspGroups: Group[] = [];
+  // Бляшка приклёпана к крышке и не двигается; качается только РЕМЕНЬ — поэтому
+  // у каждого замка свой шарнир (pivot) поверх группы с бляшкой.
+  const strapPivots: Group[] = [];
   const straps: Mesh[] = [];
   const strapBends: IUniform<number>[] = [];
   const plateW = 0.2;
@@ -780,7 +785,6 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // крышки: спуск ремня тогда идёт по обрезу, а не внутри блока и не в воздухе.
     g.position.set(GROOVE + coverW - STRAP_FLAT - STRAP_R + 0.004, PAGE_H * sy * 0.72, COVER_T);
     coverHinge.add(g);
-    claspGroups.push(g);
 
     // Бляшка — тонкое ТЕЛО, а не плоскость: у плоскости нет толщины, и с торца
     // замок исчезал в линию. Литая латунь: грани из того же материала, лицо с
@@ -794,13 +798,13 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       transparent: true,
       alphaTest: 0.5,
     });
-    // Бляшка — ДВА вырезанных по альфе лица, а не коробка.
+    // Бляшка — СТОПКА вырезанных по альфе лиц, а не коробка.
     //
     // Коробка давала толщину, но её четыре торца — сплошные прямоугольники по
-    // границе, а лицо вырезано по силуэту фигурной накладки. Всё, что торчало за
-    // силуэт, читалось тонкой золотой рамкой вокруг замка и двумя прутками,
-    // уходящими поперёк тиснения. Два лица с разносом в ту же толщину дают тот же
-    // объём на этом размере и ничего лишнего не показывают.
+    // границе, а лицо вырезано по силуэту фигурной накладки: всё, что торчало за
+    // силуэт, читалось золотой рамкой вокруг замка. Одно лицо и одна изнанка
+    // решали это, но с ребра литьё превращалось в линию в пиксель. Четыре слоя
+    // с шагом в треть толщины дают с торца честное тело, а лишнего не показывают.
     brass.transparent = false;
     brass.alphaToCoverage = true;
     const brassBack = brass.clone();
@@ -810,7 +814,12 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420));
     const plate = new Group();
     plate.position.set(-plateW * 0.42, 0, 0);
-    for (const [z, mat] of [[plateT, brass], [0, brassBack]] as const) {
+    for (const [z, mat] of [
+      [plateT, brass],
+      [plateT * 0.67, brassBack],
+      [plateT * 0.33, brassBack],
+      [0, brassBack],
+    ] as const) {
       const face = new Mesh(plateGeo, mat);
       face.position.z = z;
       face.castShadow = true;
@@ -820,11 +829,13 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
     // Длина ремешка выверена под обход: прямой участок, угол крышки, спуск по
     // обрезу, нижний угол и короткий хвост на изнанке задней крышки — к планке.
-    const strapW = 0.52;
-    // Ремешок — тонкая КОРОБКА с сеткой по длине: плоскость с торца исчезала.
-    // Сегменты нужны шейдеру изгиба, он гнёт по X.
-    const strapH = strapW * (106 / 620);
-    const sgeo = new BoxGeometry(strapW, strapH, 0.008, 18, 1, 1);
+    const strapW = 0.42;
+    // Высота НЕ привязана к длине: ремень укоротился к обрезу, а ширина ремня —
+    // свойство кожи, не длины. Текстура тянется на ~12%, на коже не читается.
+    const strapH = 0.082;
+    // Ремешок — КОРОБКА в толщину сыромятного ремня, с сеткой по длине для
+    // шейдера изгиба. Прежние 0.008 с ребра читались линией в пиксель.
+    const sgeo = new BoxGeometry(strapW, strapH, 0.016, 18, 1, 1);
     sgeo.translate(strapW / 2, 0, 0);
     // Полувысота НУЛЕВАЯ намеренно: веер — свойство бумажного листа. Последний
     // аргумент — режим wrap: ремень обходит угол крышки, а не гнётся дугой от
@@ -855,7 +866,13 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     ]);
     strap.customDepthMaterial = depthOfStrap;
     strap.castShadow = true;
-    g.add(strap);
+    // Ремень чуть ПРИПОДНЯТ: коробка стала толще, и без подъёма половина тела
+    // тонула в картоне крышки.
+    strap.position.z = 0.008;
+    const pivot = new Group();
+    pivot.add(strap);
+    g.add(pivot);
+    strapPivots.push(pivot);
     straps.push(strap);
     strapBends.push(bend);
     strapBends.push(edgeSkin.bend);
@@ -875,13 +892,24 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     alphaTest: 0.5,
   });
   catchMat.alphaToCoverage = true;
+  const catchDark = catchMat.clone();
+  catchDark.color = new Color(0x54492e);
+  catchDark.normalMap = null;
+  // Три слоя: самый нижний — литьё с текстурой (его и видно снизу), над ним два
+  // тёмных — тело планки. Одна плоскость с ребра исчезала в линию.
   for (const sy of [0.27, -0.27]) {
-    const cp = new Mesh(new PlaneGeometry(0.052, 0.127), catchMat);
-    // Rz кладёт длину планки вдоль ремешка (по x), Ry(π) разворачивает лицом
-    // вниз — планка смотрит в пол, как и весь низ тома.
-    cp.rotation.set(0, Math.PI, Math.PI / 2);
-    cp.position.set(0.957, PAGE_H * sy * 0.72, -COVER_T - 0.0008);
-    book.add(cp);
+    for (const [dz, m] of [
+      [-0.009, catchMat],
+      [-0.005, catchDark],
+      [-0.001, catchDark],
+    ] as const) {
+      const cp = new Mesh(new PlaneGeometry(0.052, 0.127), m);
+      // Rz кладёт длину планки вдоль ремешка (по x), Ry(π) разворачивает лицом
+      // вниз — планка смотрит в пол, как и весь низ тома.
+      cp.rotation.set(0, Math.PI, Math.PI / 2);
+      cp.position.set(0.957, PAGE_H * sy * 0.72, -COVER_T + dz);
+      book.add(cp);
+    }
   }
 
   // ── переворачиваемый лист: плоскость, гнущаяся в шейдере.
@@ -911,7 +939,18 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const leafBackMat = bendableMaterial(T.left, PAGE_W, true, PAGE_H / 2);
   cutLeaf(leafBackMat);
   leafBackMat.material.side = BackSide;
-  const leafBack = new Mesh(leafGeo.clone(), leafBackMat.material);
+  // UV оборота ЗЕРКАЛИТСЯ по u. Рваный обрез — один и тот же физический край
+  // листа, дальний от петли, и на обороте он обязан лежать у того же конца
+  // геометрии. Текстура левой страницы рисует зубцы у своего u = 0, поэтому без
+  // зеркала лист в момент старта листания менял рваную сторону на глазах:
+  // у лежащей страницы зубцы снаружи, у подлетевшего листа — у корешка.
+  const leafBackGeo = leafGeo.clone();
+  {
+    const buv = leafBackGeo.attributes.uv;
+    for (let i = 0; i < buv.count; i++) buv.setX(i, 1 - buv.getX(i));
+    buv.needsUpdate = true;
+  }
+  const leafBack = new Mesh(leafBackGeo, leafBackMat.material);
   leafBack.castShadow = true;
   leafBack.customDepthMaterial = leafBackMat.depth;
   leafHinge.add(leafBack);
@@ -937,7 +976,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     camera.updateProjectionMatrix();
   }
 
-  function render(open: number, turn: number, leftPages: number, rightPages: number): void {
+  function render(open: number, turn: number, leftPages: number, rightPages: number, dt = 1 / 60): void {
     const t = clamp01(open);
     const tw = clamp01(turn);
     const settle = ease(phase(t, 0.15, 1));
@@ -991,19 +1030,37 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     camera.lookAt(lookX, 0, 0);
 
     // Замки отходят первыми, крышка ждёт их. Зажим ремешка — доля 0..1: единица
-    // значит «обнимает угол и лежит на обрезе», ноль — ремень прямой.
-    const cl = ease(phase(t, 0, CLASP_END));
+    // значит «обнимает том и пристёгнут к планке», ноль — ремень свободен.
     const strapCurl = 1 - ease(phase(t, 0, CLASP_END * 0.6));
     for (const sb of strapBends) sb.value = strapCurl;
-    for (let i = 0; i < claspGroups.length; i++) {
-      // Ремешок сначала распрямляется и только потом отходит: сперва он должен
-      // отцепиться от штыря, а уже затем подниматься.
-      claspGroups[i].rotation.y = -1.5 * ease(phase(t, CLASP_END * 0.45, CLASP_END));
-      claspGroups[i].visible = cl < 0.995;
-
+    // Доля поворота крышки: нужна петле, посадке крышки по высоте и толчкам
+    // маятника ремней.
+    const rot = ease(phase(t, CLASP_END, 0.86));
+    // Ремешки НЕ исчезают: у раскрытой книги фурнитура остаётся висеть, как в
+    // жизни. Прежний код прятал замки целиком (visible = cl < 0.995), и при
+    // открытии они просто испарялись.
+    //
+    // Маятник в плоскости крышки: петля крутится вокруг Y, «низ» (−Y) в её
+    // локальных осях не меняется — целевой угол свободного ремня постоянный.
+    // Толчки приходят от хода крышки и от вращения книги пользователем; у
+    // застёгнутого ремня хвост держит планка, и маятник выключен.
+    const kick = (swayKick + (rot - prevRot) * 7) * (1 - strapCurl);
+    prevRot = rot;
+    swayKick *= Math.pow(0.002, dt);
+    const unl = ease(phase(t, CLASP_END * 0.45, CLASP_END));
+    for (let i = 0; i < strapPivots.length; i++) {
+      const p = strapPivots[i];
+      // Отщёлкнутый ремень приподнимается от крышки и остаётся висеть под
+      // небольшим углом, а не улетает на 86° в сторону.
+      p.rotation.y = -unl * (1.1 - 0.72 * unl);
+      const sway = claspSwing[i];
+      const freeStrap = 1 - strapCurl;
+      sway.v += (26 * (-Math.PI / 2 - sway.a) * freeStrap - 5.2 * sway.v) * dt + kick;
+      sway.a = Math.max(-2.1, Math.min(0.5, sway.a + sway.v * dt));
+      p.rotation.z = sway.a * freeStrap;
     }
 
-    coverHinge.rotation.y = -ease(phase(t, CLASP_END, 0.86)) * Math.PI;
+    coverHinge.rotation.y = -rot * Math.PI;
 
     const total = Math.max(1, leftPages + rightPages);
     // Ход листа прогоняется через профиль падения: первая треть — подхват,
@@ -1034,7 +1091,12 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const leftT = Math.max(SHEET_T, BLOCK_T * leftShare);
     // Крышка лежит на самой бумаге, а не на константе. Два просвета: один под
     // страницей, один над ней — в одной плоскости с крышкой страница мерцала бы.
-    coverHinge.position.z = (rightT + PAPER_LIFT * 2) * (1 - ease(phase(t, 0.45, 1)));
+    //
+    // Опускание привязано к ПОВОРОТУ, а не ко времени: петля сидит на верхе
+    // правой стопки, пока крышка не пройдёт вертикаль, и только потом съезжает
+    // на стол. Прежний спуск по времени начинался раньше вертикали — блок
+    // протыкал наклонённую крышку у корешка насквозь.
+    coverHinge.position.z = (rightT + PAPER_LIFT * 2) * (1 - ease(phase(rot, 0.5, 1)));
 
     // Толщина и веер жёлоба живут в самой геометрии половин: пережим столбцов,
     // а не scale.z — масштаб плющил бы вместе с толщиной и профиль спада.
@@ -1054,14 +1116,22 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     rightSheet.dip.value = rightT * spread;
     leftSheet.dip.value = leftT * spread;
     const rimHi = Math.max(rightT, leftT);
-    const rim = rimHi + (Math.min(rightT, leftT) - rimHi) * ease(phase(t, 0.45, 0.9));
+    // Окно сдвинуто за вертикаль крышки: пока том по сути закрыт, горб корешка
+    // обязан держаться высокой стопки — ранний спад оголял блок у жёлоба.
+    const rim = rimHi + (Math.min(rightT, leftT) - rimHi) * ease(phase(t, 0.6, 0.95));
     // Корешок РАСПРЯМЛЯЕТСЯ. У закрытой книги это полуцилиндр во всю толщину, у
     // раскрытой — он лежит между крышками почти плоско. Пока высота была
     // постоянной, у разворота дуга поднималась до верха стопок и в жёлобе была
     // видна НАРУЖНАЯ, тиснёная сторона корешка: посреди раскрытой книги шла
     // золочёная полоса с бинтами, то есть спина тома изнутри.
-    const flat = 1 - ease(phase(t, 0.5, 0.95));
-    const squash = Math.max(COVER_T / (spineRz * 2), flat);
+    // Распрямление КОРОТКОЕ и кончается сразу за вертикалью крышки: пока горб
+    // стоял до 0.95, он торчал в жёлобе наружной тиснёной стороной — между
+    // раскрывающимися стопками была видна спина тома.
+    const flat = 1 - ease(phase(t, 0.55, 0.72));
+    // Пока горб жив, его размах следует за ТЕКУЩЕЙ высотой тома (rim + крышки):
+    // с постоянным размахом на середине хода корешок то не доставал до блока,
+    // и у жёлоба чернел клин, то торчал за крышки.
+    const squash = Math.max(COVER_T / (spineRz * 2), flat * ((rim + 2 * COVER_T) / sw));
     spine.scale.z = squash;
     spineFace.scale.z = squash;
     // Центр дуги — середина ВСЕГО тома с крышками: (низ −COVER_T + верх
@@ -1117,6 +1187,14 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // Вращение мышью. Держится, а не отскакивает: смысл в том, чтобы дать
   // рассмотреть том — пружина обратно мешала бы именно этому.
   const orb = { yaw: 0, pitch: 0, vYaw: 0, vPitch: 0 };
+  // Маятники ремешков и накопленный толчок от вращения книги: физика ремней
+  // живёт в кадровом цикле вместе со всем остальным движением.
+  const claspSwing = [
+    { a: 0, v: 0 },
+    { a: 0, v: 0 },
+  ];
+  let swayKick = 0;
+  let prevRot = 0;
   const cur = { open: 0, page: Math.floor(LEAVES / 2) };
   const tgt = { open: 0, page: 0 };
   const state = { open: 0, page: Math.floor(LEAVES / 2), busy: false };
@@ -1171,7 +1249,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // Правую долю НЕ подпираем единицей. С подпоркой на последней странице сумма
     // становилась семёркой вместо шестёрки, и слева оказывалось 6/7 блока: у
     // дочитанной книги справа оставалась заметная стопка из ниоткуда.
-    render(cur.open, frac, whole, LEAVES - whole);
+    render(cur.open, frac, whole, LEAVES - whole, dt);
   }
   raf = requestAnimationFrame(step);
   // Метка готовности: по ней и сквозной тест, и замер «клик -> первый кадр».
@@ -1199,6 +1277,8 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       orb.pitch -= dy * 0.005;
       orb.vYaw = 0;
       orb.vPitch = 0;
+      // Вращение раскачивает свободные ремешки: толчок копится и гаснет в цикле.
+      swayKick = Math.max(-0.5, Math.min(0.5, swayKick + dx * 0.0011));
     },
     release(vx: number, vy: number): void {
       orb.vYaw = -vx * 0.006;
