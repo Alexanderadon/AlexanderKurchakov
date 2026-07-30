@@ -413,7 +413,34 @@ function bendableMaterial(
   return { material, bend, dip, fanBase, fanTilt, depth };
 }
 
+/**
+ * Кэш выведенных карт. Прогревается из Bestiary.warm() ДО клика: четыре
+ * deriveMaps стоят ~150–200 мс на главном потоке, и без прогрева эта пауза
+ * попадала прямо в щелчок открытия книги.
+ */
+const reliefCache = new Map<TexImageSource, ReturnType<typeof deriveMaps>>();
+function derivedCached(src: TexImageSource, w: number, s: number): ReturnType<typeof deriveMaps> {
+  let d = reliefCache.get(src);
+  if (d === undefined) {
+    d = deriveMaps(src, w, s);
+    reliefCache.set(src, d);
+  }
+  return d;
+}
+export function prewarmRelief(
+  tex: Pick<BookTextures, "coverFront" | "spine" | "plate" | "catchPlate">,
+): void {
+  derivedCached(tex.coverFront, 768, 2.6);
+  derivedCached(tex.spine, 512, 2.4);
+  derivedCached(tex.plate, 420, 2.2);
+  derivedCached(tex.catchPlate, 420, 2.2);
+}
+
 export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
+  // Узкому экрану — половинные сетки: displacement-геометрии тяжёлые, а на
+  // телефоне их разрешение всё равно не читается.
+  const lite = typeof window !== "undefined" && window.innerWidth < 720;
+  const seg = (n: number): number => (lite ? Math.ceil(n / 2) : n);
   let renderer: WebGLRenderer;
   try {
     renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true });
@@ -552,11 +579,46 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // отдельно карта нормалей совпадала с рисунком на 0.12 по корреляции — то есть
   // почти не совпадала: свет ложился по одному узору, золото нарисовано по
   // другому, и это читалось кашей. У выведенной совпадение 0.533.
-  const coverRelief = deriveMaps(tex.coverFront, 768, 2.6);
+  const coverRelief = derivedCached(tex.coverFront, 768, 2.6);
 
   const paper = (map: Texture): MeshStandardMaterial =>
     new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
-  const leather = new MeshStandardMaterial({ color: 0x14130f, roughness: 0.78, metalness: 0.05 });
+  // Кожа торцов крышек — с ПРОТИРАМИ: рёбра коробок светлеют к краям каждой
+  // грани, пятнами, как обношенная о полку кожа. Ровный цвет читался пластиком.
+  const leatherTex = (() => {
+    const S = 128;
+    const cv = document.createElement("canvas");
+    cv.width = S;
+    cv.height = S;
+    const g = cv.getContext("2d");
+    if (!g) return null;
+    const img = g.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) {
+        const ex = Math.min(x, S - 1 - x) / S;
+        const ey = Math.min(y, S - 1 - y) / S;
+        const edge = 1 - Math.min(1, Math.min(ex, ey) / 0.16);
+        const patch = 0.6 + 0.4 * Math.sin(x * 0.23 + 1.3) * Math.sin(y * 0.31 + 2.1);
+        const wear = Math.pow(Math.max(0, edge), 1.6) * patch;
+        const k = (y * S + x) * 4;
+        img.data[k] = Math.round(20 + 41 * wear);
+        img.data[k + 1] = Math.round(19 + 34 * wear);
+        img.data[k + 2] = Math.round(15 + 24 * wear);
+        img.data[k + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    const t = new Texture(cv);
+    t.colorSpace = SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
+  })();
+  const leather = new MeshStandardMaterial({
+    map: leatherTex ?? undefined,
+    color: leatherTex ? 0xffffff : 0x14130f,
+    roughness: 0.78,
+    metalness: 0.05,
+  });
   // Обрез блока: текстура кромок (линии листов уложены по её ВЫСОТЕ). Развёртка
   // пишется прямо в геометрии веера: v — доля толщины стопки, u — путь вдоль
   // грани. Прежние повороты и repeat на самой текстуре складывались друг с
@@ -634,7 +696,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
         metalness: 0.04,
       })
     : leather;
-  const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, 160, 200, 1), [
+  const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, seg(160), seg(200), 1), [
     leather,
     leather,
     leather,
@@ -675,7 +737,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
    * заворачивались под него валиком, а торец у жёлоба оставался стеной.
    */
   const buildHalfBlock = (gutterAt: -1 | 1): { mesh: Mesh; update: (T: number, carve: number) => void } => {
-    const g = new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T, 56, 1, 14);
+    const g = new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T, seg(56), 1, seg(14));
     g.translate(0, 0, BLOCK_T / 2); // низ на нуле: толщина растёт вверх
     const p = g.attributes.position;
     const uv = g.attributes.uv;
@@ -766,8 +828,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // бумаги. Сетка по X обязательна — у плоскости из одного квада гнуть нечего.
   // Геометрия ЦЕНТРИРОВАННАЯ, расстояние от петли считает шейдер по знаку side:
   // зеркалить одну страницу поворотом на 180° нельзя, к зрителю встаёт изнанка.
-  const rightGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
-  const leftGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 1);
+  // Сетка и по высоте: рябь двумерная, полосе из одного ряда гнуться нечем.
+  const rightGeo = new PlaneGeometry(PAGE_W, PAGE_H, seg(48), seg(20));
+  const leftGeo = new PlaneGeometry(PAGE_W, PAGE_H, seg(48), seg(20));
   const rightSheet = pageMaterial(T.right, T.nPage, 1);
   const leftSheet = pageMaterial(T.left, T.nPage, -1);
   const rightPage = new Mesh(rightGeo, rightSheet.material);
@@ -826,7 +889,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // Лицо с тиснением смотрит НАРУЖУ, обычной стороной: зеркалить нечего.
   // Рельеф и золото корешка — из ЕГО СОБСТВЕННОЙ текстуры: раньше сюда была
   // прикручена карта нормалей обложки, и свет ложился по чужому рисунку.
-  const spineRelief = deriveMaps(tex.spine, 512, 2.4);
+  const spineRelief = derivedCached(tex.spine, 512, 2.4);
   const spineFace = new Mesh(
     spineGeo,
     new MeshStandardMaterial({
@@ -892,8 +955,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // Коробка ПОДРАЗДЕЛЕНА: у грани с одной вершиной на угол смещать нечего, а
   // displacement двигает именно вершины. 160×200 на лицевой грани — тиснение
   // начинает ломать силуэт и отбрасывать собственную тень, чего карта нормалей
-  // не умеет в принципе.
-  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T), [
+  // не умеет в принципе. Сетка была молча ПОТЕРЯНА в одной из правок — коробка
+  // осталась из четырёх вершин на грань, и displacement обложки не делал ничего.
+  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, seg(160), seg(200), 1), [
     leather,
     leather,
     leather,
@@ -932,7 +996,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const plateT = 0.014;
   // Рельеф бляшки выводится из её же текстуры: карта нормалей давала свет, но
   // не силуэт — displacement выдавливает литьё по-настоящему, объёмом.
-  const plateRelief = deriveMaps(tex.plate, 420, 2.2);
+  const plateRelief = derivedCached(tex.plate, 420, 2.2);
   for (const sy of [0.27, -0.27]) {
     const g = new Group();
     // Корень стоит так, чтобы прямой участок STRAP_FLAT кончался ровно на углу
@@ -974,7 +1038,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     brassBack.displacementMap = null;
     brassBack.displacementScale = 0;
     // Сетка нужна displacement'у: у грани без вершин выдавливать нечего.
-    const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), 72, 66);
+    const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), seg(72), seg(66));
     const plate = new Group();
     plate.position.set(-plateW * 0.42, 0, 0);
     // Слои — ПИРАМИДОЙ: основание у кожи самое большое, наружный меньше. При
@@ -1061,7 +1125,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // книги, а не петли: при открывании остаются на месте. Текстура планки была
   // загружена с самого начала, но после переезда на three её никто не ставил
   // в сцену — замок висел без ответной части.
-  const catchRelief = deriveMaps(tex.catchPlate, 420, 2.2);
+  const catchRelief = derivedCached(tex.catchPlate, 420, 2.2);
   const catchMat = new MeshStandardMaterial({
     map: T.catchPlate,
     normalMap: T.nCatch,
@@ -1095,7 +1159,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   catchBrassDark.normalMap = null;
   catchBrassDark.displacementMap = null;
   catchBrassDark.displacementScale = 0;
-  const catchPlateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), 72, 66);
+  const catchPlateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), seg(72), seg(66));
   const hookMat = new MeshStandardMaterial({ color: 0xc9a75a, roughness: 0.34, metalness: 0.82 });
   for (const sy of [0.27, -0.27]) {
     // Пирамидой и ВПЛОТНУЮ к коже: у прежней стопки внешний слой висел в семи
@@ -1111,7 +1175,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       cp.scale.setScalar(k);
       book.add(cp);
     }
-    const strip = new Mesh(new PlaneGeometry(0.07, 0.172, 40, 96), catchMat);
+    const strip = new Mesh(new PlaneGeometry(0.07, 0.172, seg(40), seg(96)), catchMat);
     strip.rotation.set(0, Math.PI, Math.PI / 2);
     strip.position.set(0.93, PAGE_H * sy * 0.6, -COVER_T - 0.0055);
     book.add(strip);
@@ -1252,7 +1316,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // ── переворачиваемый лист: плоскость, гнущаяся в шейдере.
   const leafHinge = new Group();
   book.add(leafHinge);
-  const leafGeo = new PlaneGeometry(PAGE_W, PAGE_H, 48, 16);
+  const leafGeo = new PlaneGeometry(PAGE_W, PAGE_H, seg(48), seg(16));
   leafGeo.translate(PAGE_W / 2, 0, 0);
   // Лист режется по альфе ТАК ЖЕ, как лежащие страницы. Без этого он оставался
   // honest-to-god прямоугольником: у страницы под ним край рваный, и в каждую
@@ -1449,6 +1513,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leftPage.position.set(-PAGE_W / 2, 0, leftT * (1 - spread) + PAPER_LIFT);
     rightSheet.dip.value = rightT * spread;
     leftSheet.dip.value = leftT * spread;
+    // Рябь старой бумаги видна только у раскрытого тома: под крышкой листы
+    // прижаты в плоскость.
+    rightSheet.ripple.value = 0.003 * spread;
+    leftSheet.ripple.value = 0.003 * spread;
     const rimHi = Math.max(rightT, leftT);
     // Окно сдвинуто за вертикаль крышки: пока том по сути закрыт, горб корешка
     // обязан держаться высокой стопки — ранний спад оголял блок у жёлоба.

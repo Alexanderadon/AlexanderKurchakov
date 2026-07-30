@@ -59,7 +59,18 @@ function warm(): Promise<Warm> {
     warming = Promise.all([
       Promise.all(ASSETS.map(decode)),
       import("./bestiary/threeBook"),
-    ]).then(([images, mod]) => ({ images, make: mod.createBook }));
+    ]).then(([images, mod]) => {
+      // Выведенные карты (рельеф, золото, износ) считаются здесь же, в прогреве:
+      // четыре deriveMaps стоят ~150–200 мс главного потока, и раньше эта пауза
+      // попадала прямо в щелчок открытия.
+      mod.prewarmRelief({
+        coverFront: images[0],
+        spine: images[4],
+        plate: images[6],
+        catchPlate: images[14],
+      });
+      return { images, make: mod.createBook };
+    });
   }
   return warming;
 }
@@ -252,35 +263,98 @@ export function Bestiary() {
     };
   }, [phase]);
 
-  // Указатель: перетаскивание крутит книгу, клик без сдвига действует. Порог в
-  // шесть пикселей — палец на телефоне никогда не стоит идеально ровно, и без
-  // порога каждое касание считалось бы протяжкой.
-  const drag = useRef({ on: false, moved: 0, x: 0, y: 0, t: 0, vx: 0, vy: 0 });
+  // Указатель: перетаскивание крутит книгу, а у РАСКРЫТОЙ книги горизонтальная
+  // протяжка ТЯНЕТ ЛИСТ — палец ведёт страницу, отпустил — долетает или
+  // возвращается. Клик без сдвига действует как раньше. Порог в шесть пикселей —
+  // палец на телефоне никогда не стоит идеально ровно.
+  const drag = useRef({ on: false, moved: 0, x: 0, y: 0, sx: 0, sy: 0, t: 0, vx: 0, vy: 0, mode: 0 });
+  const dragTurn = useRef({ base: 0, dir: 1 as 1 | -1, frac: 0 });
 
   const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { on: true, moved: 0, x: e.clientX, y: e.clientY, t: performance.now(), vx: 0, vy: 0 };
+    drag.current = {
+      on: true,
+      moved: 0,
+      x: e.clientX,
+      y: e.clientY,
+      sx: e.clientX,
+      sy: e.clientY,
+      t: performance.now(),
+      vx: 0,
+      vy: 0,
+      mode: 0,
+    };
   }, []);
 
-  const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
-    const d = drag.current;
-    if (!d.on) return;
-    const dx = e.clientX - d.x;
-    const dy = e.clientY - d.y;
-    const dt = Math.max(1, performance.now() - d.t);
-    d.moved += Math.abs(dx) + Math.abs(dy);
-    d.vx = (dx / dt) * 1000;
-    d.vy = (dy / dt) * 1000;
-    d.x = e.clientX;
-    d.y = e.clientY;
-    d.t = performance.now();
-    sceneRef.current?.orbit(dx, dy);
-  }, []);
+  const onMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>): void => {
+      const d = drag.current;
+      if (!d.on) return;
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      const dt = Math.max(1, performance.now() - d.t);
+      d.moved += Math.abs(dx) + Math.abs(dy);
+      d.vx = (dx / dt) * 1000;
+      d.vy = (dy / dt) * 1000;
+      d.x = e.clientX;
+      d.y = e.clientY;
+      d.t = performance.now();
+
+      // Режим решается по первому уверенному сдвигу: горизонталь у раскрытой
+      // книги — лист, всё остальное — вращение тома.
+      if (d.mode === 0 && d.moved > 8) {
+        const sc = sceneRef.current;
+        const horizontal = Math.abs(e.clientX - d.sx) > Math.abs(e.clientY - d.sy) * 1.2;
+        if (phase === "open" && sc && !sc.state.busy && horizontal) {
+          d.mode = 2;
+          const r = e.currentTarget.getBoundingClientRect();
+          dragTurn.current = {
+            base: pageRef.current,
+            dir: e.clientX < d.sx ? 1 : -1,
+            frac: 0,
+          };
+          sc.turnFrom(1 - 2 * ((d.sy - r.top) / r.height));
+        } else {
+          d.mode = 1;
+        }
+      }
+      if (d.mode === 2) {
+        const sc = sceneRef.current;
+        if (!sc) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const tn = dragTurn.current;
+        const raw = ((tn.dir > 0 ? d.sx - e.clientX : e.clientX - d.sx) / (r.width * 0.45));
+        const target = tn.base + tn.dir;
+        // На крайних страницах лист упирается: даём восьмую часть хода и не пускаем.
+        const limit = target < 0 || target > LEAVES ? 0.12 : 1;
+        tn.frac = Math.min(limit, Math.max(0, raw));
+        sc.pose(1, tn.base + tn.dir * tn.frac);
+        return;
+      }
+      if (d.mode === 1) sceneRef.current?.orbit(dx, dy);
+    },
+    [phase],
+  );
 
   const onUp = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>): void => {
       const d = drag.current;
       d.on = false;
+      // Отпустили лист: дальше полёт сам — вперёд, если протянули дальше трети
+      // хода или махнули с размаху, иначе лист возвращается на место.
+      if (d.mode === 2) {
+        const sc = sceneRef.current;
+        if (!sc) return;
+        const tn = dragTurn.current;
+        const target = tn.base + tn.dir;
+        const flung = tn.dir > 0 ? d.vx < -260 : d.vx > 260;
+        const commit = target >= 0 && target <= LEAVES && (tn.frac > 0.36 || flung);
+        const dest = commit ? target : tn.base;
+        pageRef.current = dest;
+        sc.target(1, dest);
+        if (commit && !prefersReducedMotion()) bookRustle();
+        return;
+      }
       if (d.moved > 6) {
         sceneRef.current?.release(d.vx, d.vy);
         return;
@@ -353,7 +427,12 @@ export function Bestiary() {
                 onPointerMove={onMove}
                 onPointerUp={onUp}
                 onPointerCancel={() => {
-                  drag.current.on = false;
+                  const d = drag.current;
+                  if (d.mode === 2) {
+                    // Системный обрыв жеста: лист возвращается на место.
+                    sceneRef.current?.target(1, dragTurn.current.base);
+                  }
+                  d.on = false;
                 }}
               />
 
