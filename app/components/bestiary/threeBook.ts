@@ -355,7 +355,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const coverH = PAGE_H + SQUARE * 2;
 
   // ── задняя крышка: коробка, а не плоскость. Толщина есть по построению.
-  const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T), [
+  const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, 160, 200, 1), [
     leather,
     leather,
     leather,
@@ -369,10 +369,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   // ── блок страниц: тоже тело. Обрез по бокам — светлая бумага, сверху страница.
   const block = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, BLOCK_T), [
-    edgeMat,      // +x: передний обрез
-    blockSide,    // -x: сторона корешка, её не видно
-    edgeCross,    // +y: верхний обрез
-    edgeCross,    // -y: нижний обрез
+    edgeCross,    // +x: передний обрез — UV этой грани повёрнуты
+    edgeCross,    // -x: стена жёлоба
+    edgeMat,      // +y: верхний обрез
+    edgeMat,      // -y: нижний обрез
     blockSide,    // +z: под верхней страницей
     blockSide,    // -z: низ
   ]);
@@ -382,10 +382,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
   // ── левая половина блока: появляется, когда листы переходят налево.
   const leftBlock = new Mesh(new BoxGeometry(PAGE_W, PAGE_H, 0.01), [
-    blockSide,
-    edgeMat,      // -x: обрез левой стопки смотрит наружу, влево
-    edgeCross,
-    edgeCross,
+    edgeCross,    // +x: стена жёлоба слева
+    edgeCross,    // -x: обрез левой стопки смотрит наружу
+    edgeMat,
+    edgeMat,
     blockSide,
     blockSide,
   ]);
@@ -394,8 +394,19 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   leftBlock.visible = false;
   book.add(leftBlock);
 
-  // Верхние страницы обеих стопок — плоскости поверх коробок.
-  const pageGeo = new PlaneGeometry(PAGE_W, PAGE_H);
+  // Верхние страницы обеих стопок — ГНУЩИЕСЯ, а не плоские. У настоящей книги
+  // лист уходит в жёлоб дугой: у корешка ныряет вниз, к внешнему обрезу
+  // выпрямляется. Две плоские плиты с щелью посередине и читались как «страницы
+  // не связаны, это не разворот».
+  //
+  // Сетка по X обязательна: у плоскости из одного квада гнуть нечего. Геометрия
+  // сдвинута так, что x = 0 приходится на петлю у корешка — этого ждёт шейдер
+  // изгиба.
+  // Сетка по X — задел под изгиб в жёлоб. Сам изгиб пока выключен: попытка
+  // зеркалить левую страницу поворотом на 180° показывала её ИЗНАНКУ, и текстура
+  // пропадала. Правильное решение — своя геометрия с петлёй у корешка для каждой
+  // стороны, а не поворот одной и той же.
+  const pageGeo = new PlaneGeometry(PAGE_W, PAGE_H, 40, 1);
   const rightPage = new Mesh(pageGeo, sheet(T.right, T.nPage));
   rightPage.receiveShadow = true;
   book.add(rightPage);
@@ -457,7 +468,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // displacement двигает именно вершины. 160×200 на лицевой грани — тиснение
   // начинает ломать силуэт и отбрасывать собственную тень, чего карта нормалей
   // не умеет в принципе.
-  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, 160, 200, 1), [
+  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T), [
     leather,
     leather,
     leather,
@@ -676,7 +687,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leftPage.visible = leftBlock.visible;
     leftPage.position.set(-PAGE_W / 2, 0, leftT + 0.0015);
 
-    spine.position.set(0, 0, Math.max(0.004, Math.max(rightT, leftT) - spineR));
+    spine.position.set(0, 0, Math.min(rightT, leftT) - spineR);
     // Капталы сидят на торцах блока у самого корешка и едут за его толщиной.
     for (let i = 0; i < headbands.length; i++) {
       const sy = i === 0 ? 1 : -1;
@@ -694,6 +705,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     leaf.visible = leafPhase > 0.002 && leafPhase < 0.996;
 
     renderer.render(scene, camera);
+    canvas.dataset.bookState = cur.open.toFixed(3) + ':' + cur.page.toFixed(2);
   }
 
   resize();
@@ -704,9 +716,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   // Вращение мышью. Держится, а не отскакивает: смысл в том, чтобы дать
   // рассмотреть том — пружина обратно мешала бы именно этому.
   const orb = { yaw: 0, pitch: 0, vYaw: 0, vPitch: 0 };
-  const cur = { open: 0, page: 0 };
+  const cur = { open: 0, page: Math.floor(LEAVES / 2) };
   const tgt = { open: 0, page: 0 };
-  const state = { open: 0, page: 0, busy: false };
+  const state = { open: 0, page: Math.floor(LEAVES / 2), busy: false };
   let raf = 0;
   let last = 0;
 

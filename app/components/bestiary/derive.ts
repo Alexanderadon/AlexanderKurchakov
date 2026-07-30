@@ -16,16 +16,21 @@
 
 import { Texture } from "three";
 
-/** Ниже этого — фон, выше — рельеф. Снято замером: кожа ~0.08, золото ~0.5. */
-const LOW = 0.13;
-const HIGH = 0.44;
-
 const smoothstep = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
 
-function luminanceField(src: TexImageSource, W: number, H: number): Float32Array | null {
+/**
+ * Поле высоты из цвета. Одной яркости мало: тёмная трещина кожи и тёмный участок
+ * золота дают одно и то же число, а физически это впадина и выступ.
+ *
+ * Различаем по ТЕПЛОТЕ. Золото тиснения тёплое — красного заметно больше синего.
+ * Кожа и трещины нейтральные. Поэтому высота складывается из двух вкладов:
+ * тёплое поднимаем сильно, нейтральное светлое — слабо, нейтральное тёмное
+ * опускаем ниже нуля, в углубление.
+ */
+function heightField(src: TexImageSource, W: number, H: number): Float32Array | null {
   const cv = document.createElement("canvas");
   cv.width = W;
   cv.height = H;
@@ -36,7 +41,17 @@ function luminanceField(src: TexImageSource, W: number, H: number): Float32Array
   const d = g.getImageData(0, 0, W, H).data;
   const out = new Float32Array(W * H);
   for (let i = 0, k = 0; i < d.length; i += 4, k++) {
-    out[k] = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+    const r = d[i] / 255;
+    const g = d[i + 1] / 255;
+    const b = d[i + 2] / 255;
+    const lum = r * 0.299 + g * 0.587 + b * 0.114;
+    // Теплота: у золота красного заметно больше синего, у кожи разница около нуля.
+    const warm = Math.max(0, r - b);
+    // Тиснение — там, где ярко И тепло. Просто яркое (блик на коже) не поднимаем.
+    const relief = smoothstep(0.1, 0.42, lum) * smoothstep(0.02, 0.13, warm);
+    // Трещины: тёмное и холодное уходит НИЖЕ поверхности, а не остаётся на нуле.
+    const crack = (1 - smoothstep(0.03, 0.16, lum)) * (1 - smoothstep(0.02, 0.1, warm));
+    out[k] = relief - crack * 0.35;
   }
   return out;
 }
@@ -83,7 +98,7 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
   const W = width;
   const H = Math.round((width * ih) / iw);
 
-  const lum = luminanceField(src, W, H);
+  const lum = heightField(src, W, H);
   if (!lum) return null;
   const soft = blur(lum, W, H, 2);
 
@@ -99,8 +114,11 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
 
   const hImg = hg.createImageData(W, H);
   const nImg = ng.createImageData(W, H);
-  const at = (x: number, y: number): number =>
-    smoothstep(LOW, HIGH, soft[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))]);
+  // Поле уже нормировано в heightField: пороги там же, здесь только зажим.
+  const at = (x: number, y: number): number => {
+    const v = soft[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))];
+    return Math.min(1, Math.max(0, v * 0.74 + 0.26));
+  };
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
