@@ -36,6 +36,11 @@ export interface DipMaterial {
   material: MeshStandardMaterial;
   /** Глубина падения у самого корешка, в единицах сцены. */
   dip: IUniform<number>;
+  /**
+   * Амплитуда ряби старой бумаги. У корешка листы прижаты швейкой — рябь
+   * гаснет тем же спадом, что и жёлоб, и растёт к свободному обрезу.
+   */
+  ripple: IUniform<number>;
 }
 
 /**
@@ -51,6 +56,7 @@ export function pageMaterial(
   side: 1 | -1,
 ): DipMaterial {
   const dip: IUniform<number> = { value: 0 };
+  const ripple: IUniform<number> = { value: 0 };
   const material = new MeshStandardMaterial({
     map,
     normalMap,
@@ -73,18 +79,33 @@ export function pageMaterial(
   const HALF = 0.5; // половина ширины страницы в единицах геометрии
   const s = side > 0 ? `(position.x + ${HALF.toFixed(2)})` : `(${HALF.toFixed(2)} - position.x)`;
 
+  // Фазы ряби у левой и правой страниц разные: одинаковая волна на развороте
+  // читалась бы штампованной.
+  const p1 = side > 0 ? "0.9" : "2.3";
+  const p2 = side > 0 ? "1.7" : "0.4";
+
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uDip = dip;
+    shader.uniforms.uRipple = ripple;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform float uDip;")
+      .replace("#include <common>", "#include <common>\nuniform float uDip;\nuniform float uRipple;")
       .replace(
         "#include <beginnormal_vertex>",
         `#include <beginnormal_vertex>
-    if (uDip > 0.0001) {
-      // Наклон поверхности — производная спада. Без правки нормали прогиб был бы
-      // виден только по силуэту, а свет ложился бы как на плоскость.
-      float d = uDip * ${K.toFixed(1)} * exp(-${s} * ${K.toFixed(1)});
-      objectNormal = normalize(vec3(${side > 0 ? "-d" : "d"}, 0.0, 1.0));
+    {
+      // Наклон поверхности — производные спада и ряби. Без правки нормалей
+      // рельеф был бы виден только по силуэту, а свет ложился бы как на плоскость.
+      // Вклад ряби ПРИГЛУШЁН (×0.4): полная производная ловила зеркальный лоб
+      // солнца, и антиузлы решётки светились ровными овалами.
+      float d = uDip > 0.0001 ? uDip * ${K.toFixed(1)} * exp(-${s} * ${K.toFixed(1)}) : 0.0;
+      float rEdge = 1.0 - exp(-${s} * ${K.toFixed(1)});
+      float dwx = 17.0 * cos(position.x * 17.0 + ${p1}) * sin(position.y * 9.0 + ${p2})
+        + 18.6 * cos(position.x * 31.0 + ${p2}) * sin(position.y * 17.0 + ${p1});
+      float dwy = 9.0 * sin(position.x * 17.0 + ${p1}) * cos(position.y * 9.0 + ${p2})
+        + 10.2 * sin(position.x * 31.0 + ${p2}) * cos(position.y * 17.0 + ${p1});
+      float rx = uRipple * rEdge * dwx * 0.3;
+      float ry = uRipple * rEdge * dwy * 0.3;
+      objectNormal = normalize(vec3(${side > 0 ? "-d" : "d"} - rx, -ry, 1.0));
     }`,
       )
       .replace(
@@ -92,9 +113,20 @@ export function pageMaterial(
         `#include <begin_vertex>
     if (uDip > 0.0001) {
       transformed.z += uDip * (1.0 - exp(-${s} * ${K.toFixed(1)}));
+    }
+    if (uRipple > 0.0001) {
+      // Рябь старой бумаги: гаснет у прижатого швейкой корешка, растёт к обрезу.
+      // ДВЕ несоизмеримые октавы: одна решётка sin·sin давала правильную сетку
+      // пузырей — бумага так не коробится. Волна смещена В ПЛЮС: бумага коробится
+      // ВВЕРХ от стопки; с нулевым средним страница ныряла ниже своего зазора, и
+      // сквозь неё резкими пятнами проступал плоский верх веера.
+      float rE = 1.0 - exp(-${s} * ${K.toFixed(1)});
+      float w = sin(position.x * 17.0 + ${p1}) * sin(position.y * 9.0 + ${p2})
+        + 0.6 * sin(position.x * 31.0 + ${p2}) * sin(position.y * 17.0 + ${p1});
+      transformed.z += uRipple * rE * (w * 0.5 + 1.0);
     }`,
       );
   };
 
-  return { material, dip };
+  return { material, dip, ripple };
 }
