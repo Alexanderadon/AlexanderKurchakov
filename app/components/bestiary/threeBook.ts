@@ -153,7 +153,17 @@ function makeTexture(src: TexImageSource): Texture {
  * правильный свет с тенями — свой шейдер пришлось бы освещать руками, чем я и
  * занимался, пока ловил знаки нормалей.
  */
-function bendableMaterial(map: Texture, width: number, cut = false): {
+function bendableMaterial(
+  map: Texture,
+  width: number,
+  cut = false,
+  /**
+   * Куда загибать по глубине. Лист поднимается ОТ стопки (+1), а ремешок обязан
+   * заворачиваться К книге, обнимая передний обрез (-1). С единым знаком ремешки
+   * закручивались наружу, в пустоту, и висели в воздухе отдельными скобами.
+   */
+  dir: 1 | -1 = 1,
+): {
   material: MeshStandardMaterial;
   bend: IUniform<number>;
 } {
@@ -188,6 +198,7 @@ function bendableMaterial(map: Texture, width: number, cut = false): {
       float u = clamp(s / wid, 0.0, 1.0);
       float a = uBend * pow(u, 1.7);
       float R = a > 0.0005 ? s / a : 1.0e6;
+      float dir = ${dir.toFixed(1)};
       ${target}
     }`;
   material.onBeforeCompile = (shader) => {
@@ -197,12 +208,12 @@ function bendableMaterial(map: Texture, width: number, cut = false): {
       .replace(
         "#include <beginnormal_vertex>",
         "#include <beginnormal_vertex>" +
-          bendCode("objectNormal = normalize(vec3(-sin(a), 0.0, cos(a)));"),
+          bendCode("objectNormal = normalize(vec3(-sin(a) * dir, 0.0, cos(a)));"),
       )
       .replace(
         "#include <begin_vertex>",
         "#include <begin_vertex>" +
-          bendCode("transformed.x = R * sin(a);\n      transformed.z += R * (1.0 - cos(a));"),
+          bendCode("transformed.x = R * sin(a);\n      transformed.z += dir * R * (1.0 - cos(a));"),
       );
   };
   return { material, bend };
@@ -526,7 +537,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const plateT = 0.014;
   for (const sy of [0.27, -0.27]) {
     const g = new Group();
-    g.position.set(PAGE_W + SQUARE, PAGE_H * sy, COVER_T);
+    g.position.set(PAGE_W + SQUARE - 0.145, PAGE_H * sy, COVER_T);
     coverHinge.add(g);
     claspGroups.push(g);
 
@@ -555,22 +566,39 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     plate.castShadow = true;
     g.add(plate);
 
-    const strapW = 0.42;
+    const strapW = 0.52;
     // Ремешок — тонкая КОРОБКА с сеткой по длине: плоскость с торца исчезала.
     // Сегменты нужны шейдеру изгиба, он гнёт по X.
     const sgeo = new BoxGeometry(strapW, strapW * (106 / 620), 0.008, 18, 1, 1);
     sgeo.translate(strapW / 2, 0, 0);
-    const { material, bend } = bendableMaterial(T.strap, strapW, true);
+    const { material, bend } = bendableMaterial(T.strap, strapW, true, -1);
     // Рельеф кожи на ремешке: до этого он был единственной поверхностью совсем
     // без карты нормалей — плоская краска рядом с рельефной крышкой.
     material.normalMap = T.nStrap;
     material.normalScale = new Vector2(1.15, 1.15);
     material.needsUpdate = true;
-    const strap = new Mesh(sgeo, material);
+    // Торцам — своя тёмная кожа. С одним материалом на всю коробку текстура
+    // ремешка натягивалась и на боковые грани, вытягиваясь там в яркую нить:
+    // вокруг замка шла проволочная обводка. Изгиб общий, поэтому торцевой
+    // материал берёт ТОТ ЖЕ параметр гиба — иначе грани поехали бы отдельно.
+    const edgeSkin = bendableMaterial(T.strap, strapW, false, -1);
+    edgeSkin.material.color.setHex(0x2a241c);
+    edgeSkin.material.map = null;
+    edgeSkin.material.roughness = 0.95;
+    edgeSkin.material.needsUpdate = true;
+    const strap = new Mesh(sgeo, [
+      edgeSkin.material,
+      edgeSkin.material,
+      edgeSkin.material,
+      edgeSkin.material,
+      material,
+      material,
+    ]);
     strap.castShadow = true;
     g.add(strap);
     straps.push(strap);
     strapBends.push(bend);
+    strapBends.push(edgeSkin.bend);
   }
 
   // ── переворачиваемый лист: плоскость, гнущаяся в шейдере.
@@ -662,12 +690,14 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
 
     // Замки отходят первыми, крышка ждёт их.
     const cl = ease(phase(t, 0, CLASP_END));
+    const strapCurl = 3.35 * (1 - ease(phase(t, 0, CLASP_END * 0.6)));
+    for (const sb of strapBends) sb.value = strapCurl;
     for (let i = 0; i < claspGroups.length; i++) {
       // Ремешок сначала распрямляется и только потом отходит: сперва он должен
       // отцепиться от штыря, а уже затем подниматься.
       claspGroups[i].rotation.y = -1.5 * ease(phase(t, CLASP_END * 0.45, CLASP_END));
       claspGroups[i].visible = cl < 0.995;
-      strapBends[i].value = 2.75 * (1 - ease(phase(t, 0, CLASP_END * 0.6)));
+
     }
 
     coverHinge.rotation.y = -ease(phase(t, CLASP_END, 0.86)) * Math.PI;
