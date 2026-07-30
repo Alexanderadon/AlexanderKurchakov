@@ -940,10 +940,38 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }
     hbGeo.computeVertexNormals();
   }
+  // Заглушка ПАЗУХИ. Между дугой горба и плоской корешковой гранью блока —
+  // полость, и сверху в неё было видно черноту насквозь. У настоящего тома её
+  // закрывает загиб кожи под капталом: тёмный полудиск на всю пазуху.
+  const capGeo = new PlaneGeometry(1, 1, SPINE_SEG, 2);
+  {
+    const cpos = capGeo.attributes.position;
+    const cuv = capGeo.attributes.uv;
+    for (let i = 0; i < cpos.count; i++) {
+      const u = cuv.getX(i);
+      const w = cuv.getY(i); // 0 — центр пазухи, 1 — дуга
+      const a = (u - 0.5) * Math.PI;
+      const k = 0.03 + 0.97 * w;
+      const tuck = (GROOVE + 0.006) * Math.sin(a) * Math.sin(a) * k;
+      cpos.setX(i, -spineRx * k * Math.cos(a) + tuck);
+      cpos.setZ(i, spineRz * k * Math.sin(a));
+      cpos.setY(i, 0);
+    }
+    capGeo.computeVertexNormals();
+  }
+  const capMat = new MeshStandardMaterial({
+    color: 0x171411,
+    roughness: 0.92,
+    metalness: 0,
+    side: DoubleSide,
+  });
   const headbands: Mesh[] = [];
   for (const sy of [1, -1]) {
     const hb = new Mesh(hbGeo, headbandMat);
     hb.scale.y = sy; // нижний колпачок — зеркало верхнего, валиком вниз
+    const cap = new Mesh(capGeo, capMat);
+    cap.position.y = -0.0012; // чуть ниже плетёнки, в тень
+    hb.add(cap);
     headbands.push(hb);
     book.add(hb);
   }
@@ -1066,16 +1094,16 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const strapH = 0.082;
     // Ремешок — КОРОБКА в толщину сыромятного ремня, с сеткой по длине для
     // шейдера изгиба и по ширине для валика.
-    const sgeo = new BoxGeometry(strapW, strapH, 0.016, 24, 4, 1);
+    const sgeo = new BoxGeometry(strapW, strapH, 0.019, 24, 4, 1);
     sgeo.translate(strapW / 2, 0, 0);
     // Валик по верху: кожаный ремень выпуклый в сечении, плоская лента читалась
     // бумажной полосой. К кромкам валик сходит в ноль — шва с торцами нет.
     {
       const spos = sgeo.attributes.position;
       for (let i = 0; i < spos.count; i++) {
-        if (spos.getZ(i) < 0.0079) continue;
+        if (spos.getZ(i) < 0.0094) continue;
         const q = Math.cos((spos.getY(i) / (strapH / 2)) * (Math.PI / 2));
-        spos.setZ(i, 0.008 + 0.0045 * q);
+        spos.setZ(i, 0.0095 + 0.005 * q);
       }
       sgeo.computeVertexNormals();
     }
@@ -1094,9 +1122,11 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // вокруг замка шла проволочная обводка. Изгиб общий, поэтому торцевой
     // материал берёт ТОТ ЖЕ параметр гиба — иначе грани поехали бы отдельно.
     const edgeSkin = bendableMaterial(T.strap, strapW, false, 0, -1, true);
-    edgeSkin.material.color.setHex(0x2a241c);
+    // Срез кожи СВЕТЛЫЙ: сырая сердцевина ремня всегда бледнее лицевой стороны.
+    // Чёрные торцы сливались с фоном, и с ребра ремень читался плоской лентой.
+    edgeSkin.material.color.setHex(0x54432f);
     edgeSkin.material.map = null;
-    edgeSkin.material.roughness = 0.95;
+    edgeSkin.material.roughness = 1;
     edgeSkin.material.needsUpdate = true;
     const strap = new Mesh(sgeo, [
       edgeSkin.material,
@@ -1110,7 +1140,7 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     strap.castShadow = true;
     // Ремень чуть ПРИПОДНЯТ: коробка стала толще, и без подъёма половина тела
     // тонула в картоне крышки.
-    strap.position.z = 0.008;
+    strap.position.z = 0.0095;
     const pivot = new Group();
     pivot.add(strap);
     g.add(pivot);
@@ -1120,28 +1150,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     strapBends.push(edgeSkin.bend);
   }
 
-  // Ответная планка замка: латунь с крюком на ИЗНАНКЕ задней крышки — туда
-  // приходит хвост ремешка. Задняя крышка неподвижна, поэтому планки — дети
-  // книги, а не петли: при открывании остаются на месте. Текстура планки была
-  // загружена с самого начала, но после переезда на three её никто не ставил
-  // в сцену — замок висел без ответной части.
-  const catchRelief = derivedCached(tex.catchPlate, 420, 2.2);
-  const catchMat = new MeshStandardMaterial({
-    map: T.catchPlate,
-    normalMap: T.nCatch,
-    normalScale: new Vector2(1.1, 1.1),
-    displacementMap: catchRelief ? catchRelief.height : undefined,
-    displacementScale: catchRelief ? 0.012 : 0,
-    displacementBias: catchRelief ? -0.002 : 0,
-    roughness: 0.45,
-    metalness: 0.62,
-    alphaTest: 0.5,
-  });
-  catchMat.alphaToCoverage = true;
-  // Застёжка на заднике собрана ЯРУСАМИ, как спереди: под хвостом ремня та же
-  // фигурная бляшка с выдавленным литьём, на ней узкая планка с крюком, и сам
-  // крюк — ТЕЛОМ, латунным клином сквозь прорезь хвоста наружу. Прежняя одинокая
-  // пластинка читалась золотой крошкой.
+  // Ответная часть замка на заднике — та же фигурная бляшка, что спереди, с
+  // выдавленным литьём: хвост ремня приходит на её край. Узкая планка с крюком
+  // (catch.webp) убрана — вместе с бляшкой и хвостом она сливалась в кашу.
   const catchBrass = new MeshStandardMaterial({
     map: T.plate,
     normalMap: T.nPlate,
@@ -1159,8 +1170,10 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   catchBrassDark.normalMap = null;
   catchBrassDark.displacementMap = null;
   catchBrassDark.displacementScale = 0;
+  // БЕЗ узкой планки и крюка поверх: бляшка + планка + клин + хвост сливались
+  // в кашу. Остаётся чистая бляшка с выдавленным литьём; хвост ремня со своей
+  // нарисованной заклёпкой прижимается к её краю и не наезжает на лилию.
   const catchPlateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), seg(72), seg(66));
-  const hookMat = new MeshStandardMaterial({ color: 0xc9a75a, roughness: 0.34, metalness: 0.82 });
   for (const sy of [0.27, -0.27]) {
     // Пирамидой и ВПЛОТНУЮ к коже: у прежней стопки внешний слой висел в семи
     // миллиметрах над крышкой и с ребра парил светлой пластинкой в воздухе.
@@ -1175,16 +1188,6 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       cp.scale.setScalar(k);
       book.add(cp);
     }
-    const strip = new Mesh(new PlaneGeometry(0.07, 0.172, seg(40), seg(96)), catchMat);
-    strip.rotation.set(0, Math.PI, Math.PI / 2);
-    strip.position.set(0.93, PAGE_H * sy * 0.6, -COVER_T - 0.0055);
-    book.add(strip);
-    // Крюк сидит НА планке и проходит сквозь прорезь хвоста: снизу тело до самой
-    // фурнитуры, наружу — клин.
-    const hook = new Mesh(new BoxGeometry(0.018, 0.024, 0.02), hookMat);
-    hook.rotation.x = Math.PI / 4;
-    hook.position.set(0.948, PAGE_H * sy * 0.6, -COVER_T - 0.033);
-    book.add(hook);
   }
 
   // ── Угловые оковки: латунные накладки по углам обеих крышек — тем же приёмом,
