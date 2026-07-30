@@ -30,7 +30,11 @@ const smoothstep = (a: number, b: number, x: number): number => {
  * тёплое поднимаем сильно, нейтральное светлое — слабо, нейтральное тёмное
  * опускаем ниже нуля, в углубление.
  */
-function heightField(src: TexImageSource, W: number, H: number): Float32Array | null {
+function heightField(
+  src: TexImageSource,
+  W: number,
+  H: number,
+): { h: Float32Array; gold: Float32Array } | null {
   const cv = document.createElement("canvas");
   cv.width = W;
   cv.height = H;
@@ -40,6 +44,7 @@ function heightField(src: TexImageSource, W: number, H: number): Float32Array | 
   g.drawImage(src as CanvasImageSource, 0, 0, W, H);
   const d = g.getImageData(0, 0, W, H).data;
   const out = new Float32Array(W * H);
+  const gold = new Float32Array(W * H);
   for (let i = 0, k = 0; i < d.length; i += 4, k++) {
     const r = d[i] / 255;
     const g = d[i + 1] / 255;
@@ -52,8 +57,11 @@ function heightField(src: TexImageSource, W: number, H: number): Float32Array | 
     // Трещины: тёмное и холодное уходит НИЖЕ поверхности, а не остаётся на нуле.
     const crack = (1 - smoothstep(0.03, 0.16, lum)) * (1 - smoothstep(0.02, 0.1, warm));
     out[k] = relief - crack * 0.35;
+    // Маска золота нужна отдельно: из неё собираются карты металличности и
+    // шероховатости — металл там же, где рисунок, по построению.
+    gold[k] = relief;
   }
-  return out;
+  return { h: out, gold };
 }
 
 /** Размытие в два прохода: O(n·r) вместо O(n·r²), результат тот же. */
@@ -83,6 +91,10 @@ export interface Derived {
   height: Texture;
   /** Карта нормалей, совпадающая с рисунком по построению. */
   normal: Texture;
+  /** Карта металличности: золото — металл, кожа — нет. */
+  metal: Texture;
+  /** Карта шероховатости: золото полировано, кожа матовая. */
+  rough: Texture;
 }
 
 /**
@@ -98,9 +110,12 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
   const W = width;
   const H = Math.round((width * ih) / iw);
 
-  const lum = heightField(src, W, H);
-  if (!lum) return null;
-  const soft = blur(lum, W, H, 2);
+  const fields = heightField(src, W, H);
+  if (!fields) return null;
+  const soft = blur(fields.h, W, H, 2);
+  // Золото размывается чуть-чуть: границе металла нужна резкость, но без
+  // размытия каждая крупинка мерцает на бликах.
+  const goldSoft = blur(fields.gold, W, H, 1);
 
   const hcv = document.createElement("canvas");
   hcv.width = W;
@@ -110,10 +125,20 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
   ncv.width = W;
   ncv.height = H;
   const ng = ncv.getContext("2d");
-  if (!hg || !ng) return null;
+  const mcv = document.createElement("canvas");
+  mcv.width = W;
+  mcv.height = H;
+  const mg = mcv.getContext("2d");
+  const rcv = document.createElement("canvas");
+  rcv.width = W;
+  rcv.height = H;
+  const rg = rcv.getContext("2d");
+  if (!hg || !ng || !mg || !rg) return null;
 
   const hImg = hg.createImageData(W, H);
   const nImg = ng.createImageData(W, H);
+  const mImg = mg.createImageData(W, H);
+  const rImg = rg.createImageData(W, H);
   // Поле уже нормировано в heightField: пороги там же, здесь только зажим.
   const at = (x: number, y: number): number => {
     const v = soft[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))];
@@ -129,6 +154,21 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
       hImg.data[k + 1] = v;
       hImg.data[k + 2] = v;
       hImg.data[k + 3] = 255;
+
+      // Металличность и шероховатость из маски золота. Материал ставит оба
+      // параметра в единицу, значения целиком живут в картах: кожа — матовый
+      // диэлектрик, тиснение — полированный металл, который и ловит окружение.
+      const gld = goldSoft[y * W + x];
+      const mv = Math.round(Math.min(1, 0.06 + 0.9 * gld) * 255);
+      const rv = Math.round(Math.min(1, Math.max(0, 0.78 - 0.5 * gld)) * 255);
+      mImg.data[k] = mv;
+      mImg.data[k + 1] = mv;
+      mImg.data[k + 2] = mv;
+      mImg.data[k + 3] = 255;
+      rImg.data[k] = rv;
+      rImg.data[k + 1] = rv;
+      rImg.data[k + 2] = rv;
+      rImg.data[k + 3] = 255;
 
       // Собель по высоте: наклон поверхности и есть нормаль.
       const dx =
@@ -148,10 +188,16 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
   }
   hg.putImageData(hImg, 0, 0);
   ng.putImageData(nImg, 0, 0);
+  mg.putImageData(mImg, 0, 0);
+  rg.putImageData(rImg, 0, 0);
 
   const height = new Texture(hcv);
   height.needsUpdate = true;
   const normal = new Texture(ncv);
   normal.needsUpdate = true;
-  return { height, normal };
+  const metal = new Texture(mcv);
+  metal.needsUpdate = true;
+  const rough = new Texture(rcv);
+  rough.needsUpdate = true;
+  return { height, normal, metal, rough };
 }
