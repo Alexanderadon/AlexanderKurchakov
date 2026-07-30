@@ -131,9 +131,14 @@ const PAPER_LIFT = 0.0015;
  * Прямой участок КОРОТКИЙ: фурнитура сидит у самого обреза. С длинным корень
  * уезжал к середине крышки, и бляшки закрывали готическое тиснение.
  */
-const STRAP_FLAT = 0.028;
+/**
+ * Прямой участок начинается НА БЛЯШКЕ: корень ремня с заклёпкой лежит в её
+ * прорези — они же сцеплены. С коротким участком корень висел в воздухе рядом
+ * с бляшкой, и крепление не читалось.
+ */
+const STRAP_FLAT = 0.058;
 const STRAP_R = 0.03;
-const STRAP_DROP = 0.305;
+const STRAP_DROP = 0.313;
 const STRAP_R2 = 0.025;
 /**
  * Прогиб спуска ВНУТРЬ, к бумаге: обрез вогнутый, и натянутый по прямой ремень
@@ -642,10 +647,22 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   });
   // Переплёт: сторона, где блок сшит. Тёмная, матовая, без кромок.
   const binding = new MeshStandardMaterial({ color: 0x24211b, roughness: 0.95, metalness: 0 });
-  // Верх блока под страницей и его низ — та же бумага, что и страницы: всё, что
-  // выглядывает в прорехи рваного края, должно читаться бумагой, а не серым
-  // картоном, который рисовал вдоль обреза сплошную серую ленту.
-  const paperTop = new MeshStandardMaterial({ color: 0xd8d1c0, roughness: 1, metalness: 0 });
+  // Верх блока под страницей — ТЕКСТУРА СЛЕДУЮЩЕЙ СТРАНИЦЫ, чуть притемнённая:
+  // под настоящим листом лежит такой же лист, и всё, что выглядывает в прорехи
+  // рваного края, совпадает по тону по построению. Плоская светлая заливка
+  // читалась чужим белым ободом вокруг страниц.
+  const underPaperR = new MeshStandardMaterial({
+    map: T.right,
+    roughness: 0.96,
+    metalness: 0,
+    color: new Color(0.9, 0.89, 0.87),
+  });
+  const underPaperL = new MeshStandardMaterial({
+    map: T.left,
+    roughness: 0.96,
+    metalness: 0,
+    color: new Color(0.9, 0.89, 0.87),
+  });
 
   const book = new Group();
   scene.add(book);
@@ -763,12 +780,19 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     if (idx) {
       for (const grp of g.groups) {
         const face = grp.materialIndex ?? 0;
-        if (face > 3) continue;
         const seen = new Set<number>();
         for (let k = grp.start; k < grp.start + grp.count; k++) {
           const vi = idx.getX(k);
           if (seen.has(vi)) continue;
           seen.add(vi);
+          if (face > 3) {
+            // Верх и низ блока несут текстуру страницы, но семплируют её
+            // ВНУТРЕННЮЮ область: по краям у страницы рваная альфа, и на
+            // сплошной грани прозрачные текселы рисовались белой гребёнкой
+            // вдоль обрезов.
+            uv.setXY(vi, 0.06 + uv.getX(vi) * 0.88, 0.06 + uv.getY(vi) * 0.88);
+            continue;
+          }
           // Повтор 1:1 — растяжение линий вдоль грани незаметно (они и так
           // тянутся вдоль), а видимый шов от тайлинга заметен сразу.
           const along = face < 2 ? p.getY(vi) / PAGE_H + 0.5 : s01[vi];
@@ -779,11 +803,11 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }
     const mats = [
       gutterAt < 0 ? edgeMat : binding, // +x
-      gutterAt < 0 ? binding : edgeMat, // -x
-      edgeMat,                          // +y: верхний обрез
-      edgeMat,                          // -y: нижний обрез
-      paperTop,                         // +z: под верхней страницей
-      paperTop,                         // -z: низ
+      gutterAt < 0 ? binding : edgeMat,       // -x
+      edgeMat,                                // +y: верхний обрез
+      edgeMat,                                // -y: нижний обрез
+      gutterAt < 0 ? underPaperR : underPaperL, // +z: под верхней страницей
+      gutterAt < 0 ? underPaperR : underPaperL, // -z: низ
     ];
     const mesh = new Mesh(g, mats);
     mesh.castShadow = true;
@@ -1068,7 +1092,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     // Сетка нужна displacement'у: у грани без вершин выдавливать нечего.
     const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), seg(72), seg(66));
     const plate = new Group();
-    plate.position.set(-plateW * 0.42, 0, 0);
+    // Бляшка стоит на прежнем месте (центр ~0.89): корень группы уехал влево
+    // на бляшку, и относительный сдвиг пересчитан, чтобы литьё не поехало.
+    plate.position.set(-0.054, 0, 0);
     // Слои — ПИРАМИДОЙ: основание у кожи самое большое, наружный меньше. При
     // обратном порядке внешний слой нависал грибом, и с ребра под его краем
     // был виден воздух. Ступеньки внутрь читаются фаской литья.
@@ -1138,9 +1164,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     ]);
     strap.customDepthMaterial = depthOfStrap;
     strap.castShadow = true;
-    // Ремень чуть ПРИПОДНЯТ: коробка стала толще, и без подъёма половина тела
-    // тонула в картоне крышки.
-    strap.position.z = 0.0095;
+    // Ремень ПРИПОДНЯТ над литьём бляшки: корень едет ПО её рельефу, а не сквозь
+    // него; дуга на углу крышки съедает высоту при спуске.
+    strap.position.z = 0.0175;
     const pivot = new Group();
     pivot.add(strap);
     g.add(pivot);
