@@ -977,14 +977,14 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), 72, 66);
     const plate = new Group();
     plate.position.set(-plateW * 0.42, 0, 0);
-    // Нижние слои ВЛОЖЕНЫ с уменьшением: одинаковые силуэты на косом ракурсе
-    // разъезжались параллаксом, и бляшка двоилась призраком. Ступенька внутрь
-    // читается фаской литья, а не вторым контуром.
+    // Слои — ПИРАМИДОЙ: основание у кожи самое большое, наружный меньше. При
+    // обратном порядке внешний слой нависал грибом, и с ребра под его краем
+    // был виден воздух. Ступеньки внутрь читаются фаской литья.
     for (const [z, mat, k] of [
-      [plateT, brass, 1],
+      [plateT, brass, 0.94],
       [plateT * 0.67, brassBack, 0.97],
-      [plateT * 0.33, brassBack, 0.94],
-      [0, brassBack, 0.91],
+      [plateT * 0.33, brassBack, 0.99],
+      [0, brassBack, 1],
     ] as const) {
       const face = new Mesh(plateGeo, mat);
       face.position.z = z;
@@ -1098,10 +1098,12 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
   const catchPlateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), 72, 66);
   const hookMat = new MeshStandardMaterial({ color: 0xc9a75a, roughness: 0.34, metalness: 0.82 });
   for (const sy of [0.27, -0.27]) {
+    // Пирамидой и ВПЛОТНУЮ к коже: у прежней стопки внешний слой висел в семи
+    // миллиметрах над крышкой и с ребра парил светлой пластинкой в воздухе.
     for (const [dz, m, k] of [
-      [-0.002, catchBrassDark, 0.92],
-      [-0.0045, catchBrassDark, 0.96],
-      [-0.007, catchBrass, 1],
+      [-0.0015, catchBrassDark, 1],
+      [-0.003, catchBrassDark, 0.97],
+      [-0.0045, catchBrass, 0.94],
     ] as const) {
       const cp = new Mesh(catchPlateGeo, m);
       cp.rotation.set(0, Math.PI, 0);
@@ -1111,11 +1113,13 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     }
     const strip = new Mesh(new PlaneGeometry(0.07, 0.172, 40, 96), catchMat);
     strip.rotation.set(0, Math.PI, Math.PI / 2);
-    strip.position.set(0.93, PAGE_H * sy * 0.6, -COVER_T - 0.0095);
+    strip.position.set(0.93, PAGE_H * sy * 0.6, -COVER_T - 0.0055);
     book.add(strip);
+    // Крюк сидит НА планке и проходит сквозь прорезь хвоста: снизу тело до самой
+    // фурнитуры, наружу — клин.
     const hook = new Mesh(new BoxGeometry(0.018, 0.024, 0.02), hookMat);
     hook.rotation.x = Math.PI / 4;
-    hook.position.set(0.948, PAGE_H * sy * 0.6, -COVER_T - 0.02);
+    hook.position.set(0.948, PAGE_H * sy * 0.6, -COVER_T - 0.033);
     book.add(hook);
   }
 
@@ -1219,9 +1223,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       ];
       for (const [x, y, rz] of spots) {
         for (const [dz, m, k] of [
-          [0.008, cornerBrass, 1],
-          [0.0055, cornerDark, 0.955],
-          [0.003, cornerDark, 0.91],
+          [0.008, cornerBrass, 0.93],
+          [0.0055, cornerDark, 0.97],
+          [0.003, cornerDark, 1],
         ] as const) {
           const c = new Mesh(cornerGeo, m);
           if (back) {
