@@ -547,24 +547,34 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const strapW = CLASP_W * 1.15;
     for (const sy of [0.27, -0.27]) {
       const hingeX = PAGE_W + SQUARE - plateW * 0.72;
-      // бляшка: лежит на крышке, живёт вместе с ней
+      // Бляшка: лежит на крышке, живёт вместе с ней. Два прохода — нижний темнее
+      // и чуть сдвинут: у плоского квада нет толщины, а накладка её обязана иметь.
       pieces.push({
-        model: multiply(coverModel, translation(hingeX, PAGE_H * sy, COVER_T + 0.002)),
+        model: multiply(coverModel, translation(hingeX + 0.004, PAGE_H * sy - 0.004, COVER_T)),
+        size: [plateW, plateW * (386 / 420)],
+        dir: 1,
+        tex: texPlate,
+        tint: [0.02, 0.018, 0.014, 0.78],
+      });
+      pieces.push({
+        model: multiply(coverModel, translation(hingeX, PAGE_H * sy, COVER_T + 0.005)),
         size: [plateW, plateW * (386 / 420)],
         dir: 1,
         tex: texPlate,
       });
-      // ремешок: от петли бляшки через торец. Изгиб уходит с 1.75 в ноль —
-      // застёгнутый ремешок обёрнут вокруг обреза, отстёгнутый прям.
+      // Ремешок. Петля стоит РОВНО на обрезе, а не у бляшки: дуга начинает
+      // гнуться от первой же точки, и с петлёй посреди крышки первый участок
+      // уходил вниз — сквозь корочку и блок. От обреза он обёртывает торец
+      // снаружи и ничего не пересекает.
       pieces.push({
         model: multiply(
-          multiply(coverModel, translation(hingeX + plateW * 0.62, PAGE_H * sy, COVER_T + 0.004)),
+          multiply(coverModel, translation(PAGE_W + SQUARE, PAGE_H * sy, COVER_T * 0.5)),
           rotationY(-1.35 * cl),
         ),
         size: [strapW, strapW * (106 / 620)],
         dir: 1,
         tex: texStrap,
-        bend: 1.75 * (1 - cl),
+        bend: 2.4 * (1 - cl),
         curl: -1,
       });
     }
