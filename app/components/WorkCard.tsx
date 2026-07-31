@@ -28,10 +28,10 @@ const NEAR_MARGIN = 500;
 // «Карточка подошла к экрану» по геометрии, без посредников. Нулевой
 // прямоугольник — карточка убрана фильтром (display:none): грузить ей картинку
 // не за чем, иначе первый же фильтр вытянул бы всю сетку разом.
-function isNear(el: HTMLElement): boolean {
+function isNear(el: HTMLElement, margin: number): boolean {
   const r = el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return false;
-  return r.top < window.innerHeight + NEAR_MARGIN && r.bottom > -NEAR_MARGIN;
+  return r.top < window.innerHeight + margin && r.bottom > -margin;
 }
 
 // ── Пробуждение отложенной загрузки ──────────────────────────────────────────
@@ -136,7 +136,11 @@ export function WorkCard({
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
-    if (isNear(el) || !("IntersectionObserver" in window)) {
+    // Сразу — ТОЛЬКО то, что действительно в окне (запас 0), а не всё в пределах
+    // 500 px. С широким запасом первая загрузка подорожала с 4867 до 6204 мс:
+    // лишние постеры декодировались под заставкой. Остальным по-прежнему
+    // занимается наблюдатель со своим запасом в 500 px.
+    if (isNear(el, 0) || !("IntersectionObserver" in window)) {
       setNear(true);
       return;
     }
@@ -157,7 +161,7 @@ export function WorkCard({
     // на экране — проверяем сами и, если пора, ставим картинку не дожидаясь
     // колеса. Дальние карточки проверка не задевает: у них rect не в кадре.
     const stopWake = onWake(() => {
-      if (done || !isNear(el)) return;
+      if (done || !isNear(el, NEAR_MARGIN)) return;
       done = true;
       setNear(true);
       io.disconnect();

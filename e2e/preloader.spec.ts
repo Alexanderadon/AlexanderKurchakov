@@ -56,20 +56,25 @@ test.describe("прелоадер", () => {
     // и уходит сам, без перезагрузки
     await expect(page.locator(".preload")).toHaveCount(0, { timeout: 26_000 });
     await expect(page.locator(".rootwrap")).toBeVisible();
-    expect(await page.evaluate(() => sessionStorage.getItem("kur:preloaded"))).toBe("1");
+    // Метки сессии больше нет: заставка идёт на КАЖДОЙ загрузке документа.
+    // Скомпилированные шейдерные программы браузер между загрузками не хранит,
+    // линковка платится всякий раз (550-771 мс длинных задач на прод-сборке), и
+    // прятать её больше нечем. Проверяем, что метку никто не пишет.
+    expect(await page.evaluate(() => sessionStorage.getItem("kur:preloaded"))).toBeNull();
   });
 
-  test("второй раз за сессию не показывается", async ({ page }) => {
+  test("показывается и на повторной загрузке", async ({ page }) => {
     test.slow();
-    await page.goto("/?preload");
-    // Сначала дожидаемся появления: без этого toHaveCount(0) проходит ещё до
-    // того, как React смонтировал оверлей, и сессия не помечается — тест тогда
-    // проверяет не то, что задумано.
+    await page.goto("/");
     await expect(page.getByRole("progressbar")).toBeVisible();
     await expect(page.locator(".preload")).toHaveCount(0, { timeout: 26_000 });
-    await page.goto("/");
+    // Раньше здесь проверялось обратное — что второй раз заставки НЕТ. Гейт по
+    // sessionStorage снят: без заставки вся линковка шейдеров била по уже
+    // показанной странице, и это были те самые «фризы при обновлении».
+    await page.reload();
+    await expect(page.getByRole("progressbar")).toBeVisible();
+    await expect(page.locator(".preload")).toHaveCount(0, { timeout: 26_000 });
     await expect(page.locator(".rootwrap")).toBeVisible();
-    await expect(page.locator(".preload")).toHaveCount(0);
   });
 
   test("не появляется при prefers-reduced-motion", async ({ page }) => {
