@@ -3,12 +3,15 @@
 // Как это устроено «по-взрослому», а не как таймер на четыре секунды:
 //  • Показ решается ДО первой отрисовки — инлайновым скриптом в <head>, который
 //    ставит data-preload на <html>. CSS по этому атрибуту прячет контент, поэтому
-//    страница не успевает мигнуть. У скрипта есть предохранитель: через 8 секунд
-//    атрибут снимается сам, чтобы упавший JS не оставил сайт невидимым навсегда.
+//    страница не успевает мигнуть. У скрипта есть предохранитель (BOOT_GATE_MS):
+//    он снимает атрибут сам, чтобы упавший JS не оставил сайт невидимым навсегда.
 //  • Прогресс тянется за РЕАЛЬНОЙ загрузкой (шрифты, текстуры, постер героя),
 //    с полом 1.1 с (мигнувший прелоадер хуже отсутствующего) и потолком 4.2 с
 //    (зависшая загрузка не должна вешать сайт).
-//  • Один раз за сессию: на второй странице и после возврата назад не мешает.
+//  • На КАЖДОЙ загрузке документа, включая перезагрузку: браузер не хранит
+//    скомпилированные шейдерные программы между загрузками, поэтому линковка
+//    (550-771 мс на прод-сборке) платится всякий раз, и её нужно прятать.
+//    Повторная загрузка при этом короче первой — остальное лежит в кэше.
 //  • Уважает prefers-reduced-motion и Save-Data — там его просто нет.
 //  • Доступность: role="progressbar" с реальным aria-valuenow, контент под ним
 //    скрыт visibility:hidden, то есть недостижим ни фокусом, ни скринридером.
@@ -18,13 +21,19 @@ import { bufferDpr, eyeMetrics, isNarrow } from "./geometry";
 import { DEFAULT_TIMING, initialCounter, smoothstep, progressTarget, stepCounter } from "./progress";
 import { whenHandsReady } from "~/lib/handFrames";
 import { whenBookReady } from "~/lib/bookReady";
-import { FADE_MS, FINALE_MS, HARD_BAIL_MS } from "~/lib/preloadTiming";
+import {
+  FADE_MS,
+  FINALE_MS,
+  HARD_BAIL_MS,
+  WARM_FINALE_MS,
+  WARM_FLOOR_MS,
+  isWarmLoad,
+} from "~/lib/preloadTiming";
 import { Readiness, decodeImage, whenFontsReady } from "./readiness";
 import { createScene, type SceneImages } from "./scene";
 import { stageAt, type Viewport } from "./words";
 import { roman } from "./roman";
 
-const SESSION_KEY = "kur:preloaded";
 // Образцы обязательны: без них грузится только латинский срез, и кириллица
 // в переводах отрисовалась бы подставным шрифтом.
 const FONTS = [
@@ -82,6 +91,11 @@ export function Preloader() {
     const ready = new Readiness();
     const images: Partial<SceneImages> = {};
     let disposed = false;
+    // Повторная загрузка короче первой: прятать там нужно только линковку
+    // шейдеров, всё остальное лежит в кэше.
+    const warm = isWarmLoad();
+    const timing = warm ? { ...DEFAULT_TIMING, minMs: WARM_FLOOR_MS } : DEFAULT_TIMING;
+    const finaleMs = warm ? WARM_FINALE_MS : FINALE_MS;
 
     let vp: Viewport = { w: innerWidth, h: innerHeight, narrow: isNarrow(innerWidth, innerHeight) };
     const relayout = (): void => {
@@ -225,10 +239,10 @@ export function Preloader() {
       ready.mark("frame");
 
       if (counter.pct < 100) {
-        const target = progressTarget(now - startT, ready.ratio, DEFAULT_TIMING);
+        const target = progressTarget(now - startT, ready.ratio, timing);
         counter = stepCounter(counter, target, dt);
       } else if (done < 1) {
-        done = Math.min(1, done + dt / FINALE_MS);
+        done = Math.min(1, done + dt / finaleMs);
       } else if (!ending) {
         ending = 1;
         finish();
@@ -271,11 +285,8 @@ export function Preloader() {
   function finish(): void {
     if (finishedRef.current) return;
     finishedRef.current = true;
-    try {
-      sessionStorage.setItem(SESSION_KEY, "1");
-    } catch {
-      /* приватный режим — переживём */
-    }
+    // Метки сессии больше НЕТ: заставка идёт на каждой загрузке, и читать её
+    // было некому — единственным читателем был инлайновый скрипт.
     document.documentElement.removeAttribute("data-preload");
     setFading(true);
     window.setTimeout(() => setLive(false), FADE_MS);

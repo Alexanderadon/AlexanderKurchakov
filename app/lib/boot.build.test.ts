@@ -35,7 +35,10 @@ describe.skipIf(!built)("собранная разметка", () => {
     expect(inline).toMatch(/data-preload/);
     expect(inline).toMatch(/prefers-reduced-motion/);
     expect(inline).toMatch(/saveData/);
-    expect(inline).toMatch(/kur:preloaded/);
+    // Гейта по сессии больше нет: заставка идёт на каждой загрузке документа,
+    // потому что скомпилированные шейдерные программы браузер между загрузками
+    // не хранит и линковку (550-771 мс) приходится прятать всякий раз.
+    expect(inline).not.toMatch(/kur:preloaded/);
   });
 
   it("предохранитель на месте и переживает полный цикл оверлея", () => {

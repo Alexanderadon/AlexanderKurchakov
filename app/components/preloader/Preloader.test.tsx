@@ -78,10 +78,13 @@ describe("Preloader", () => {
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
-  it("помечает сессию, чтобы не показываться второй раз", () => {
+  it("не помечает сессию: заставка идёт на каждой загрузке", () => {
+    // Метка была нужна гейту в инлайновом скрипте, который показывал заставку
+    // раз за сессию. Гейт снят — на F5 иначе вся линковка шейдеров бьёт по уже
+    // показанной странице, а прятать её больше нечем.
     html().setAttribute("data-preload", "");
     render(<Preloader />);
-    expect(sessionStorage.getItem("kur:preloaded")).toBe("1");
+    expect(sessionStorage.getItem("kur:preloaded")).toBeNull();
   });
 
   it("переживает недоступное sessionStorage (приватный режим)", () => {

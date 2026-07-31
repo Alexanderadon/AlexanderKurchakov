@@ -63,23 +63,15 @@ describe("BOOT_SCRIPT", () => {
     expect(el.hasAttribute("data-preload")).toBe(true);
   });
 
-  it("?preload показывает заставку принудительно, даже если сессия помечена", () => {
-    // без этого пересмотреть её нельзя иначе как через инкогнито или консоль
+  it("показывает заставку и на повторной загрузке", () => {
+    // Раньше был гейт по sessionStorage — заставка шла раз за сессию, и на F5
+    // вся линковка шейдеров (550-771 мс длинных задач на прод-сборке) била по
+    // уже показанной странице. Скомпилированные программы браузер между
+    // загрузками не хранит, поэтому эту работу можно только прятать.
     sessionStorage.setItem("kur:preloaded", "1");
-    const url = new URL(location.href);
-    url.search = "?preload";
-    history.replaceState(null, "", url);
     const el = document.createElement("html");
     runBoot(el);
     expect(el.hasAttribute("data-preload")).toBe(true);
-    history.replaceState(null, "", "/");
-  });
-
-  it("не показывает прелоадер второй раз за сессию", () => {
-    sessionStorage.setItem("kur:preloaded", "1");
-    const el = document.createElement("html");
-    runBoot(el);
-    expect(el.hasAttribute("data-preload")).toBe(false);
   });
 
   it("не показывает прелоадер при prefers-reduced-motion", () => {
