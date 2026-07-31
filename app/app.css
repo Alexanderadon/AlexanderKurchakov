@@ -148,6 +148,9 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
 /* Живая 3D-книга в плитке. Постер остаётся фолбэком до готовности сцены (и
    отдаёт LCP), затем гаснет под канвасом. Канвас прозрачный — drop-shadow
    обводит сам том, тень остаётся честной. */
+/* Гнездо канваса в плитке. Сам канвас создаётся кодом и переезжает в модалку,
+   поэтому в разметке остаётся только пустое место под него. */
+.bslot{position:absolute;inset:0;pointer-events:none}
 .btile{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:0;
   pointer-events:none;
   filter:drop-shadow(0 15px 20px rgba(0,0,0,.72)) drop-shadow(0 3px 4px rgba(0,0,0,.55));

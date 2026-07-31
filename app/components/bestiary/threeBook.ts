@@ -92,6 +92,12 @@ export interface BookScene {
    * которую его взяли.
    */
   turnFrom(fromY: number): void;
+  /**
+   * Переключает РАМКУ КАДРА, не пересобирая сцену: "tile" — фронтально и
+   * крупно, без подиума; "spread" — режиссёрский облёт с пятном света и тенью
+   * на столе. Ради этих двух режимов раньше строились две полные книги.
+   */
+  setFraming(mode: "tile" | "spread"): void;
   /** Крутить книгу перетаскиванием: сдвиг в пикселях за кадр движения. */
   orbit(dx: number, dy: number): void;
   /** Отпустили — дальше по инерции. */
@@ -430,16 +436,31 @@ function bendableMaterial(
 }
 
 /**
- * Кэш выведенных карт. Прогревается из Bestiary.warm() ДО клика: четыре
- * deriveMaps стоят ~150–200 мс на главном потоке, и без прогрева эта пауза
- * попадала прямо в щелчок открытия книги.
+ * Кэш выведенных карт. Греется из Bestiary ДО показа книги: замер прод-сборки
+ * дал три прохода deriveMaps примерно на 900 мс главного потока (прежний
+ * комментарий обещал 150–200 мс на четыре — цифра была занижена в семь раз, и
+ * именно из-за неё конвейер прогрева считали дешёвым).
+ *
+ * Ключ — картинка И параметры. Раньше ключом была только картинка, и вызов с
+ * другой шириной молча получал чужую карту: разъехавшиеся числа в двух местах
+ * (512 в прогреве против 512 в сборке) никак бы себя не проявили, а при правке
+ * одного из них рельеф считался бы в одном разрешении, а масштабировался под
+ * другое.
  */
-const reliefCache = new Map<TexImageSource, ReturnType<typeof deriveMaps>>();
+const reliefCache = new Map<string, ReturnType<typeof deriveMaps>>();
+const reliefKeys = new WeakMap<object, number>();
+let reliefSeq = 0;
 function derivedCached(src: TexImageSource, w: number, s: number): ReturnType<typeof deriveMaps> {
-  let d = reliefCache.get(src);
+  let id = reliefKeys.get(src as object);
+  if (id === undefined) {
+    id = ++reliefSeq;
+    reliefKeys.set(src as object, id);
+  }
+  const key = `${id}|${w}|${s}`;
+  let d = reliefCache.get(key);
   if (d === undefined) {
     d = deriveMaps(src, w, s);
-    reliefCache.set(src, d);
+    reliefCache.set(key, d);
   }
   return d;
 }
@@ -449,13 +470,18 @@ function derivedCached(src: TexImageSource, w: number, s: number): ReturnType<ty
  * страницы (прелоадер, вход) не дёргались от одного сплошного куска работы.
  */
 export function reliefSteps(
-  tex: Pick<BookTextures, "coverFront" | "spine" | "plate" | "catchPlate">,
+  tex: Pick<BookTextures, "coverFront" | "spine" | "plate">,
 ): Array<() => void> {
   return [
     () => void derivedCached(tex.coverFront, 768, 2.6),
-    () => void derivedCached(tex.spine, 512, 2.4),
+    // Корешок считается в 256, а не в 512: исходник spine.webp — 220 пикселей
+    // в ширину, и вчетверо большее поле не добавляет ни одной детали, только
+    // 1.28 мегапикселя работы из воздуха.
+    () => void derivedCached(tex.spine, 256, 2.4),
     () => void derivedCached(tex.plate, 420, 2.2),
-    () => void derivedCached(tex.catchPlate, 420, 2.2),
+    // Четвёртым шагом здесь грелся catchPlate. Его карты не читает НИКТО:
+    // ответная планка собирается из плоского tex.catchPlate без рельефа, и
+    // весь проход уходил в кэш, из которого никто не берёт.
   ];
 }
 
@@ -463,18 +489,21 @@ export function createBook(
   canvas: HTMLCanvasElement,
   tex: BookTextures,
   opts?: {
-    /** Ближняя рамка для ПЛИТКИ: закрытый том крупнее в кадре. */
+    /**
+     * Ближняя рамка для ПЛИТКИ: закрытый том крупнее в кадре и без подиума.
+     * Дальше переключается на ходу через setFraming — отдельного флага «голая
+     * книга» больше нет, подиум это часть рамки, а не свойство сборки.
+     */
     closeUp?: boolean;
-    /** ГОЛАЯ книга без подиума: ни пятна света, ни ловца тени за томом. */
-    bare?: boolean;
     /** СПЯЩИЙ старт: кадровый цикл не запускается — сцену будят setActive(true).
      *  Нужен предварительной сборке: первый же кадр компилировал бы шейдеры
      *  синхронно, а для этого есть асинхронный compile(). */
     dormant?: boolean;
   },
 ): BookScene | null {
-  const closeUp = !!opts?.closeUp;
-  const bare = !!opts?.bare;
+  // Не константы: одна и та же сцена служит и плиткой, и разворотом в модалке —
+  // рамка кадра и подиум переключаются на ходу через setFraming.
+  let closeUp = !!opts?.closeUp;
   const dormant = !!opts?.dormant;
   // Узкому экрану — половинные сетки: displacement-геометрии тяжёлые, а на
   // телефоне их разрешение всё равно не читается.
@@ -487,13 +516,46 @@ export function createBook(
     canvas.dataset.bookError = "webgl недоступен";
     return null;
   }
+  // ГЛАВНАЯ причина фризов при загрузке — вот эта строка, а не количество полигонов.
+  //
+  // Линковка шейдера у драйвера асинхронна: gl.linkProgram возвращается сразу, а
+  // работа идёт в фоне. Но при checkShaderErrors (включён по умолчанию) three на
+  // ПЕРВОМ использовании программы зовёт getProgramInfoLog/getShaderInfoLog и
+  // getProgramParameter(LINK_STATUS) — а они обязаны дождаться драйвера. Главный
+  // поток встаёт. Профиль прод-сборки: 3529 мс в одной задаче и 8357 мс длинных
+  // задач суммарно на 84 программы, при том что сам linkProgram занимает 114 мс.
+  //
+  // В разработке проверку оставляем: именно она когда-то поймала несовпадение
+  // точности uniform, из-за которого сцена молча не собиралась.
+  renderer.debug.checkShaderErrors = import.meta.env.DEV;
   renderer.setClearColor(new Color(0x000000), 0);
   // AgX держит золото в светах, не выбеливая его: у ACESFilmic тиснение уходило
   // в жёлтую кашу на ярких участках.
   renderer.toneMapping = AgXToneMapping;
   renderer.toneMappingExposure = 1.1;
-  renderer.shadowMap.enabled = true;
+  // ТЕНИ ТОЛЬКО В РАЗВОРОТЕ.
+  //
+  // Теневой проход — это отдельный набор depth-программ, по одной на каждую
+  // конфигурацию материала, и compileAsync их НЕ покрывает: three готовит только
+  // цветовой проход, а внутренние depth-варианты линкуются в первом же видимом
+  // кадре. Тень отбрасывают 40 мешей из 56, конфигураций материала 19 — вот
+  // откуда почти половина из 41 программы и 3.5 с ожидания драйвера.
+  //
+  // В плитке 273×210 динамическая тень не читается вовсе: под томом лежит
+  // CSS-тень (.btile filter: drop-shadow), и именно она рисует вес. Включаем
+  // теневой проход только когда книга разворачивается на подиуме.
+  renderer.shadowMap.enabled = !closeUp;
   renderer.shadowMap.type = PCFSoftShadowMap;
+  // Тень пересчитывается по требованию, а не каждый кадр: см. moved в цикле.
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
+  /**
+   * Что-то сдвинулось не по своей воле книги (мышь, ресайз, пробуждение, смена
+   * рамки) — тень пересчитать. Объявлено ЗДЕСЬ, а не рядом с циклом кадров:
+   * resize() зовётся до конца сборки, и объявление ниже дало бы обращение к
+   * переменной до инициализации.
+   */
+  let moved = true;
 
   const scene = new Scene();
 
@@ -580,14 +642,23 @@ export function createBook(
     new MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false }),
   );
   glow.position.set(0.2, -0.3, -0.06);
-  if (!bare) scene.add(glow);
+  // Подиум ВСЕГДА в сцене, но гасится видимостью. Раньше «голость» решалась на
+  // сборке, и ради двух режимов кадра приходилось строить ДВЕ книги — два
+  // рендерера, два кэша программ, два комплекта текстур. Замер: плитка 39
+  // программ и 3827 мс ожидания драйвера, модалка ещё 21 программа. Программы
+  // живут в контексте и между контекстами не делятся никак, поэтому вторая
+  // сцена — это ровно вторая полная оплата.
+  scene.add(glow);
   // Плотность тени на подиуме живёт в кадре: закрытому тому она даёт вес, а при
   // раскрытии квадратные тени крышки и блока ездили по заднику «квадратиками».
   const shadowMat = new ShadowMaterial({ opacity: 0.42 });
   const shadowCatch = new Mesh(new PlaneGeometry(7, 7), shadowMat);
   shadowCatch.position.set(0.2, -0.3, -0.045);
   shadowCatch.receiveShadow = true;
-  if (!bare) scene.add(shadowCatch);
+  scene.add(shadowCatch);
+  // Подиум — принадлежность разворотной рамки, в плитке его нет.
+  glow.visible = !closeUp;
+  shadowCatch.visible = !closeUp;
 
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const T = {
@@ -947,7 +1018,9 @@ export function createBook(
   // Лицо с тиснением смотрит НАРУЖУ, обычной стороной: зеркалить нечего.
   // Рельеф и золото корешка — из ЕГО СОБСТВЕННОЙ текстуры: раньше сюда была
   // прикручена карта нормалей обложки, и свет ложился по чужому рисунку.
-  const spineRelief = derivedCached(tex.spine, 512, 2.4);
+  // Ширина обязана совпадать с прогревом (reliefSteps), иначе кэш промахивается
+  // и карта считается второй раз — уже на видимой странице.
+  const spineRelief = derivedCached(tex.spine, 256, 2.4);
   const spineFace = new Mesh(
     spineGeo,
     new MeshStandardMaterial({
@@ -1438,6 +1511,7 @@ export function createBook(
     narrow = w / h < 1.15;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    moved = true;
   }
 
   function render(open: number, turn: number, leftPages: number, rightPages: number): void {
@@ -1698,6 +1772,7 @@ export function createBook(
 
     // Инерция вращения: скорость гаснет за ~0.4 с, углы упираются в пределы.
     if (orb.vYaw || orb.vPitch) {
+      moved = true;
       orb.yaw += orb.vYaw * dt;
       orb.pitch += orb.vPitch * dt;
       const damp = Math.pow(0.02, dt);
@@ -1714,6 +1789,12 @@ export function createBook(
     state.open = cur.open;
     state.page = cur.page;
     state.busy = Math.abs(dOpen) > 1e-3 || Math.abs(dPage) > 1e-3;
+    // Теневая карта 2048² перепекалась КАЖДЫЙ кадр — и у неподвижной книги в
+    // плитке тоже. Это отдельный проход по всей геометрии со своими depth-
+    // программами, 60 раз в секунду ради картинки, которая не меняется.
+    // Обновляем, только когда что-то действительно поехало.
+    if (state.busy || moved) renderer.shadowMap.needsUpdate = true;
+    moved = false;
 
     // Целая часть — сколько листов уже слева, дробная — ход текущего.
     const whole = Math.floor(cur.page + 1e-6);
@@ -1757,11 +1838,21 @@ export function createBook(
       tgt.open = cur.open;
       tgt.page = cur.page;
     },
+    setFraming(mode: "tile" | "spread"): void {
+      closeUp = mode === "tile";
+      glow.visible = !closeUp;
+      shadowCatch.visible = !closeUp;
+      renderer.shadowMap.enabled = !closeUp;
+      // Кадр сменился — тень пересчитать обязательно, даже если книга стоит.
+      renderer.shadowMap.needsUpdate = true;
+      moved = true;
+    },
     orbit(dx: number, dy: number): void {
       orb.yaw -= dx * 0.006;
       orb.pitch -= dy * 0.005;
       orb.vYaw = 0;
       orb.vPitch = 0;
+      moved = true;
     },
     release(vx: number, vy: number): void {
       orb.vYaw = -vx * 0.006;
@@ -1772,11 +1863,13 @@ export function createBook(
       orb.pitch = 0;
       orb.vYaw = 0;
       orb.vPitch = 0;
+      moved = true;
     },
     setActive(on: boolean): void {
       if (on) {
         if (!raf) {
           last = 0; // иначе первый dt после сна съест накопленный простой
+          moved = true; // проснулись — первый кадр рисуем с честной тенью
           raf = requestAnimationFrame(step);
         }
       } else if (raf) {

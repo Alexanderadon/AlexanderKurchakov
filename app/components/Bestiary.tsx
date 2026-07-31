@@ -96,14 +96,10 @@ export function Bestiary() {
   // постера. Прогрев стартует сразу после монтирования (в idle) — плитке всё
   // равно нужны чанк и текстуры, а заодно к клику готова и модалка: прежняя
   // ленивая загрузка по доскроллу оставляла клик с ожиданием в секунды.
-  const tileRef = useRef<HTMLCanvasElement>(null);
-  const tileSceneRef = useRef<BookScene | null>(null);
-  const modalCvRef = useRef<HTMLCanvasElement | null>(null);
   const slotRef = useRef<HTMLDivElement>(null);
+  const tileSlotRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [tileLive, setTileLive] = useState(false);
-  // Отдельный сигнал готовности модальной сцены: она доезжает ПОЗЖЕ плитки, и
-  // если модалку открыли в этот зазор, вставка канваса обязана повториться.
-  const [modalLive, setModalLive] = useState(false);
   useEffect(() => {
     let dead = false;
     const idle =
@@ -130,36 +126,30 @@ export function Bestiary() {
           stepFn();
         }
         await breath();
-        if (dead || !tileRef.current || tileSceneRef.current) return;
-        // Плитка: голая книга без подиума, фронтальной рамкой.
-        const ts = make(tileRef.current, tex, { closeUp: true, bare: true, dormant: true });
-        tileSceneRef.current = ts;
-        if (ts) {
-          await ts.compile();
+        if (dead || !tileSlotRef.current || sceneRef.current) return;
+        const cv = document.createElement("canvas");
+        cv.className = "btile";
+        cv.setAttribute("aria-hidden", "true");
+        tileSlotRef.current.appendChild(cv);
+        canvasRef.current = cv;
+        // ОДНА сцена на обе роли. Раньше их было две — отдельная для плитки и
+        // отдельная для модалки, — и это стоило ровно вдвое: программы шейдеров
+        // живут в WebGL-контексте и между контекстами не делятся никак. Замер
+        // прод-сборки: плитка 39 программ и 3827 мс ожидания драйвера в
+        // конструкторе WebGLUniforms, модалка ещё 21 программа про запас.
+        // Теперь канвас один и переезжает из плитки в модалку и обратно, а
+        // рамка кадра переключается setFraming.
+        const sc = make(cv, tex, { closeUp: true, dormant: true });
+        sceneRef.current = sc;
+        if (sc) {
+          sc.target(0, pageRef.current);
+          await sc.compile();
           if (dead) return;
-          ts.setActive(true);
+          sc.setActive(true);
           setTileLive(true);
-          // Плитка ожила — прелоадер можно отпускать: видимого постера уже нет.
-          // Модальная сцена доготовится асинхронно в фоне, без рывков.
-          markBookReady();
-        }
-        await breath();
-        if (dead) return;
-        // Модальная сцена: спящая, скомпилированная заранее — проснётся при
-        // открытии. Пересборок нет, клик мгновенный.
-        const mc = document.createElement("canvas");
-        mc.className = "bbook";
-        modalCvRef.current = mc;
-        const ms = make(mc, tex, { dormant: true });
-        sceneRef.current = ms;
-        ms?.target(0, pageRef.current);
-        // Сцена есть — вставлять уже можно (если модалку открыли раньше времени,
-        // недокомпилированное доберёт первый кадр). Прогрев продолжается фоном.
-        setModalLive(true);
-        if (ms) await ms.compile();
-        if (dead) return;
-        if (import.meta.env.DEV) {
-          (window as unknown as { __book?: BookScene | null }).__book = sceneRef.current;
+          if (import.meta.env.DEV) {
+            (window as unknown as { __book?: BookScene | null }).__book = sc;
+          }
         }
       } finally {
         // Отпускаем прелоадер и при успехе, и при падении сети: без книги ему
@@ -168,15 +158,12 @@ export function Bestiary() {
       }
     })();
     const onR = (): void => {
-      tileSceneRef.current?.resize();
       sceneRef.current?.resize();
     };
     window.addEventListener("resize", onR);
     return () => {
       dead = true;
       window.removeEventListener("resize", onR);
-      tileSceneRef.current?.dispose();
-      tileSceneRef.current = null;
       sceneRef.current?.dispose();
       sceneRef.current = null;
     };
@@ -197,7 +184,7 @@ export function Bestiary() {
       const dy = (s.ty - s.cy) * 0.14;
       s.cx += dx;
       s.cy += dy;
-      tileSceneRef.current?.orbit(dx, dy);
+      sceneRef.current?.orbit(dx, dy);
       if (Math.abs(s.tx - s.cx) > 0.4 || Math.abs(s.ty - s.cy) > 0.4) {
         s.raf = requestAnimationFrame(step);
       } else {
@@ -265,23 +252,43 @@ export function Bestiary() {
   // эффект добежит по tileLive.
   useEffect(() => {
     if (phase === "shut") return;
-    const mc = modalCvRef.current;
+    const cv = canvasRef.current;
     const slot = slotRef.current;
+    const home = tileSlotRef.current;
     const sc = sceneRef.current;
-    if (!mc || !slot || !sc) return;
-    mc.setAttribute("role", "img");
-    mc.setAttribute("aria-label", t.hero.bestiarySpread);
-    slot.appendChild(mc);
-    sc.setActive(true);
+    if (!cv || !slot || !home || !sc) return;
+    // ПЕРЕЕЗД, а не вторая сцена: тот же канвас вынимается из плитки и
+    // вставляется в модалку. WebGL-контекст переживает перенос узла между
+    // родителями — теряется он только при удалении из документа, а тут узел
+    // всё время остаётся в дереве.
+    //
+    // Класс МЕНЯЕМ, а не добавляем: у плиточного канваса opacity:0 вне
+    // .bshut[data-live], pointer-events:none и своя drop-shadow с переходом —
+    // в модалке всё это лишнее.
+    cv.classList.remove("btile");
+    cv.classList.add("bbook");
+    cv.setAttribute("role", "img");
+    cv.setAttribute("aria-label", t.hero.bestiarySpread);
+    cv.removeAttribute("aria-hidden");
+    slot.appendChild(cv);
+    sc.setFraming("spread");
     sc.resize();
     // Раскрываем НЕ сразу: книга ждёт закрытой, её можно покрутить. Открывает
     // следующий клик — иначе рассмотреть том не успеваешь.
     sc.target(phase === "open" ? 1 : 0, pageRef.current);
     return () => {
-      mc.remove();
-      sc.setActive(false);
+      cv.classList.remove("bbook");
+      cv.classList.add("btile");
+      cv.removeAttribute("role");
+      cv.removeAttribute("aria-label");
+      cv.setAttribute("aria-hidden", "true");
+      home.appendChild(cv);
+      sc.setFraming("tile");
+      sc.resetView();
+      sc.target(0, pageRef.current);
+      sc.resize();
     };
-  }, [phase === "shut", modalLive, t.hero.bestiarySpread]);
+  }, [phase === "shut", tileLive, t.hero.bestiarySpread]);
 
   // Клавиатура: Escape закрывает, стрелки листают. Вешаем на документ, пока
   // открыто, — фокус может быть на любом элементе внутри диалога.
@@ -480,8 +487,15 @@ export function Bestiary() {
           loading="lazy"
           decoding="async"
         />
-        {/* Живой том: канвас поверх постера, постер гаснет по готовности сцены. */}
-        <canvas ref={tileRef} className="btile" aria-hidden="true" />
+        {/* Живой том: канвас поверх постера, постер гаснет по готовности сцены.
+            Гнездо, а не сам канвас: канвас один на плитку и на модалку и ездит
+            между ними, а узел, созданный из JSX, так двигать НЕЛЬЗЯ. React
+            рассылает события по дереву файберов, а не по DOM: у перенесённого
+            JSX-узла родителем в дереве остаётся плитка, и pointerup из модалки
+            уходил в onClick кнопки .bshut вместо обработчиков книги — клик по
+            тому переставал его раскрывать. У канваса, созданного вручную,
+            файбера нет, и событие достаётся ближайшему предку по DOM. */}
+        <div ref={tileSlotRef} className="bslot" aria-hidden="true" />
       </button>
 
       {live &&

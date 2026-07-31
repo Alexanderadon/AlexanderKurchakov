@@ -139,17 +139,39 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
   const nImg = ng.createImageData(W, H);
   const mImg = mg.createImageData(W, H);
   const rImg = rg.createImageData(W, H);
-  // Поле уже нормировано в heightField: пороги там же, здесь только зажим.
-  const at = (x: number, y: number): number => {
-    const v = soft[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))];
-    return Math.min(1, Math.max(0, v * 0.74 + 0.26));
-  };
+  // ЗАГОТОВКИ вместо пересчёта в каждом пикселе.
+  //
+  // Раньше здесь была функция at(x,y), которая на каждый вызов зажимала обе
+  // координаты и заново приводила высоту. Собель зовёт её восемь раз, плюс
+  // девятый — для самой высоты: на 768×1110 это девять миллионов вызовов с
+  // четырьмя Math.min/max каждый. Приводим поле ОДИН раз, а соседей берём
+  // прямым индексом.
+  const hh = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const v = soft[i] * 0.74 + 0.26;
+    hh[i] = v < 0 ? 0 : v > 1 ? 1 : v;
+  }
+  // Износ и «пятна» раскладываются на произведение множителя по столбцу и
+  // множителя по строке — значит считаются W + H раз, а не W·H.
+  const colBorder = new Float32Array(W);
+  const colPatch = new Float32Array(W);
+  for (let x = 0; x < W; x++) {
+    colBorder[x] = smoothstep(0, 0.055, Math.min(x, W - 1 - x) / W);
+    colPatch[x] = Math.sin(x * 0.011 + 3.1);
+  }
 
   for (let y = 0; y < H; y++) {
+    const rowUp = (y > 0 ? y - 1 : 0) * W;
+    const row = y * W;
+    const rowDn = (y < H - 1 ? y + 1 : H - 1) * W;
+    const rowBorder = smoothstep(0, 0.075, Math.min(y, H - 1 - y) / H);
+    const rowPatch = Math.sin(y * 0.014 + 1.2);
     for (let x = 0; x < W; x++) {
-      const h = at(x, y);
-      const k = (y * W + x) * 4;
-      const v = Math.round(h * 255);
+      const xm = x > 0 ? x - 1 : 0;
+      const xp = x < W - 1 ? x + 1 : W - 1;
+      const h = hh[row + x];
+      const k = (row + x) * 4;
+      const v = (h * 255 + 0.5) | 0;
       hImg.data[k] = v;
       hImg.data[k + 1] = v;
       hImg.data[k + 2] = v;
@@ -163,15 +185,13 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
       // кромок и углов её съедают руки и полка. Вклад золота гасится к границам
       // листа, и не ровной виньеткой, а пятнами — низкочастотный синус даёт
       // неравномерность износа. Стёртое золото заодно матовеет.
-      const gld = goldSoft[y * W + x];
-      const ex = Math.min(x, W - 1 - x) / W;
-      const ey = Math.min(y, H - 1 - y) / H;
-      const border = smoothstep(0, 0.055, ex) * smoothstep(0, 0.075, ey);
-      const patch = 0.82 + 0.18 * Math.sin(x * 0.011 + 3.1) * Math.sin(y * 0.014 + 1.2);
+      const gld = goldSoft[row + x];
+      const border = colBorder[x] * rowBorder;
+      const patch = 0.82 + 0.18 * colPatch[x] * rowPatch;
       const wear = Math.min(1, (0.28 + 0.72 * border) * patch);
       const gw = gld * wear;
-      const mv = Math.round(Math.min(1, 0.06 + 0.9 * gw) * 255);
-      const rv = Math.round(Math.min(1, Math.max(0, 0.78 - 0.5 * gw)) * 255);
+      const mv = (Math.min(1, 0.06 + 0.9 * gw) * 255 + 0.5) | 0;
+      const rv = (Math.min(1, Math.max(0, 0.78 - 0.5 * gw)) * 255 + 0.5) | 0;
       mImg.data[k] = mv;
       mImg.data[k + 1] = mv;
       mImg.data[k + 2] = mv;
@@ -182,18 +202,24 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
       rImg.data[k + 3] = 255;
 
       // Собель по высоте: наклон поверхности и есть нормаль.
-      const dx =
-        (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) -
-          at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)) / 4;
-      const dy =
-        (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) -
-          at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) / 4;
+      const nw = hh[rowUp + xm];
+      const nn = hh[rowUp + x];
+      const ne = hh[rowUp + xp];
+      const ww = hh[row + xm];
+      const ee = hh[row + xp];
+      const sw = hh[rowDn + xm];
+      const ss = hh[rowDn + x];
+      const se = hh[rowDn + xp];
+      const dx = (ne + 2 * ee + se - nw - 2 * ww - sw) / 4;
+      const dy = (sw + 2 * ss + se - nw - 2 * nn - ne) / 4;
       const nx = -dx * strength;
       const ny = -dy * strength;
-      const len = Math.hypot(nx, ny, 1);
-      nImg.data[k] = Math.round(((nx / len) * 0.5 + 0.5) * 255);
-      nImg.data[k + 1] = Math.round(((ny / len) * 0.5 + 0.5) * 255);
-      nImg.data[k + 2] = Math.round(((1 / len) * 0.5 + 0.5) * 255);
+      // sqrt, а не hypot: hypot в V8 масштабирует аргументы ради защиты от
+      // переполнения, которого здесь быть не может — оба слагаемых меньше пяти.
+      const inv = 0.5 / Math.sqrt(nx * nx + ny * ny + 1);
+      nImg.data[k] = (((nx * inv + 0.5) * 255) + 0.5) | 0;
+      nImg.data[k + 1] = (((ny * inv + 0.5) * 255) + 0.5) | 0;
+      nImg.data[k + 2] = (((inv + 0.5) * 255) + 0.5) | 0;
       nImg.data[k + 3] = 255;
     }
   }
