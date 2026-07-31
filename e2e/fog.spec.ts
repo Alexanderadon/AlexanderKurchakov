@@ -48,8 +48,10 @@ async function bandLuma(page: Page, clip: { x: number; y: number; width: number;
  * тумана, поэтому одинаково работает во всех движках и на любом экране.
  */
 test("вклад тумана в пределах и одинаков между движками", async ({ page }) => {
+  // Прелоадер честно ждёт сборку книги — в headless это долго.
+  test.slow();
   await page.goto("/");
-  await page.waitForSelector(".fogshader");
+  await page.waitForSelector(".fogshader", { timeout: 40_000 });
   await page.waitForTimeout(1600); // дать шуму развернуться
 
   const vp = page.viewportSize();

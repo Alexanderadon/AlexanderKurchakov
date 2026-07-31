@@ -33,7 +33,12 @@ export function progressTarget(
   const r = Math.min(1, Math.max(0, ready));
   const byFloor = Math.min(1, t / timing.minMs); // не обгоняем минимум
   const byCeil = Math.min(1, t / timing.maxMs); // и не отстаём от максимума
-  return Math.max(byCeil, Math.min(r, byFloor)) * 100;
+  // Потолок по времени НЕ добегает до конца: без полной готовности бар ползёт
+  // максимум к 93% и ждёт сигналы. Прелоадер уходит после загрузки всего
+  // контента, а не по секундомеру — лучше дольше, чем сайт с недогруженной
+  // книгой и постером вместо неё. Жёсткий предел на патологию остаётся.
+  const ceiling = r >= 1 ? byCeil : Math.min(byCeil, 0.93);
+  return Math.max(ceiling, Math.min(r, byFloor)) * 100;
 }
 
 export interface CounterState {
