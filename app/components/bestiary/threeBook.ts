@@ -1878,6 +1878,19 @@ export function createBook(
       }
     },
     compile(): Promise<void> {
+      // ПОМЕШНЫЙ прогрев, по нескольку мешей за кадр.
+      //
+      // compileAsync линкует программы в фоне и главный поток не держит. Но
+      // отражение uniform-ов (конструктор WebGLUniforms: getProgramParameter,
+      // затем getActiveUniform и getUniformLocation на каждый uniform) three
+      // делает ЛЕНИВО, при первом использовании программы, — и первый же кадр
+      // книги трогал все двадцать с лишним программ разом. Замер: одна задача
+      // на 961 мс. Она приходилась на заставку, и заставка на эту секунду
+      // замирала: спрятать работу мало, её надо ещё и раздробить.
+      //
+      // Прячем все меши, потом открываем по нескольку за кадр и рисуем. Каждый
+      // кадр трогает две-три новые программы вместо всех сразу.
+      //
       // Теневой проход здесь НЕ прогревается — и это осознанно.
       //
       // Попытка была: нарисовать под заставкой один кадр с включённой тенью,
@@ -1889,7 +1902,22 @@ export function createBook(
       // экономии 95-143 мс на первом открытии книги. Оставляем как есть: эта
       // сотня миллисекунд приходится на анимацию раскрытия в 2.6 с и стоит
       // ровно один пропущенный кадр, а платить за неё секундами загрузки нельзя.
-      return renderer.compileAsync(scene, camera).then(() => undefined);
+      return renderer.compileAsync(scene, camera).then(async () => {
+        const meshes: Mesh[] = [];
+        scene.traverse((o) => {
+          if (o instanceof Mesh) meshes.push(o);
+        });
+        const wasVisible = meshes.map((m) => m.visible);
+        for (const m of meshes) m.visible = false;
+        const page = Math.floor(cur.page);
+        for (let i = 0; i < meshes.length; i += 3) {
+          for (let k = i; k < Math.min(meshes.length, i + 3); k++) meshes[k].visible = wasVisible[k];
+          render(cur.open, 0, page, LEAVES - page);
+          await new Promise<void>((res) => requestAnimationFrame(() => res()));
+        }
+        for (let k = 0; k < meshes.length; k++) meshes[k].visible = wasVisible[k];
+        moved = true;
+      });
     },
     resize,
     dispose(): void {
