@@ -819,14 +819,11 @@ export function createBook(
         color: 0x1a1712,
         normalMap: recessNormal(coverRelief.normal),
         normalScale: new Vector2(1.25, 1.25),
-        displacementMap: coverRelief.height,
-        displacementScale: -0.004,
-        displacementBias: 0.001,
         roughness: 0.74,
         metalness: 0.04,
       })
     : leather;
-  const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, seg(160), seg(200), 1), [
+  const backCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, 1, 1, 1), [
     leather,
     leather,
     leather,
@@ -1124,7 +1121,7 @@ export function createBook(
   // начинает ломать силуэт и отбрасывать собственную тень, чего карта нормалей
   // не умеет в принципе. Сетка была молча ПОТЕРЯНА в одной из правок — коробка
   // осталась из четырёх вершин на грань, и displacement обложки не делал ничего.
-  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, seg(160), seg(200), 1), [
+  const frontCover = new Mesh(new BoxGeometry(coverW, coverH, COVER_T, 1, 1, 1), [
     leather,
     leather,
     leather,
@@ -1133,12 +1130,6 @@ export function createBook(
       map: T.cover,
       normalMap: coverRelief ? coverRelief.normal : T.nCover,
       normalScale: new Vector2(1.0, 1.0),
-      displacementMap: coverRelief ? coverRelief.height : undefined,
-      // Высота тиснения на настоящей книге — полмиллиметра при странице 30 см,
-      // то есть примерно 0.0017 в наших единицах. Берём вчетверо: на экране
-      // полмиллиметра не читается, а вчетверо — уже да, и ещё не карикатура.
-      displacementScale: coverRelief ? 0.0075 : 0,
-      displacementBias: coverRelief ? -0.002 : 0,
       // Оба параметра в единице: их значения целиком живут в выведенных картах —
       // кожа остаётся матовым диэлектриком, а тиснение становится НАСТОЯЩИМ
       // металлом и ловит окружение. С одним общим числом на всю крышку золото
@@ -1180,9 +1171,6 @@ export function createBook(
       map: T.plate,
       normalMap: T.nPlate,
       normalScale: new Vector2(1.2, 1.2),
-      displacementMap: plateRelief ? plateRelief.height : undefined,
-      displacementScale: plateRelief ? 0.013 : 0,
-      displacementBias: plateRelief ? -0.0025 : 0,
       roughness: 0.42,
       metalness: 0.65,
       transparent: true,
@@ -1205,7 +1193,7 @@ export function createBook(
     brassBack.displacementMap = null;
     brassBack.displacementScale = 0;
     // Сетка нужна displacement'у: у грани без вершин выдавливать нечего.
-    const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), seg(72), seg(66));
+    const plateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), 1, 1);
     const plate = new Group();
     // Бляшка стоит на прежнем месте (центр ~0.89): корень группы уехал влево
     // на бляшку, и относительный сдвиг пересчитан, чтобы литьё не поехало.
@@ -1298,9 +1286,6 @@ export function createBook(
     map: T.plate,
     normalMap: T.nPlate,
     normalScale: new Vector2(1.2, 1.2),
-    displacementMap: plateRelief ? plateRelief.height : undefined,
-    displacementScale: plateRelief ? 0.013 : 0,
-    displacementBias: plateRelief ? -0.0025 : 0,
     roughness: 0.42,
     metalness: 0.65,
     alphaTest: 0.5,
@@ -1314,7 +1299,7 @@ export function createBook(
   // БЕЗ узкой планки и крюка поверх: бляшка + планка + клин + хвост сливались
   // в кашу. Остаётся чистая бляшка с выдавленным литьём; хвост ремня со своей
   // нарисованной заклёпкой прижимается к её краю и не наезжает на лилию.
-  const catchPlateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), seg(72), seg(66));
+  const catchPlateGeo = new PlaneGeometry(plateW, plateW * (386 / 420), 1, 1);
   for (const sy of [0.27, -0.27]) {
     // Пирамидой и ВПЛОТНУЮ к коже: у прежней стопки внешний слой висел в семи
     // миллиметрах над крышкой и с ребра парил светлой пластинкой в воздухе.
