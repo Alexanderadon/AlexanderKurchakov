@@ -10,9 +10,11 @@
 // внешний идентификатор после сборки превратится в имя, которого в инлайновом
 // скрипте не существует. За этим следит тест.
 
+import { BOOT_GATE_MS } from "./preloadTiming";
+
 type Conn = { saveData?: boolean };
 
-function boot(d: HTMLElement): void {
+function boot(d: HTMLElement, gateMs: number): void {
   d.classList.add("js");
   try {
     const p = localStorage.getItem("bento2:palette");
@@ -39,12 +41,20 @@ function boot(d: HTMLElement): void {
       d.setAttribute("data-preload", "");
       setTimeout(function () {
         d.removeAttribute("data-preload");
-      }, 8000);
+      }, gateMs);
     }
   } catch {
     /* приватный режим */
   }
 }
 
-/** Готовая к вставке в <script> строка. */
-export const BOOT_SCRIPT = `(${boot.toString()})(document.documentElement)`;
+/**
+ * Готовая к вставке в <script> строка.
+ *
+ * Время предохранителя передаётся АРГУМЕНТОМ, а не стоит числом внутри функции:
+ * оно связано инвариантом с пределом жизни оверлея, а сослаться на импорт по
+ * имени нельзя — после toString() в инлайновом скрипте такого идентификатора не
+ * существует. Раньше числа стояли в двух файлах и разъехались: предохранитель
+ * снимал гейт на восьмой секунде, а компонент уходил на двадцатой.
+ */
+export const BOOT_SCRIPT = `(${boot.toString()})(document.documentElement, ${BOOT_GATE_MS})`;

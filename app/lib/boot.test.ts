@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BOOT_SCRIPT } from "./boot";
+import { BOOT_GATE_MS, FADE_MS, HARD_BAIL_MS } from "./preloadTiming";
 
 /** Выполняет скрипт так же, как браузер: как отдельный источник, без модулей. */
 function runBoot(el: HTMLElement): void {
@@ -40,7 +41,19 @@ describe("BOOT_SCRIPT", () => {
       expect(BOOT_SCRIPT.includes(bad), `утечка наружу: ${bad}`).toBe(false);
     }
     expect(BOOT_SCRIPT.startsWith("(function")).toBe(true);
-    expect(BOOT_SCRIPT.endsWith("(document.documentElement)")).toBe(true);
+    // Время предохранителя передаётся аргументом: сослаться на импорт по имени
+    // в инлайновом скрипте нельзя, а держать число внутри функции — значит снова
+    // развести его с пределом жизни оверлея.
+    expect(BOOT_SCRIPT.endsWith(`(document.documentElement, ${BOOT_GATE_MS})`)).toBe(true);
+  });
+
+  it("предохранитель переживает полный цикл оверлея", () => {
+    // ИНВАРИАНТ, из-за нарушения которого страница на четырнадцать секунд
+    // становилась некликабельной: предохранитель снимал гейт, содержимое
+    // показывалось, а сверху ещё лежал непрозрачный оверлей без
+    // pointer-events:none. Предохранитель обязан срабатывать ПОСЛЕ того, как
+    // компонент ушёл сам — со всеми фазами.
+    expect(BOOT_GATE_MS).toBeGreaterThan(HARD_BAIL_MS + FADE_MS);
   });
 
   it("ставит класс js и гейт прелоадера на чистой сессии", () => {
@@ -92,7 +105,7 @@ describe("BOOT_SCRIPT", () => {
     const el = document.createElement("html");
     runBoot(el);
     expect(el.hasAttribute("data-preload")).toBe(true);
-    vi.advanceTimersByTime(8000);
+    vi.advanceTimersByTime(BOOT_GATE_MS);
     expect(el.hasAttribute("data-preload")).toBe(false);
     vi.useRealTimers();
   });

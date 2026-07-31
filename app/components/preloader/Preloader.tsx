@@ -18,28 +18,13 @@ import { bufferDpr, eyeMetrics, isNarrow } from "./geometry";
 import { DEFAULT_TIMING, initialCounter, smoothstep, progressTarget, stepCounter } from "./progress";
 import { whenHandsReady } from "~/lib/handFrames";
 import { whenBookReady } from "~/lib/bookReady";
+import { FADE_MS, FINALE_MS, HARD_BAIL_MS } from "~/lib/preloadTiming";
 import { Readiness, decodeImage, whenFontsReady } from "./readiness";
 import { createScene, type SceneImages } from "./scene";
 import { stageAt, type Viewport } from "./words";
 import { roman } from "./roman";
 
 const SESSION_KEY = "kur:preloaded";
-/** Разлив света в конце, мс. */
-const FINALE_MS = 900;
-/** Плавное исчезновение оверлея, мс. Должно совпасть с transition в CSS. */
-const FADE_MS = 600;
-/**
- * Жёсткий предел жизни оверлея, мс. Считать завершение только по кадрам нельзя:
- * во вкладке, открытой в фоне, requestAnimationFrame не вызывается вообще —
- * прелоадер досчитывал бы вечно и остался бы лежать поверх сайта, перехватывая
- * клики. Атрибут-гейт при этом снимал бы предохранитель в BOOT, так что сайт
- * был бы виден, но некликабелен. Таймер работает независимо от кадров.
- */
-// Жёсткий предел — страховка от патологии (битые ассеты, мёртвый WebGL), а не
-// нормальный путь: обычно оверлей уходит по готовности контента, включая книгу.
-// Пользовательское требование: лучше дольше показывать прелоадер, чем отдать
-// сайт с недогруженной книгой.
-const HARD_BAIL_MS = 20000;
 // Образцы обязательны: без них грузится только латинский срез, и кириллица
 // в переводах отрисовалась бы подставным шрифтом.
 const FONTS = [
@@ -63,8 +48,21 @@ export function Preloader() {
   // Первый клиентский рендер обязан совпасть с пререндером (null), поэтому
   // включаемся вторым проходом. Контент всё это время уже скрыт через CSS.
   useEffect(() => {
-    if (document.documentElement.hasAttribute("data-preload")) setLive(true);
-    else finish();
+    // ВКЛАДКА, ОТКРЫТАЯ В ФОНЕ (например, «открыть в новой вкладке»).
+    //
+    // Прогресс двигается только внутри кадрового цикла, а requestAnimationFrame
+    // в скрытой вкладке не вызывается ВООБЩЕ. Слушатель visibilitychange тут не
+    // спасает: события не будет, вкладка скрыта с самого начала. Счётчик стоял на
+    // нуле до жёсткого предела, и по возвращении человек заставал непрозрачный
+    // оверлей поверх готовой страницы. Хуже того, уход по пределу помечал сессию
+    // — единственный за сессию показ заставки сгорал в фоне, где на него никто не
+    // смотрел.
+    if (document.hidden || !document.documentElement.hasAttribute("data-preload")) {
+      document.documentElement.removeAttribute("data-preload");
+      finishedRef.current = true;
+      return;
+    }
+    setLive(true);
   }, []);
 
   useEffect(() => {
@@ -131,12 +129,19 @@ export function Preloader() {
     // Книга: Бестиарий собирает свои сцены под оверлеем и сигналит готовность.
     // Страховка таймаутом: если книги на странице нет, сигнал не должен держать
     // оверлей до жёсткого предела.
-    Promise.race([
-      whenBookReady(),
-      new Promise<void>((res) => window.setTimeout(res, 15000)),
-    ]).then(() => {
+    // Ждать книгу дольше, чем живёт сам оверлей, бессмысленно: жёсткий предел
+    // всё равно снимет заставку раньше. Прежние 15 с были больше и старого
+    // предела в 6.5 с, и полезного ожидания, а id таймера ещё и не сохранялся —
+    // после ухода со страницы он продолжал тикать.
+    let bookWait = 0;
+    const bookRace = (): void => {
+      if (!bookWait) return;
+      window.clearTimeout(bookWait);
+      bookWait = 0;
       if (!disposed) ready.mark("book");
-    });
+    };
+    bookWait = window.setTimeout(bookRace, Math.round(HARD_BAIL_MS * 0.8));
+    void whenBookReady().then(bookRace);
 
     // ── факел
     let mx = vp.w * 0.5;
@@ -251,6 +256,7 @@ export function Preloader() {
       disposed = true;
       cancelAnimationFrame(raf);
       clearTimeout(bail);
+      clearTimeout(bookWait);
       removeEventListener("mousemove", onMouse);
       removeEventListener("touchstart", onTouch);
       removeEventListener("touchmove", onTouch);
