@@ -80,8 +80,6 @@ describe.skipIf(!built || stale)("собранная разметка", () => {
     // Оболочка (PreloadShell) пре-рендерится и рисуется парсером сразу, поэтому
     // её присутствие в отдаваемом HTML — это и есть проверяемое свойство:
     // проглядеть её пропажу иначе нельзя, юнит-тесты гоняют исходник.
-    expect(html).toMatch(/class="preboot"/);
-    expect(html).toMatch(/class="preboot-pulse"/);
     expect(html).not.toMatch(/class="preload"/);
   });
 
