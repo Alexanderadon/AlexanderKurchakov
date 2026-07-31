@@ -144,14 +144,23 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
   min-height:clamp(190px,42vw,260px)}
 .t-best .bcover{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
   filter:drop-shadow(0 15px 20px rgba(0,0,0,.72)) drop-shadow(0 3px 4px rgba(0,0,0,.55));
-  transition:transform .55s var(--ez),filter .55s var(--ez)}
+  transition:transform .55s var(--ez),filter .55s var(--ez),opacity .45s var(--ez)}
+/* Живая 3D-книга в плитке. Постер остаётся фолбэком до готовности сцены (и
+   отдаёт LCP), затем гаснет под канвасом. Канвас прозрачный — drop-shadow
+   обводит сам том, тень остаётся честной. */
+.btile{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:0;
+  pointer-events:none;
+  filter:drop-shadow(0 15px 20px rgba(0,0,0,.72)) drop-shadow(0 3px 4px rgba(0,0,0,.55));
+  transition:transform .55s var(--ez),filter .55s var(--ez),opacity .45s var(--ez)}
+.bshut[data-live="1"] .btile{opacity:1}
+.bshut[data-live="1"] .bcover{opacity:0}
 /* Наведение — книгу приподнимают со стола, а не увеличивают: том едет вверх,
    тень отстаёт и мягчеет. Масштаб здесь читался бы как зум по картинке. */
 @media (hover: hover){
-  .t-best:hover .bcover{transform:translateY(-5px);
+  .t-best:hover .bcover,.t-best:hover .btile{transform:translateY(-5px);
     filter:drop-shadow(0 26px 30px rgba(0,0,0,.78)) drop-shadow(0 5px 7px rgba(0,0,0,.5))}
 }
-.bshut{display:block;width:100%;height:100%;padding:0;background:none;border:0;cursor:pointer}
+.bshut{display:block;position:relative;width:100%;height:100%;padding:0;background:none;border:0;cursor:pointer}
 .bshut:focus-visible{outline:2px solid var(--fire);outline-offset:6px;border-radius:10px}
 
 /* ============ бестиарий: раскрытие ============ */
@@ -216,7 +225,7 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
 .bmodal--closing .bface--cover{
   animation:bcov var(--h) cubic-bezier(.1,.5,.5,1) var(--h) reverse both}
 /* Пока книга раскрыта, в плитке не должно быть второго такого же тома. */
-.bshut[aria-expanded="true"] .bcover{opacity:0}
+.bshut[aria-expanded="true"] .bcover,.bshut[aria-expanded="true"] .btile{opacity:0}
 .bspread{width:100%;height:100%;object-fit:contain;display:block;
   filter:drop-shadow(0 40px 60px rgba(0,0,0,.7))}
 

@@ -441,7 +441,15 @@ export function prewarmRelief(
   derivedCached(tex.catchPlate, 420, 2.2);
 }
 
-export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookScene | null {
+export function createBook(
+  canvas: HTMLCanvasElement,
+  tex: BookTextures,
+  opts?: {
+    /** Ближняя рамка для ПЛИТКИ: закрытый том крупнее в кадре. */
+    closeUp?: boolean;
+  },
+): BookScene | null {
+  const closeUp = !!opts?.closeUp;
   // Узкому экрану — половинные сетки: displacement-геометрии тяжёлые, а на
   // телефоне их разрешение всё равно не читается.
   const lite = typeof window !== "undefined" && window.innerWidth < 720;
@@ -1448,10 +1456,13 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
     const pitch = ((basePitch + overshoot) * Math.PI) / 180 + orb.pitch * orbW;
     const baseYaw = narrow ? -9 + 1 * anticip + 3 * swing : -16 + 2 * anticip + 4 * swing;
     const yaw = (baseYaw * Math.PI) / 180 + orb.yaw * orbW;
-    // В узком кадре подходим заметно ближе и целимся в одну страницу.
-    const dist = narrow
-      ? 2.62 + 0.5 * swing + overshoot * 0.02
-      : 2.78 + 0.55 * swing - 0.06 * anticip + overshoot * 0.02;
+    // В узком кадре подходим заметно ближе и целимся в одну страницу. Ближняя
+    // рамка плитки поджимает дистанцию, пока том закрыт.
+    const dist =
+      (narrow
+        ? 2.62 + 0.5 * swing + overshoot * 0.02
+        : 2.78 + 0.55 * swing - 0.06 * anticip + overshoot * 0.02) -
+      (closeUp ? 0.2 * (1 - swing) : 0);
     // Широкий кадр к концу хода смотрит в корешок (виден весь разворот), узкий —
     // остаётся на правой странице.
     const lookX = narrow ? PAGE_W * 0.5 : (PAGE_W / 2) * (1 - swing);
@@ -1460,7 +1471,9 @@ export function createBook(canvas: HTMLCanvasElement, tex: BookTextures): BookSc
       dist * Math.sin(pitch),
       dist * Math.cos(yaw) * Math.cos(pitch),
     );
-    camera.lookAt(lookX, 0, 0);
+    // Ближняя рамка целится чуть выше центра тома — иначе верхний каптал
+    // цеплялся за кромку плитки.
+    camera.lookAt(lookX, closeUp ? 0.07 * (1 - swing) : 0, 0);
 
     // Замки отходят первыми, крышка ждёт их. Зажим ремешка — доля 0..1: единица
     // значит «обнимает том и пристёгнут к планке», ноль — ремень свободен.
