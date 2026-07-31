@@ -102,6 +102,12 @@ export interface BookScene {
    * просто вбивала её в угловые пределы — все «сбросы» смотрели сверху-сзади.
    */
   resetView(): void;
+  /**
+   * Включить или усыпить кадровый цикл. Спящая сцена не рендерит ни кадра:
+   * заранее собранная модальная книга не должна жечь главный поток, пока
+   * закрыта, — двойной rAF душил и анимации сайта, и слабые машины.
+   */
+  setActive(on: boolean): void;
   resize(): void;
   dispose(): void;
 }
@@ -432,13 +438,20 @@ function derivedCached(src: TexImageSource, w: number, s: number): ReturnType<ty
   }
   return d;
 }
-export function prewarmRelief(
+/**
+ * Прогрев выведенных карт ПО ШАГАМ: каждый шаг — одна карта (~40–60 мс).
+ * Вызывающая сторона прокладывает между шагами idle-паузы, чтобы анимации
+ * страницы (прелоадер, вход) не дёргались от одного сплошного куска работы.
+ */
+export function reliefSteps(
   tex: Pick<BookTextures, "coverFront" | "spine" | "plate" | "catchPlate">,
-): void {
-  derivedCached(tex.coverFront, 768, 2.6);
-  derivedCached(tex.spine, 512, 2.4);
-  derivedCached(tex.plate, 420, 2.2);
-  derivedCached(tex.catchPlate, 420, 2.2);
+): Array<() => void> {
+  return [
+    () => void derivedCached(tex.coverFront, 768, 2.6),
+    () => void derivedCached(tex.spine, 512, 2.4),
+    () => void derivedCached(tex.plate, 420, 2.2),
+    () => void derivedCached(tex.catchPlate, 420, 2.2),
+  ];
 }
 
 export function createBook(
@@ -447,9 +460,12 @@ export function createBook(
   opts?: {
     /** Ближняя рамка для ПЛИТКИ: закрытый том крупнее в кадре. */
     closeUp?: boolean;
+    /** ГОЛАЯ книга без подиума: ни пятна света, ни ловца тени за томом. */
+    bare?: boolean;
   },
 ): BookScene | null {
   const closeUp = !!opts?.closeUp;
+  const bare = !!opts?.bare;
   // Узкому экрану — половинные сетки: displacement-геометрии тяжёлые, а на
   // телефоне их разрешение всё равно не читается.
   const lite = typeof window !== "undefined" && window.innerWidth < 720;
@@ -554,14 +570,14 @@ export function createBook(
     new MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false }),
   );
   glow.position.set(0.2, -0.3, -0.06);
-  scene.add(glow);
+  if (!bare) scene.add(glow);
   // Плотность тени на подиуме живёт в кадре: закрытому тому она даёт вес, а при
   // раскрытии квадратные тени крышки и блока ездили по заднику «квадратиками».
   const shadowMat = new ShadowMaterial({ opacity: 0.42 });
   const shadowCatch = new Mesh(new PlaneGeometry(7, 7), shadowMat);
   shadowCatch.position.set(0.2, -0.3, -0.045);
   shadowCatch.receiveShadow = true;
-  scene.add(shadowCatch);
+  if (!bare) scene.add(shadowCatch);
 
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const T = {
@@ -1639,8 +1655,11 @@ export function createBook(
   // hint — точка подхвата (-1 низ … +1 верх), приходит из turnFrom() перед
   // листанием; остальное разыгрывается заново на каждый лист.
   const turnFx = { base: 0.97, tilt: 0.3, amp: 1.6, hint: 0 };
+  // Цель обязана СОВПАДАТЬ со стартовым положением: с tgt.page = 0 цикл кадров
+  // сам гнал закладку 3 → 0, и книга листала страницы без всякой команды —
+  // в модалке это маскировал немедленный target(), на плитке вылезло наружу.
   const cur = { open: 0, page: Math.floor(LEAVES / 2) };
-  const tgt = { open: 0, page: 0 };
+  const tgt = { open: 0, page: Math.floor(LEAVES / 2) };
   const state = { open: 0, page: Math.floor(LEAVES / 2), busy: false };
   let raf = 0;
   let last = 0;
@@ -1744,6 +1763,17 @@ export function createBook(
       orb.pitch = 0;
       orb.vYaw = 0;
       orb.vPitch = 0;
+    },
+    setActive(on: boolean): void {
+      if (on) {
+        if (!raf) {
+          last = 0; // иначе первый dt после сна съест накопленный простой
+          raf = requestAnimationFrame(step);
+        }
+      } else if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
     },
     resize,
     dispose(): void {

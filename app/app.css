@@ -225,7 +225,9 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
 .bmodal--closing .bface--cover{
   animation:bcov var(--h) cubic-bezier(.1,.5,.5,1) var(--h) reverse both}
 /* Пока книга раскрыта, в плитке не должно быть второго такого же тома. */
-.bshut[aria-expanded="true"] .bcover,.bshut[aria-expanded="true"] .btile{opacity:0}
+/* Плиточный том НЕ прячется при открытой модалке: он остаётся под тёмной
+   вуалью и при закрытии просто оказывается на месте — без «пропала-появилась». */
+.bshut[aria-expanded="true"] .bcover{opacity:0}
 .bspread{width:100%;height:100%;object-fit:contain;display:block;
   filter:drop-shadow(0 40px 60px rgba(0,0,0,.7))}
 
@@ -233,6 +235,9 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
    на левую, значит рисовать его надо по всей ширине книги, а не в границах
    одной страницы. Событий не ловит — кнопки и фон под ним остаются кликабельны. */
 .bbook{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* Гнездо для готового канваса книги: сцена живёт постоянно, канвас при открытии
+   вставляется сюда, при закрытии вынимается — не разрушаясь. */
+.bbook-host{position:absolute;inset:0}
 
 /* Подсказка про обращение с книгой: живёт только пока том закрыт. */
 .bhint{position:absolute;left:50%;bottom:-34px;transform:translateX(-50%);z-index:3;

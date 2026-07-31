@@ -45,7 +45,11 @@ function decode(src: string): Promise<HTMLImageElement> {
   });
 }
 
-type Warm = { images: HTMLImageElement[]; make: typeof import("./bestiary/threeBook").createBook };
+type Warm = {
+  images: HTMLImageElement[];
+  make: typeof import("./bestiary/threeBook").createBook;
+  relief: typeof import("./bestiary/threeBook").reliefSteps;
+};
 
 /**
  * Прогрев. Чанк three (131 КБ) и семь текстур тянутся ОДИН раз на модуль и
@@ -54,23 +58,15 @@ type Warm = { images: HTMLImageElement[]; make: typeof import("./bestiary/threeB
  * книги обязано быть щелчком, другого варианта нет.
  */
 let warming: Promise<Warm> | null = null;
+// Прогрев — только СЕТЬ и декод картинок: это не дёргает главный поток и
+// спокойно идёт под прелоадером. Вся тяжёлая работа CPU (карты рельефа,
+// сборка сцен, компиляция шейдеров) — отдельным конвейером после него.
 function warm(): Promise<Warm> {
   if (!warming) {
     warming = Promise.all([
       Promise.all(ASSETS.map(decode)),
       import("./bestiary/threeBook"),
-    ]).then(([images, mod]) => {
-      // Выведенные карты (рельеф, золото, износ) считаются здесь же, в прогреве:
-      // четыре deriveMaps стоят ~150–200 мс главного потока, и раньше эта пауза
-      // попадала прямо в щелчок открытия.
-      mod.prewarmRelief({
-        coverFront: images[0],
-        spine: images[4],
-        plate: images[6],
-        catchPlate: images[14],
-      });
-      return { images, make: mod.createBook };
-    });
+    ]).then(([images, mod]) => ({ images, make: mod.createBook, relief: mod.reliefSteps }));
   }
   return warming;
 }
@@ -78,7 +74,6 @@ function warm(): Promise<Warm> {
 export function Bestiary() {
   const { t } = useLang();
   const [phase, setPhase] = useState<Phase>("shut");
-  const turnRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<BookScene | null>(null);
   const pageRef = useRef(Math.floor(LEAVES / 2)); // сколько листов уже слева
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -102,32 +97,80 @@ export function Bestiary() {
   // ленивая загрузка по доскроллу оставляла клик с ожиданием в секунды.
   const tileRef = useRef<HTMLCanvasElement>(null);
   const tileSceneRef = useRef<BookScene | null>(null);
+  const modalCvRef = useRef<HTMLCanvasElement | null>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
   const [tileLive, setTileLive] = useState(false);
+  const liveRef = useRef(false);
+  liveRef.current = phase !== "shut";
   useEffect(() => {
     let dead = false;
     const idle =
       (window as unknown as { requestIdleCallback?: (fn: () => void) => number }).requestIdleCallback ??
-      ((fn: () => void) => window.setTimeout(fn, 150));
-    idle(() => {
-      warm()
-        .then(({ images, make }) => {
-          const cv = tileRef.current;
-          if (dead || !cv || tileSceneRef.current) return;
-          const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
-            foredge, nForedge, headband, nStrap, catchPlate, nCatch] = images;
-          tileSceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate,
-            nCover, nPage, nPlate, foredge, nForedge, headband, nStrap, catchPlate, nCatch }, { closeUp: true });
-          if (tileSceneRef.current) setTileLive(true);
-        })
-        .catch(() => undefined);
-    });
-    const onR = (): void => tileSceneRef.current?.resize();
+      ((fn: () => void) => window.setTimeout(fn, 120));
+    // Пауза до следующего свободного окна главного потока: тяжёлые шаги идут
+    // ПООДИНОЧКЕ, между ними страница успевает нарисовать кадры.
+    const breath = (): Promise<void> => new Promise((res) => idle(() => res()));
+    // Пока прелоадер на экране — никакой работы CPU: его анимации не должны
+    // виснуть. Пусть подготовка идёт дольше, но плавно; сеть качается и так.
+    const preloaderGone = (): Promise<void> =>
+      new Promise((res) => {
+        const check = (): void => {
+          if (dead || !document.querySelector(".preload")) res();
+          else window.setTimeout(check, 200);
+        };
+        check();
+      });
+    void (async () => {
+      try {
+        const { images, make, relief } = await warm();
+        await preloaderGone();
+        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
+          foredge, nForedge, headband, nStrap, catchPlate, nCatch] = images;
+        const tex = { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate,
+          nCover, nPage, nPlate, foredge, nForedge, headband, nStrap, catchPlate, nCatch };
+        // Карты рельефа: четыре шага по одному, с передышками.
+        for (const stepFn of relief(tex)) {
+          await breath();
+          if (dead) return;
+          stepFn();
+        }
+        await breath();
+        if (dead || !tileRef.current || tileSceneRef.current) return;
+        // Плитка: голая книга без подиума, ближней рамкой.
+        tileSceneRef.current = make(tileRef.current, tex, { closeUp: true, bare: true });
+        if (tileSceneRef.current) setTileLive(true);
+        await breath();
+        if (dead) return;
+        // Модальная сцена собирается один раз на отдельном канвасе: шейдеры
+        // компилируются сейчас, и клик открывает книгу без фриза. Пару кадров
+        // на компиляцию — и цикл сцены засыпает до открытия.
+        const mc = document.createElement("canvas");
+        mc.className = "bbook";
+        modalCvRef.current = mc;
+        sceneRef.current = make(mc, tex);
+        sceneRef.current?.target(0, pageRef.current);
+        if (import.meta.env.DEV) {
+          (window as unknown as { __book?: BookScene | null }).__book = sceneRef.current;
+        }
+        window.setTimeout(() => {
+          if (!dead && !liveRef.current) sceneRef.current?.setActive(false);
+        }, 400);
+      } catch {
+        /* сеть упала — плитка остаётся постером */
+      }
+    })();
+    const onR = (): void => {
+      tileSceneRef.current?.resize();
+      sceneRef.current?.resize();
+    };
     window.addEventListener("resize", onR);
     return () => {
       dead = true;
       window.removeEventListener("resize", onR);
       tileSceneRef.current?.dispose();
       tileSceneRef.current = null;
+      sceneRef.current?.dispose();
+      sceneRef.current = null;
     };
   }, []);
 
@@ -208,40 +251,29 @@ export function Bestiary() {
     });
   }, [phase, after, aim]);
 
-  // Сцена переворота живёт, пока книга открыта. Текстуры декодируем до создания
-  // контекста: WebGL не умеет ждать картинку, недогруженная приедет пустой.
+  // Открытие модалки: ГОТОВЫЙ канвас книги вставляется в гнездо, закрытие
+  // вынимает его, не разрушая сцену. Пересборки нет — нет ни фриза, ни
+  // исчезающей книги. Если открыли раньше, чем прогрелось (медленная сеть),
+  // эффект добежит по tileLive.
   useEffect(() => {
     if (phase === "shut") return;
-    let dead = false;
-    warm()
-      .then(({ images, make }) => {
-        const cv = turnRef.current;
-        if (dead || !cv) return;
-        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
-          foredge, nForedge, headband, nStrap, catchPlate, nCatch] = images;
-        sceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
-          foredge, nForedge, headband, nStrap, catchPlate, nCatch });
-        // Раскрываем НЕ сразу: книга ждёт закрытой, её можно покрутить. Открывает
-        // следующий клик — иначе рассмотреть том не успеваешь.
-        sceneRef.current?.target(phase === "open" ? 1 : 0, pageRef.current);
-        // Дев-шов для стенда: середину переворота кликами не поймать — она длится
-        // 850 мс, а снимок кадра занимает столько же. В сборку не попадает.
-        if (import.meta.env.DEV) {
-          (window as unknown as { __book?: BookScene | null }).__book = sceneRef.current;
-        }
-      })
-      .catch(() => undefined);
-    const onResize = (): void => {
-      sceneRef.current?.resize();
-    };
-    window.addEventListener("resize", onResize);
+    const mc = modalCvRef.current;
+    const slot = slotRef.current;
+    const sc = sceneRef.current;
+    if (!mc || !slot || !sc) return;
+    mc.setAttribute("role", "img");
+    mc.setAttribute("aria-label", t.hero.bestiarySpread);
+    slot.appendChild(mc);
+    sc.setActive(true);
+    sc.resize();
+    // Раскрываем НЕ сразу: книга ждёт закрытой, её можно покрутить. Открывает
+    // следующий клик — иначе рассмотреть том не успеваешь.
+    sc.target(phase === "open" ? 1 : 0, pageRef.current);
     return () => {
-      dead = true;
-      window.removeEventListener("resize", onResize);
-      sceneRef.current?.dispose();
-      sceneRef.current = null;
+      mc.remove();
+      sc.setActive(false);
     };
-  }, [phase === "shut"]);
+  }, [phase === "shut", tileLive, t.hero.bestiarySpread]);
 
   // Клавиатура: Escape закрывает, стрелки листают. Вешаем на документ, пока
   // открыто, — фокус может быть на любом элементе внутри диалога.
@@ -309,7 +341,7 @@ export function Bestiary() {
   const drag = useRef({ on: false, moved: 0, x: 0, y: 0, sx: 0, sy: 0, t: 0, vx: 0, vy: 0, mode: 0 });
   const dragTurn = useRef({ base: 0, dir: 1 as 1 | -1, frac: 0 });
 
-  const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+  const onDown = useCallback((e: React.PointerEvent<HTMLDivElement>): void => {
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = {
       on: true,
@@ -326,7 +358,7 @@ export function Bestiary() {
   }, []);
 
   const onMove = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>): void => {
+    (e: React.PointerEvent<HTMLDivElement>): void => {
       const d = drag.current;
       if (!d.on) return;
       const dx = e.clientX - d.x;
@@ -376,7 +408,7 @@ export function Bestiary() {
   );
 
   const onUp = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>): void => {
+    (e: React.PointerEvent<HTMLDivElement>): void => {
       const d = drag.current;
       d.on = false;
       // Отпустили лист: дальше полёт сам — вперёд, если протянули дальше трети
@@ -462,11 +494,9 @@ export function Bestiary() {
                   страниц с толщиной, форзац на изнанке крышки, камера с
                   перспективой. Прежний вариант был перебросом карточки: крышка
                   уходила ребром, и в этот кадр её подменял плоский разворот. */}
-              <canvas
-                ref={turnRef}
-                className="bbook"
-                role="img"
-                aria-label={t.hero.bestiarySpread}
+              <div
+                ref={slotRef}
+                className="bbook-host"
                 onPointerDown={onDown}
                 onPointerMove={onMove}
                 onPointerUp={onUp}
