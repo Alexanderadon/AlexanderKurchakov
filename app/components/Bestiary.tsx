@@ -12,6 +12,7 @@ import { useLang } from "~/lib/i18n";
 import { prefersReducedMotion } from "~/lib/media";
 import { LEAVES, OPEN_MS, SPREAD_RATIO } from "~/lib/bestiary";
 import { bookCreak, bookRustle } from "~/lib/bookSounds";
+import { markBookReady } from "~/lib/bookReady";
 import type { BookScene } from "./bestiary/threeBook";
 
 /** peek — книга в модалке, но ещё закрыта: её можно рассмотреть и покрутить. */
@@ -100,8 +101,9 @@ export function Bestiary() {
   const modalCvRef = useRef<HTMLCanvasElement | null>(null);
   const slotRef = useRef<HTMLDivElement>(null);
   const [tileLive, setTileLive] = useState(false);
-  const liveRef = useRef(false);
-  liveRef.current = phase !== "shut";
+  // Отдельный сигнал готовности модальной сцены: она доезжает ПОЗЖЕ плитки, и
+  // если модалку открыли в этот зазор, вставка канваса обязана повториться.
+  const [modalLive, setModalLive] = useState(false);
   useEffect(() => {
     let dead = false;
     const idle =
@@ -110,25 +112,18 @@ export function Bestiary() {
     // Пауза до следующего свободного окна главного потока: тяжёлые шаги идут
     // ПООДИНОЧКЕ, между ними страница успевает нарисовать кадры.
     const breath = (): Promise<void> => new Promise((res) => idle(() => res()));
-    // Пока прелоадер на экране — никакой работы CPU: его анимации не должны
-    // виснуть. Пусть подготовка идёт дольше, но плавно; сеть качается и так.
-    const preloaderGone = (): Promise<void> =>
-      new Promise((res) => {
-        const check = (): void => {
-          if (dead || !document.querySelector(".preload")) res();
-          else window.setTimeout(check, 200);
-        };
-        check();
-      });
+    // Вся подготовка идёт ПОД прелоадером, и он ждёт её сигнала (markBookReady):
+    // после его ухода не остаётся ни лагов, ни постера вместо книги. Плавность —
+    // из устройства шагов: derive-карты по одной в idle-окна, сцены рождаются
+    // спящими, шейдеры компилируются асинхронно (compileAsync) — синхронных
+    // фризов нет вовсе, пусть прелоадер работает дольше.
     void (async () => {
       try {
         const { images, make, relief } = await warm();
-        await preloaderGone();
         const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
           foredge, nForedge, headband, nStrap, catchPlate, nCatch] = images;
         const tex = { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate,
           nCover, nPage, nPlate, foredge, nForedge, headband, nStrap, catchPlate, nCatch };
-        // Карты рельефа: четыре шага по одному, с передышками.
         for (const stepFn of relief(tex)) {
           await breath();
           if (dead) return;
@@ -136,27 +131,40 @@ export function Bestiary() {
         }
         await breath();
         if (dead || !tileRef.current || tileSceneRef.current) return;
-        // Плитка: голая книга без подиума, ближней рамкой.
-        tileSceneRef.current = make(tileRef.current, tex, { closeUp: true, bare: true });
-        if (tileSceneRef.current) setTileLive(true);
+        // Плитка: голая книга без подиума, фронтальной рамкой.
+        const ts = make(tileRef.current, tex, { closeUp: true, bare: true, dormant: true });
+        tileSceneRef.current = ts;
+        if (ts) {
+          await ts.compile();
+          if (dead) return;
+          ts.setActive(true);
+          setTileLive(true);
+          // Плитка ожила — прелоадер можно отпускать: видимого постера уже нет.
+          // Модальная сцена доготовится асинхронно в фоне, без рывков.
+          markBookReady();
+        }
         await breath();
         if (dead) return;
-        // Модальная сцена собирается один раз на отдельном канвасе: шейдеры
-        // компилируются сейчас, и клик открывает книгу без фриза. Пару кадров
-        // на компиляцию — и цикл сцены засыпает до открытия.
+        // Модальная сцена: спящая, скомпилированная заранее — проснётся при
+        // открытии. Пересборок нет, клик мгновенный.
         const mc = document.createElement("canvas");
         mc.className = "bbook";
         modalCvRef.current = mc;
-        sceneRef.current = make(mc, tex);
-        sceneRef.current?.target(0, pageRef.current);
+        const ms = make(mc, tex, { dormant: true });
+        sceneRef.current = ms;
+        ms?.target(0, pageRef.current);
+        // Сцена есть — вставлять уже можно (если модалку открыли раньше времени,
+        // недокомпилированное доберёт первый кадр). Прогрев продолжается фоном.
+        setModalLive(true);
+        if (ms) await ms.compile();
+        if (dead) return;
         if (import.meta.env.DEV) {
           (window as unknown as { __book?: BookScene | null }).__book = sceneRef.current;
         }
-        window.setTimeout(() => {
-          if (!dead && !liveRef.current) sceneRef.current?.setActive(false);
-        }, 400);
-      } catch {
-        /* сеть упала — плитка остаётся постером */
+      } finally {
+        // Отпускаем прелоадер и при успехе, и при падении сети: без книги ему
+        // тем более незачем стоять.
+        markBookReady();
       }
     })();
     const onR = (): void => {
@@ -273,7 +281,7 @@ export function Bestiary() {
       mc.remove();
       sc.setActive(false);
     };
-  }, [phase === "shut", tileLive, t.hero.bestiarySpread]);
+  }, [phase === "shut", modalLive, t.hero.bestiarySpread]);
 
   // Клавиатура: Escape закрывает, стрелки листают. Вешаем на документ, пока
   // открыто, — фокус может быть на любом элементе внутри диалога.

@@ -32,7 +32,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], launchOptions: { args: ["--mute-audio"] } },
+      // Настоящий GPU (ANGLE поверх D3D11) вместо софтверного SwiftShader:
+      // прелоадер теперь ждёт сборку WebGL-сцен книги, и на софтверном рендере
+      // это минуты вместо секунд — тесты меряли бы не сайт, а эмулятор.
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: { args: ["--mute-audio", "--use-angle=d3d11"] },
+      },
     },
     {
       name: "firefox",

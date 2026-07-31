@@ -48,21 +48,25 @@ test.describe("прелоадер", () => {
   });
 
   test("показывается и уступает место сайту", async ({ page }) => {
+    // Оверлей теперь честно ждёт готовности книги (в headless её сцены
+    // собираются на софтверном GL долго) — потолок ожидания вырос.
+    test.slow();
     await page.goto("/?preload");
     await expect(page.getByRole("progressbar")).toBeVisible();
     // и уходит сам, без перезагрузки
-    await expect(page.locator(".preload")).toHaveCount(0, { timeout: 12_000 });
+    await expect(page.locator(".preload")).toHaveCount(0, { timeout: 26_000 });
     await expect(page.locator(".rootwrap")).toBeVisible();
     expect(await page.evaluate(() => sessionStorage.getItem("kur:preloaded"))).toBe("1");
   });
 
   test("второй раз за сессию не показывается", async ({ page }) => {
+    test.slow();
     await page.goto("/?preload");
     // Сначала дожидаемся появления: без этого toHaveCount(0) проходит ещё до
     // того, как React смонтировал оверлей, и сессия не помечается — тест тогда
     // проверяет не то, что задумано.
     await expect(page.getByRole("progressbar")).toBeVisible();
-    await expect(page.locator(".preload")).toHaveCount(0, { timeout: 12_000 });
+    await expect(page.locator(".preload")).toHaveCount(0, { timeout: 26_000 });
     await page.goto("/");
     await expect(page.locator(".rootwrap")).toBeVisible();
     await expect(page.locator(".preload")).toHaveCount(0);

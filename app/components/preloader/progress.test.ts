@@ -33,9 +33,10 @@ describe("progressTarget", () => {
     expect(progressTarget(T.minMs / 2, 0.2, T)).toBeCloseTo(20, 5);
   });
 
-  it("всё равно доходит до 100 к потолку, если загрузка зависла", () => {
-    expect(progressTarget(T.maxMs, 0, T)).toBe(100);
-    expect(progressTarget(T.maxMs * 2, 0, T)).toBe(100);
+  it("без полной готовности упирается в 93 и ждёт сигналы", () => {
+    expect(progressTarget(T.maxMs, 0, T)).toBe(93);
+    expect(progressTarget(T.maxMs * 2, 0, T)).toBe(93);
+    expect(progressTarget(T.maxMs * 2, 1, T)).toBe(100);
   });
 
   it("монотонен по времени", () => {
@@ -102,10 +103,9 @@ describe("длительность прелоадера", () => {
     expect(ms).toBeLessThan(2600); // и не утомил
   });
 
-  it("завершается даже если ассеты не пришли никогда", () => {
+  it("без готовности сам не финиширует: страховка — жёсткий предел компонента", () => {
     const ms = runToFull(60, Number.POSITIVE_INFINITY);
-    expect(Number.isFinite(ms)).toBe(true);
-    expect(ms).toBeLessThan(T.maxMs + 1500);
+    expect(ms).toBeGreaterThan(T.maxMs); // крутился дольше потолка и ждал
   });
 
   it("ждёт медленную сеть, но не сверх потолка", () => {

@@ -17,6 +17,7 @@ import { createEye, type Eye } from "./eye";
 import { bufferDpr, eyeMetrics, isNarrow } from "./geometry";
 import { DEFAULT_TIMING, initialCounter, smoothstep, progressTarget, stepCounter } from "./progress";
 import { whenHandsReady } from "~/lib/handFrames";
+import { whenBookReady } from "~/lib/bookReady";
 import { Readiness, decodeImage, whenFontsReady } from "./readiness";
 import { createScene, type SceneImages } from "./scene";
 import { stageAt, type Viewport } from "./words";
@@ -34,7 +35,11 @@ const FADE_MS = 600;
  * клики. Атрибут-гейт при этом снимал бы предохранитель в BOOT, так что сайт
  * был бы виден, но некликабелен. Таймер работает независимо от кадров.
  */
-const HARD_BAIL_MS = 6500;
+// Жёсткий предел — страховка от патологии (битые ассеты, мёртвый WebGL), а не
+// нормальный путь: обычно оверлей уходит по готовности контента, включая книгу.
+// Пользовательское требование: лучше дольше показывать прелоадер, чем отдать
+// сайт с недогруженной книгой.
+const HARD_BAIL_MS = 20000;
 // Образцы обязательны: без них грузится только латинский срез, и кириллица
 // в переводах отрисовалась бы подставным шрифтом.
 const FONTS = [
@@ -122,6 +127,15 @@ export function Preloader() {
     // повод держать оверлей до жёсткого предела.
     whenHandsReady().then(() => {
       if (!disposed) ready.mark("hands");
+    });
+    // Книга: Бестиарий собирает свои сцены под оверлеем и сигналит готовность.
+    // Страховка таймаутом: если книги на странице нет, сигнал не должен держать
+    // оверлей до жёсткого предела.
+    Promise.race([
+      whenBookReady(),
+      new Promise<void>((res) => window.setTimeout(res, 15000)),
+    ]).then(() => {
+      if (!disposed) ready.mark("book");
     });
 
     // ── факел

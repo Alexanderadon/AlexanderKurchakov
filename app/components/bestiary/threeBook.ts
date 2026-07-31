@@ -108,6 +108,11 @@ export interface BookScene {
    * закрыта, — двойной rAF душил и анимации сайта, и слабые машины.
    */
   setActive(on: boolean): void;
+  /**
+   * Асинхронная компиляция всех шейдеров сцены (KHR_parallel_shader_compile):
+   * прогрев без фриза главного потока — прелоадер и его анимации не дёргаются.
+   */
+  compile(): Promise<void>;
   resize(): void;
   dispose(): void;
 }
@@ -462,10 +467,15 @@ export function createBook(
     closeUp?: boolean;
     /** ГОЛАЯ книга без подиума: ни пятна света, ни ловца тени за томом. */
     bare?: boolean;
+    /** СПЯЩИЙ старт: кадровый цикл не запускается — сцену будят setActive(true).
+     *  Нужен предварительной сборке: первый же кадр компилировал бы шейдеры
+     *  синхронно, а для этого есть асинхронный compile(). */
+    dormant?: boolean;
   },
 ): BookScene | null {
   const closeUp = !!opts?.closeUp;
   const bare = !!opts?.bare;
+  const dormant = !!opts?.dormant;
   // Узкому экрану — половинные сетки: displacement-геометрии тяжёлые, а на
   // телефоне их разрешение всё равно не читается.
   const lite = typeof window !== "undefined" && window.innerWidth < 720;
@@ -1468,17 +1478,18 @@ export function createBook(
     // К развороту камера ПОДНИМАЕТСЯ (~25° тангажа при ~12° рысканья) и отходит:
     // сверху видны оба веера стопок, обрезы и канты крышек — толщина читается,
     // разворот целиком в кадре и с воздухом по краям.
-    const basePitch = narrow ? 16 - 2 * anticip + 5 * swing : 20 - 2 * anticip + 7 * swing;
+    // Плиточная рамка (closeUp) — ФРОНТАЛЬНО и плашмя, как на прежнем постере:
+    // ни рысканья, ни полубока, дистанция с запасом — том целиком, без обрезки.
+    const basePitch = closeUp ? 7 : narrow ? 16 - 2 * anticip + 5 * swing : 20 - 2 * anticip + 7 * swing;
     const pitch = ((basePitch + overshoot) * Math.PI) / 180 + orb.pitch * orbW;
-    const baseYaw = narrow ? -9 + 1 * anticip + 3 * swing : -16 + 2 * anticip + 4 * swing;
+    const baseYaw = closeUp ? 0 : narrow ? -9 + 1 * anticip + 3 * swing : -16 + 2 * anticip + 4 * swing;
     const yaw = (baseYaw * Math.PI) / 180 + orb.yaw * orbW;
-    // В узком кадре подходим заметно ближе и целимся в одну страницу. Ближняя
-    // рамка плитки поджимает дистанцию, пока том закрыт.
-    const dist =
-      (narrow
+    // В узком кадре подходим заметно ближе и целимся в одну страницу.
+    const dist = closeUp
+      ? 3.0
+      : narrow
         ? 2.62 + 0.5 * swing + overshoot * 0.02
-        : 2.78 + 0.55 * swing - 0.06 * anticip + overshoot * 0.02) -
-      (closeUp ? 0.2 * (1 - swing) : 0);
+        : 2.78 + 0.55 * swing - 0.06 * anticip + overshoot * 0.02;
     // Широкий кадр к концу хода смотрит в корешок (виден весь разворот), узкий —
     // остаётся на правой странице.
     const lookX = narrow ? PAGE_W * 0.5 : (PAGE_W / 2) * (1 - swing);
@@ -1487,9 +1498,7 @@ export function createBook(
       dist * Math.sin(pitch),
       dist * Math.cos(yaw) * Math.cos(pitch),
     );
-    // Ближняя рамка целится чуть выше центра тома — иначе верхний каптал
-    // цеплялся за кромку плитки.
-    camera.lookAt(lookX, closeUp ? 0.07 * (1 - swing) : 0, 0);
+    camera.lookAt(lookX, closeUp ? 0.02 : 0, 0);
 
     // Замки отходят первыми, крышка ждёт их. Зажим ремешка — доля 0..1: единица
     // значит «обнимает том и пристёгнут к планке», ноль — ремень свободен.
@@ -1714,7 +1723,7 @@ export function createBook(
     // дочитанной книги справа оставалась заметная стопка из ниоткуда.
     render(cur.open, frac, whole, LEAVES - whole);
   }
-  raf = requestAnimationFrame(step);
+  if (!dormant) raf = requestAnimationFrame(step);
   // Метка готовности: по ней и сквозной тест, и замер «клик -> первый кадр».
   canvas.dataset.ready = "1";
   // Дев-шов: стенду нужно мерить фактические высоты мешей, а не пересчитывать
@@ -1774,6 +1783,9 @@ export function createBook(
         cancelAnimationFrame(raf);
         raf = 0;
       }
+    },
+    compile(): Promise<void> {
+      return renderer.compileAsync(scene, camera).then(() => undefined);
     },
     resize,
     dispose(): void {
