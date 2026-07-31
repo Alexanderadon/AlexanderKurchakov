@@ -9,6 +9,7 @@ import {
 
 import type { Route } from "./+types/root";
 import { Preloader } from "./components/preloader/Preloader";
+import { PreloadShell } from "./components/preloader/PreloadShell";
 import { BOOT_SCRIPT } from "./lib/boot";
 import "./app.css";
 
@@ -40,6 +41,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
       </head>
       <body>
+        {/* Первым в <body> — намеренно. Парсер рисует то, что уже разобрал:
+            несколько пустых div'ов в начале документа попадают на экран, не
+            дожидаясь ни остальной разметки страницы, ни гидратации, ни WebGL.
+            Заставка из React поднималась на 545-780 мс, эта — вместе с CSS. */}
+        <PreloadShell />
         {children}
         <ScrollRestoration />
         <Scripts />

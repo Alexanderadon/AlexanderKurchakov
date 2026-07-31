@@ -4,15 +4,35 @@
 // build/client/index.html.
 //
 // Тест пропускается, если сборки нет: `npm test` должен работать и без неё.
-import { existsSync, readFileSync } from "node:fs";
+//
+// И ПРОСРОЧЕННОЙ сборки тоже. Раньше проверка шла по любому build/client,
+// который случайно лежал в папке, — а это разметка вчерашних исходников: она и
+// пропускает свежую поломку, и падает на изменении, которого в ней ещё не может
+// быть (`npm run build` тут не гоняется — сборка и замеры делаются отдельно).
+// В CI это ничего не меняет: `npm run test` идёт до сборки, и раздел
+// пропускается целиком.
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BOOT_GATE_MS, FADE_MS, HARD_BAIL_MS } from "./preloadTiming";
 
 const HTML = resolve(process.cwd(), "build/client/index.html");
 const built = existsSync(HTML);
+// Исходники, про содержимое которых этот раздел утверждает.
+const SOURCES = [
+  "app/root.tsx",
+  "app/lib/boot.ts",
+  "app/lib/preloadTiming.ts",
+  "app/components/preloader/PreloadShell.tsx",
+];
+const stale =
+  built &&
+  SOURCES.some((p) => {
+    const f = resolve(process.cwd(), p);
+    return existsSync(f) && statSync(f).mtimeMs > statSync(HTML).mtimeMs;
+  });
 
-describe.skipIf(!built)("собранная разметка", () => {
+describe.skipIf(!built || stale)("собранная разметка", () => {
   const html = built ? readFileSync(HTML, "utf8") : "";
   const inline = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
 
@@ -54,7 +74,14 @@ describe.skipIf(!built)("собранная разметка", () => {
     expect(BOOT_GATE_MS).toBeGreaterThan(HARD_BAIL_MS + FADE_MS);
   });
 
-  it("оверлея нет в разметке — он появляется только после гидратации", () => {
+  it("первый кадр заставки лежит в разметке, а WebGL-оверлей — нет", () => {
+    // Разделение намеренное. WebGL-оверлей приходит из React и появляется на
+    // 545-780 мс — до гидратации показывать было нечего, экран стоял пустым.
+    // Оболочка (PreloadShell) пре-рендерится и рисуется парсером сразу, поэтому
+    // её присутствие в отдаваемом HTML — это и есть проверяемое свойство:
+    // проглядеть её пропажу иначе нельзя, юнит-тесты гоняют исходник.
+    expect(html).toMatch(/class="preboot"/);
+    expect(html).toMatch(/class="preboot-pulse"/);
     expect(html).not.toMatch(/class="preload"/);
   });
 

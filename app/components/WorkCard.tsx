@@ -20,6 +20,72 @@ const MEDIA_STYLE: CSSProperties = {
 // Статус подписи звука: idle → «смотреть», off/on → «звук выкл/вкл» (текст — из словаря).
 type SndState = "idle" | "off" | "on";
 
+// Запас, на котором картинку карточки считаем нужной: 500 px до кадра. Постер
+// успевает приехать до того, как карточка войдёт в вид, и подмены пустого
+// прямоугольника на картинку никто не видит.
+const NEAR_MARGIN = 500;
+
+// «Карточка подошла к экрану» по геометрии, без посредников. Нулевой
+// прямоугольник — карточка убрана фильтром (display:none): грузить ей картинку
+// не за чем, иначе первый же фильтр вытянул бы всю сетку разом.
+function isNear(el: HTMLElement): boolean {
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return false;
+  return r.top < window.innerHeight + NEAR_MARGIN && r.bottom > -NEAR_MARGIN;
+}
+
+// ── Пробуждение отложенной загрузки ──────────────────────────────────────────
+// IntersectionObserver считает от геометрии и докладывает, когда та поехала —
+// то есть на прокрутке. Но у страницы есть состояния, когда прокрутки не
+// происходит вовсе: книга бестиария и заставка держат body{overflow:hidden},
+// страница под ними стоит намертво. Замер прод-сборки: сразу после закрытия
+// книги 5 карточек из 23 показывали пустой прямоугольник вместо картинки,
+// причём длинных задач в этот момент НОЛЬ — поток свободен, карточки просто
+// ждут, когда им наконец поставят картинку. Дождались бы они только следующего
+// движения колеса — это и есть «пустые прямоугольники вместо карточек».
+//
+// Ловим сам момент, когда странице возвращают прокрутку: замок снимают через
+// style у <body> (бестиарий) и через атрибут data-preload у <html> (заставка).
+// Наблюдатель один на весь модуль, а не по штуке на карточку, и все проверки
+// сведены в один кадр: 23 чтения rect подряд стоят браузеру один пересчёт
+// раскладки, вразнобой — двадцать три.
+const wakeSubs = new Set<() => void>();
+let wakeObserver: MutationObserver | null = null;
+let wakeRaf = 0;
+
+function fireWake(): void {
+  if (wakeRaf) return;
+  wakeRaf = requestAnimationFrame(() => {
+    wakeRaf = 0;
+    wakeSubs.forEach((fn) => fn());
+  });
+}
+
+function onWake(fn: () => void): () => void {
+  wakeSubs.add(fn);
+  if (!wakeObserver && typeof MutationObserver !== "undefined") {
+    wakeObserver = new MutationObserver(fireWake);
+    wakeObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
+    wakeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style", "class", "data-preload"],
+    });
+  }
+  return () => {
+    wakeSubs.delete(fn);
+    if (wakeSubs.size) return;
+    wakeObserver?.disconnect();
+    wakeObserver = null;
+    if (wakeRaf) {
+      cancelAnimationFrame(wakeRaf);
+      wakeRaf = 0;
+    }
+  };
+}
+
 function rootClass(item: WorkItem): string {
   return [
     "work",
@@ -47,10 +113,12 @@ export function WorkCard({
   const rafIds = useRef<number[]>([]);
   const firstVisible = useRef(true);
   const [snd, setSnd] = useState<SndState>("idle");
-  // Постеры карточек — 1.6 МБ jpg, и почти все они ниже первого экрана. У
+  // Картинки карточек — 1.6 МБ jpg, и почти все они ниже первого экрана. У
   // атрибута poster нет ленивой загрузки: браузер тянет его всегда и сразу,
   // отбирая полосу у того, что видно немедленно (руки — почти мегабайт). Ставим
-  // постер, только когда карточка подходит к экрану.
+  // постер, только когда карточка подходит к экрану; этим же флагом снимаем
+  // ленивость с <img> — у подошедшей карточки картинка нужна наверняка, а не по
+  // усмотрению эвристики браузера.
   const [near, setNear] = useState(false);
   const sndText =
     snd === "idle"
@@ -59,27 +127,45 @@ export function WorkCard({
         ? t.video.sndOff
         : t.video.sndOn;
 
-  // Запас в 500 px: постер успевает приехать до того, как карточка войдёт в
-  // кадр, и подмены пустого прямоугольника на картинку никто не видит. Без
-  // IntersectionObserver (старые движки) грузим сразу — как было.
+  // Карточки первого экрана обязаны получать картинку сразу: спрашиваем
+  // геометрию сами, тем же тиком. Раньше тут ждали первый колбэк наблюдателя —
+  // он приходит кадром позже и после ещё одного рендера, а карточку видно уже
+  // сейчас. Экономия трафика от этого не страдает: всё, что дальше 500 px,
+  // по-прежнему ждёт наблюдателя и не тянет свои полтора мегабайта вперёд.
+  // Без IntersectionObserver (старые движки) грузим сразу — как было.
   useEffect(() => {
-    if (!("IntersectionObserver" in window)) {
+    const el = cardRef.current;
+    if (!el) return;
+    if (isNear(el) || !("IntersectionObserver" in window)) {
       setNear(true);
       return;
     }
-    const el = cardRef.current;
-    if (!el) return;
+    let done = false;
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
+          done = true;
           setNear(true);
           io.disconnect();
         }
       },
-      { rootMargin: "500px" },
+      { rootMargin: `${NEAR_MARGIN}px` },
     );
     io.observe(el);
-    return () => io.disconnect();
+    // Страховка на случай, когда геометрия «поехала» без прокрутки: закрылась
+    // книга, ушла заставка. Наблюдатель об этом не докладывает, а карточка уже
+    // на экране — проверяем сами и, если пора, ставим картинку не дожидаясь
+    // колеса. Дальние карточки проверка не задевает: у них rect не в кадре.
+    const stopWake = onWake(() => {
+      if (done || !isNear(el)) return;
+      done = true;
+      setNear(true);
+      io.disconnect();
+    });
+    return () => {
+      io.disconnect();
+      stopWake();
+    };
   }, []);
 
   // Показ/скрытие при фильтрации — таймер на элементе, без гонок (как toggleItem).
@@ -210,7 +296,11 @@ export function WorkCard({
           <img
             src={item.imgSrc}
             alt={item.imgAlt}
-            loading="lazy"
+            // Пока карточка далеко — ленивая загрузка, как было. Подошла —
+            // переводим в eager: смена lazy→eager запускает загрузку сразу, и
+            // картинка перестаёт зависеть от эвристики браузера, которая под
+            // открытой модалкой карточку из виду не теряет, но и не торопится.
+            loading={near ? "eager" : "lazy"}
             style={
               item.imgPos
                 ? { ...MEDIA_STYLE, objectPosition: item.imgPos }

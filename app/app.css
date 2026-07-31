@@ -677,16 +677,72 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 html[data-preload] .rootwrap{visibility:hidden}
 html[data-preload] body{overflow:hidden}
 
+/* ── первый кадр заставки: HTML+CSS, поток композитора (PreloadShell.tsx) ──
+   Две беды лечатся одним слоем.
+   Первая: WebGL-оверлей приходит из React и появляется на 545-780 мс — до
+   гидратации на экране пусто. Эта разметка пре-рендерится и рисуется вместе
+   с CSS, примерно за 100 мс.
+   Вторая: WebGL идёт в requestAnimationFrame на главном потоке, а под
+   заставкой на первом заходе 18 длинных задач общей длиной 4867 мс (худшая
+   968 мс — разбор чанка three.js). Всё это время кадры не идут, и заставка
+   стоит мёртвая. Здесь анимируются ТОЛЬКО transform и opacity: такие
+   анимации Chromium уводит на композитор, и они продолжают идти, пока
+   главный поток занят. Ни width/height, ни left/top, ни background-position
+   — любое из них вернуло бы анимацию на главный поток вместе с вёрсткой.
+   Показ целиком на атрибуте data-preload: ставит BOOT-скрипт, снимает
+   Preloader.finish() или его предохранитель. Своей логики у слоя нет. */
+/* Оболочка заставки: показывается тем же атрибутом, что и оверлей.
+   Верхний слой (.preboot-pulse) лежит ПОВЕРХ оверлея — иначе замёрзший
+   непрозрачный холст закрыл бы единственное, что ещё движется. Но из-за этого
+   он обязан и УХОДИТЬ вместе с оверлеем: finish() снимает data-preload сразу, а
+   оверлей гаснет ещё 600 мс, и слой без перехода пропадал бы рывком поверх
+   полностью непрозрачной картинки. Гасим его тем же временем, что и оверлей. */
+.preboot{display:none}
+.preboot-pulse{display:block;opacity:0;transition:opacity .6s var(--ez)}
+html[data-preload] .preboot{display:block}
+html[data-preload] .preboot-pulse{opacity:1}
+
+/* Подложка — ПОД холстом (у того z-index 9999 и alpha:false, то есть он
+   непрозрачен): как только сцена поднялась, подложки просто не видно, и
+   снимать её отдельно не нужно. Цвет литералом, а не var(--bg): он обязан
+   совпасть с землёй, которую заливает шейдер (#0D0D0B), а --bg переопределяют
+   палитры. */
+.preboot{position:fixed;inset:0;z-index:9998;pointer-events:none;background:#0D0D0B}
+.preboot-glow,.preboot-vig{position:absolute;inset:0;will-change:transform,opacity;
+  transform:scale(.9);opacity:.45;animation:preboot-breath 3.1s ease-in-out infinite alternate}
+.preboot-glow{background:radial-gradient(circle at 50% 60%,rgba(168,147,95,.17),rgba(168,147,95,.05) 34%,transparent 62%)}
+
+/* Живой слой — ПОВЕРХ холста (10000 против 9999) и полупрозрачный: если бы он
+   лежал ниже, замёрзший непрозрачный WebGL закрыл бы единственное, что на
+   экране ещё движется. pointer-events:none, чтобы не отбирать курсор у
+   оверлея (у того cursor:none и свой факел). */
+.preboot-pulse{position:fixed;inset:0;z-index:10000;pointer-events:none;overflow:hidden}
+.preboot-vig{background:radial-gradient(ellipse at 50% 58%,transparent 46%,rgba(168,147,95,.12) 78%,transparent 100%);
+  animation-duration:3.7s}
+.preboot-scan{position:absolute;left:0;top:0;width:100%;height:2px;overflow:hidden;background:rgba(168,147,95,.09)}
+.preboot-scan b{position:absolute;top:0;bottom:0;left:0;width:34%;display:block;
+  background:linear-gradient(90deg,transparent,var(--fire2),transparent);
+  transform:translate3d(-100%,0,0);will-change:transform;
+  animation:preboot-sweep 1.25s linear infinite}
+/* -100% — правый край блика на кромке экрана, 300% — левый край за кромкой:
+   проценты у translateX считаются от ширины САМОГО блика (34vw), поэтому
+   пробег через экран = 100/34 ≈ 294%, плюс запас на паузу. */
+@keyframes preboot-sweep{from{transform:translate3d(-100%,0,0)}to{transform:translate3d(300%,0,0)}}
+@keyframes preboot-breath{from{transform:scale(.9);opacity:.45}to{transform:scale(1.12);opacity:1}}
+
 .preload{position:fixed;inset:0;z-index:9999;cursor:none;opacity:1;
   transition:opacity .6s var(--ez);color:var(--tx);-webkit-tap-highlight-color:transparent}
 .preload[data-fade]{opacity:0;pointer-events:none}
 .preload-gl{position:fixed;inset:0;width:100%;height:100%;display:block}
 .preload-eye{position:fixed;pointer-events:none;will-change:transform}
 
-.preload-top{position:fixed;top:max(4vh,env(safe-area-inset-top));left:0;right:0;text-align:center;
+/* .preboot-top идёт тем же правилом намеренно: латынь на подложке и латынь на
+   WebGL-оверлее обязаны стоять пиксель в пиксель, иначе в момент подъёма сцены
+   надпись дёрнется. */
+.preload-top,.preboot-top{position:fixed;top:max(4vh,env(safe-area-inset-top));left:0;right:0;text-align:center;
   pointer-events:none;font-family:'Cinzel',Georgia,serif;font-size:clamp(10px,1.3vw,14px);
   letter-spacing:.42em;color:rgba(168,147,95,.30);padding:0 6vw}
-.preload-top s{display:block;text-decoration:none;font-family:'Old Standard TT',Georgia,serif;
+.preload-top s,.preboot-top s{display:block;text-decoration:none;font-family:'Old Standard TT',Georgia,serif;
   font-style:italic;font-size:.78em;letter-spacing:.16em;color:rgba(196,196,192,.22);margin-top:.5em}
 
 .preload-hud{position:fixed;left:max(4vw,env(safe-area-inset-left));
@@ -707,13 +763,16 @@ html[data-preload] body{overflow:hidden}
   letter-spacing:.3em;text-transform:uppercase}
 
 @media (max-width:620px),(orientation:portrait){
-  .preload-top{top:2.6vh;letter-spacing:.3em}
+  .preload-top,.preboot-top{top:2.6vh;letter-spacing:.3em}
   .preload-rn{letter-spacing:.3em}
   .preload-hud{bottom:calc(3.2vh + env(safe-area-inset-bottom))}
 }
 /* Прелоадера нет при reduced-motion — решение принимается ещё в BOOT-скрипте,
-   но правило страхует на случай, если атрибут выставят иначе. */
+   но правило страхует на случай, если атрибут выставят иначе. Оболочку тоже
+   гасим, и обязательно селектором той же силы (html[data-preload] .preboot):
+   голого .preboot не хватило бы — правило показа специфичнее и победило бы. */
 @media (prefers-reduced-motion:reduce){
   html[data-preload] .rootwrap{visibility:visible}
   .preload{display:none}
+  html[data-preload] .preboot,html[data-preload] .preboot-pulse{display:none;opacity:0}
 }
