@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { BOOT_GATE_MS, FADE_MS, HARD_BAIL_MS } from "./preloadTiming";
 
 const HTML = resolve(process.cwd(), "build/client/index.html");
 const built = existsSync(HTML);
@@ -37,10 +38,17 @@ describe.skipIf(!built)("собранная разметка", () => {
     expect(inline).toMatch(/kur:preloaded/);
   });
 
-  it("предохранитель на 8 секунд на месте", () => {
-    // минификатор пишет 8000 как 8e3 — принимаем оба вида
+  it("предохранитель на месте и переживает полный цикл оверлея", () => {
     expect(inline).toMatch(/removeAttribute\(\s*["']data-preload["']\s*\)/);
-    expect(inline).toMatch(/8000|8e3/);
+    // Число приходит аргументом из preloadTiming, минификатор может записать его
+    // и как 13100, и как 1.31e4 — сверяемся со значением, а не с написанием.
+    const exp = String(BOOT_GATE_MS);
+    const sci = BOOT_GATE_MS.toExponential().replace("+", "");
+    expect(
+      inline.includes(exp) || inline.includes(sci),
+      `в разметке нет времени предохранителя (${exp})`,
+    ).toBe(true);
+    expect(BOOT_GATE_MS).toBeGreaterThan(HARD_BAIL_MS + FADE_MS);
   });
 
   it("оверлея нет в разметке — он появляется только после гидратации", () => {

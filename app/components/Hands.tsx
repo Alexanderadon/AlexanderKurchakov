@@ -3,9 +3,10 @@
 // на край main с заходом OVER; в покое пальцы качаются по синусоиде (idle-цикл),
 // при скролле перебирают; хват сжимается в тишине и ослабевает на скорости.
 // Рендер: canvas + transform, слой выключается тумблером панели (bento2:hands).
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePrefs } from "~/lib/prefs";
 import { prefersReducedMotion } from "~/lib/media";
+import { useRafLoop } from "~/hooks/useRafLoop";
 import { HAND_FRAMES_PER_SIDE, handImages } from "~/lib/handFrames";
 
 const N = HAND_FRAMES_PER_SIDE;
@@ -38,6 +39,15 @@ function HandsLayer() {
   const rRef = useRef<HTMLDivElement>(null);
   const shLRef = useRef<HTMLDivElement>(null);
   const shRRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  /** Кадр рук. Появляется, когда раскодирован первый кадр каждой руки. */
+  const draw = useRef<((t: number) => void) | null>(null);
+  const [alive, setAlive] = useState(false);
+
+  // Цикл ЗАСЫПАЕТ, когда слой рук уехал за экран: руки живут только у первого
+  // экрана, а крутились всё время, пока страница открыта, и каждый кадр читали
+  // window.scrollY и писали transform двум десяткам узлов.
+  useRafLoop((t) => draw.current?.(t), { watch: layerRef, enabled: alive, rootMargin: "300px" });
 
   useEffect(() => {
     if (prefersReducedMotion()) return;
@@ -115,10 +125,9 @@ function HandsLayer() {
     let vel = 0;
     let still = 0;
     let lag = 0;
-    let raf = 0;
     let frame = 0;
 
-    function loop(t: number): void {
+    const loop = (t: number): void => {
       // карточки могли перестроиться (фильтр/шрифты) — обновляем пачкой раз в ~1с
       if (++frame % 60 === 0) refreshCards();
       const y = window.scrollY;
@@ -188,8 +197,7 @@ function HandsLayer() {
         }
         tipYpx[s] = ty;
       }
-      raf = requestAnimationFrame(loop);
-    }
+    };
 
     // старт после декода первого кадра каждой руки; если кадры не загрузились
     // за ~16с — сдаёмся, а не крутим таймер вечно
@@ -197,7 +205,8 @@ function HandsLayer() {
     const boot = window.setInterval(() => {
       if (imgs[0][0].complete && imgs[1][0].complete) {
         window.clearInterval(boot);
-        raf = requestAnimationFrame(loop);
+        draw.current = loop;
+        setAlive(true);
       } else if (++bootTicks > 400) {
         window.clearInterval(boot);
       }
@@ -205,14 +214,14 @@ function HandsLayer() {
 
     return () => {
       window.clearInterval(boot);
-      cancelAnimationFrame(raf);
+      draw.current = null;
       window.removeEventListener("resize", layout);
     };
   }, []);
 
   return (
     <>
-      <div className="hands-layer" aria-hidden="true">
+      <div className="hands-layer" aria-hidden="true" ref={layerRef}>
         <div className="hgrip hgrip--l" ref={lRef}>
           <canvas width={FRAME_W} height={FRAME_H} />
         </div>

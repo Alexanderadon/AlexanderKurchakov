@@ -2,8 +2,9 @@
 // эволюционируют и никогда не повторяются, курсор расталкивает дым.
 // Дёшево: рендер в 0.32 от экрана (шум мягкий, разницы не видно), 30 к/с,
 // пауза во вкладке-невидимке, выключен при reduced-motion и без WebGL.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { prefersReducedMotion } from "~/lib/media";
+import { useRafLoop } from "~/hooks/useRafLoop";
 
 const SCALE = 0.5;
 const FRAME_MS = 33;
@@ -66,6 +67,11 @@ function compile(gl: WebGLRenderingContext, type: number, src: string) {
 
 export function Fog() {
   const ref = useRef<HTMLCanvasElement>(null);
+  /** Рисование кадра. Заполняется, когда WebGL собрался; null — сцены нет. */
+  const draw = useRef<((now: number) => void) | null>(null);
+  const [alive, setAlive] = useState(false);
+
+  useRafLoop((now) => draw.current?.(now), { fps: 1000 / FRAME_MS, enabled: alive });
 
   useEffect(() => {
     if (prefersReducedMotion()) return;
@@ -148,22 +154,23 @@ export function Fog() {
     window.addEventListener("touchend", onLeave, { passive: true });
     window.addEventListener("touchcancel", onLeave, { passive: true });
 
-    let raf = 0, last = 0;
+    // Сам кадр отдан общему тикеру (useRafLoop): он один на весь сайт умеет и
+    // ограничивать частоту, и НЕ просить кадр в скрытой вкладке. Прежний цикл
+    // просил кадр всегда и выходил из него по document.hidden уже внутри — то
+    // есть браузер всё равно будил страницу.
     const t0 = performance.now();
-    function loop(now: number): void {
-      raf = requestAnimationFrame(loop);
-      if (now - last < FRAME_MS || document.hidden || !gl) return;
-      last = now;
+    draw.current = (now: number): void => {
+      if (!gl) return;
       mx += (tx - mx) * 0.06;
       my += (ty - my) * 0.06;
       gl.uniform2f(uM, mx, my);
       gl.uniform1f(uT, (now - t0) / 1000);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-    }
-    raf = requestAnimationFrame(loop);
+    };
+    setAlive(true);
 
     return () => {
-      cancelAnimationFrame(raf);
+      draw.current = null;
       window.removeEventListener("resize", size);
       window.visualViewport?.removeEventListener("resize", size);
       window.removeEventListener("mousemove", onMove);
