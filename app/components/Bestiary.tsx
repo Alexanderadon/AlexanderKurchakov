@@ -96,27 +96,66 @@ export function Bestiary() {
     [],
   );
 
-  // Прогрев по приближению плитки к экрану: к моменту клика чанк и текстуры уже
-  // в памяти. Запас 600 px — пользователь ещё скроллит, а книга уже готова.
+  // В плитке живёт СВОЯ уменьшенная сцена той же книги: закрытый том вместо
+  // постера. Прогрев стартует сразу после монтирования (в idle) — плитке всё
+  // равно нужны чанк и текстуры, а заодно к клику готова и модалка: прежняя
+  // ленивая загрузка по доскроллу оставляла клик с ожиданием в секунды.
+  const tileRef = useRef<HTMLCanvasElement>(null);
+  const tileSceneRef = useRef<BookScene | null>(null);
+  const [tileLive, setTileLive] = useState(false);
   useEffect(() => {
-    const el = btnRef.current;
-    if (!el) return;
-    if (!("IntersectionObserver" in window)) {
-      void warm();
-      return;
-    }
-    const io = new IntersectionObserver(
-      (ent) => {
-        if (ent.some((e) => e.isIntersecting)) {
-          void warm();
-          io.disconnect();
-        }
-      },
-      { rootMargin: "600px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
+    let dead = false;
+    const idle =
+      (window as unknown as { requestIdleCallback?: (fn: () => void) => number }).requestIdleCallback ??
+      ((fn: () => void) => window.setTimeout(fn, 150));
+    idle(() => {
+      warm()
+        .then(({ images, make }) => {
+          const cv = tileRef.current;
+          if (dead || !cv || tileSceneRef.current) return;
+          const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
+            foredge, nForedge, headband, nStrap, catchPlate, nCatch] = images;
+          tileSceneRef.current = make(cv, { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate,
+            nCover, nPage, nPlate, foredge, nForedge, headband, nStrap, catchPlate, nCatch }, { closeUp: true });
+          if (tileSceneRef.current) setTileLive(true);
+        })
+        .catch(() => undefined);
+    });
+    const onR = (): void => tileSceneRef.current?.resize();
+    window.addEventListener("resize", onR);
+    return () => {
+      dead = true;
+      window.removeEventListener("resize", onR);
+      tileSceneRef.current?.dispose();
+      tileSceneRef.current = null;
+    };
   }, []);
+
+  // Наведение на плитку: том мягко доворачивается к курсору и так же мягко
+  // возвращается — живая книга, а не картинка. Тайловая сцена своя, поэтому
+  // модалке эти повороты не передаются.
+  const sway = useRef({ raf: 0, cx: 0, cy: 0, tx: 0, ty: 0 });
+  const swayTo = useCallback((tx: number, ty: number): void => {
+    if (prefersReducedMotion()) return;
+    const s = sway.current;
+    s.tx = tx;
+    s.ty = ty;
+    if (s.raf) return;
+    const step = (): void => {
+      const dx = (s.tx - s.cx) * 0.14;
+      const dy = (s.ty - s.cy) * 0.14;
+      s.cx += dx;
+      s.cy += dy;
+      tileSceneRef.current?.orbit(dx, dy);
+      if (Math.abs(s.tx - s.cx) > 0.4 || Math.abs(s.ty - s.cy) > 0.4) {
+        s.raf = requestAnimationFrame(step);
+      } else {
+        s.raf = 0;
+      }
+    };
+    s.raf = requestAnimationFrame(step);
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(sway.current.raf), []);
 
   const open = useCallback((): void => {
     if (phase !== "shut") return;
@@ -389,7 +428,10 @@ export function Bestiary() {
         className="bshut"
         aria-expanded={live}
         aria-label={t.hero.bestiaryOpen}
+        data-live={tileLive ? "1" : undefined}
         onClick={open}
+        onMouseEnter={() => swayTo(-34, -12)}
+        onMouseLeave={() => swayTo(0, 0)}
       >
         <img
           className="bcover"
@@ -398,6 +440,8 @@ export function Bestiary() {
           loading="lazy"
           decoding="async"
         />
+        {/* Живой том: канвас поверх постера, постер гаснет по готовности сцены. */}
+        <canvas ref={tileRef} className="btile" aria-hidden="true" />
       </button>
 
       {live &&
