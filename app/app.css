@@ -86,19 +86,23 @@ nav a:hover{color:var(--tx);background:rgba(255,255,255,.06)}
    контейнер прокрутки и не ломает position:sticky шапки. */
 html,body{overflow-x:clip}
 
-/* ============ скованные руки у подножия ============ */
-/* Сцена НЕ перехватывает указатель и поднимает узника из-за нижней кромки,
-   когда до него долистали; штатные руки в это время расходятся (Hands). */
-.chains-stage{position:relative;height:min(58vh,520px);overflow:hidden;pointer-events:none;margin-top:-24px;
-  -webkit-mask-image:linear-gradient(180deg,#000 78%,transparent 99%);
-  mask-image:linear-gradient(180deg,#000 78%,transparent 99%)}
-.chains-cv{position:absolute;left:50%;bottom:0;height:132%;width:auto;opacity:0;
-  transform:translate(-50%,40%);
-  transition:opacity 1s var(--ez),transform 1.2s var(--ez);
-  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 15%);
-  mask-image:linear-gradient(90deg,transparent 0,#000 15%);
+/* ============ скованные руки из-под футера ============ */
+/* Сцена — абсолютный оверлей НУЛЕВОЙ высоты в потоке: блоки страницы не
+   сдвинуты ни на пиксель. Узник поднимается из-за нижней кромки страницы и
+   проходит ПОЗАДИ футера (footer поднят по z). Обрезов нет: правый край кадра
+   совмещён с краем окна, единственные живые срезы (левая рука позы «замок» и
+   верх кадра) растворяются узкими масками — как у рук первого экрана. */
+.chains-stage{position:absolute;left:0;right:0;bottom:0;height:min(78vh,700px);
+  overflow:hidden;pointer-events:none;z-index:-1;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 12%);
+  mask-image:linear-gradient(180deg,transparent 0,#000 12%)}
+.chains-cv{position:absolute;right:4vw;bottom:0;height:min(100%,720px);width:auto;opacity:0;
+  transform:translateY(55%);
+  transition:opacity 1.1s var(--ez),transform 1.4s var(--ez);
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 12%);
+  mask-image:linear-gradient(90deg,transparent 0,#000 12%);
   filter:drop-shadow(0 8px 26px rgba(0,0,0,.55))}
-.chains-stage[data-in] .chains-cv{opacity:.92;transform:translate(-50%,22%)}
+.chains-stage[data-in] .chains-cv{opacity:.95;transform:translateY(15%)}
 @media(prefers-reduced-motion:reduce){.chains-cv{transition:none}}
 
 /* ============ layout ============ */
@@ -626,7 +630,7 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 @media(pointer:coarse){.inktrail{display:none}}
 
 /* ============ cinebg: свет собора (ветка cinematic-background) ============ */
-.rootwrap{position:relative}
+.rootwrap{position:relative;isolation:isolate}
 .cinebg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--cbg)}
 .cinebg-tex,.cinebg-tex2,.cinebg-tex3{filter:sepia(.45) hue-rotate(-5deg) saturate(1.15)}
 /* бумага (волокно) — основа; камень и царапины поверх неё как фактуры */
