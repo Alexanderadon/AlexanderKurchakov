@@ -30,18 +30,22 @@ import {
   ClampToEdgeWrapping,
   EquirectangularReflectionMapping,
   Color,
+  DataTexture,
   DirectionalLight,
+  FloatType,
   Group,
   Mesh,
   MeshBasicMaterial,
   MeshDepthMaterial,
   MeshStandardMaterial,
+  NearestFilter,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
   PlaneGeometry,
   RepeatWrapping,
   RGBADepthPacking,
+  RGBAFormat,
   BackSide,
   DoubleSide,
   Scene,
@@ -241,6 +245,114 @@ function makeTexture(src: TexImageSource): Texture {
   const t = new Texture(src as TexImageSource);
   t.colorSpace = SRGBColorSpace;
   t.needsUpdate = true;
+  return t;
+}
+
+/**
+ * ── ЗАГЛУШКИ ДЛЯ ПУСТЫХ СЛОТОВ КАРТ.
+ *
+ * three собирает шейдерную программу по НАБОРУ ЗАДЕЙСТВОВАННЫХ СЛОТОВ, а не по
+ * значениям. Материал с картой цвета и материал без неё — две разные программы,
+ * даже если поверхность одна и та же. Цвет, roughness и metalness живут в
+ * юниформах и программу НЕ раздваивают, а вот map / normalMap / roughnessMap /
+ * metalnessMap раздваивают каждый: в ключ идут mapUv, normalMapUv,
+ * roughnessMapUv, metalnessMapUv (WebGLPrograms.js, 272–281).
+ *
+ * Зачем это вообще понадобилось. Замер живой сцены на прод-сборке: 56 мешей,
+ * ~7000 треугольников (после снятия displacement), 37 шейдерных программ и
+ * 3185 мс ожидания драйвера при сборке — то есть примерно 86 мс на программу.
+ * Полигонов давно нет, платим за программы.
+ *
+ * Матовый корпус тома — кожа торцов, форзацы, подложка бумаги под страницей,
+ * обрез, переплёт, слепое тиснение задника, лицо крышки и лицо корешка —
+ * совпадал по КАЖДОМУ биту ключа, кроме набора карт: у всех side = FrontSide,
+ * alphaTest = 0, transparent = false, alphaToCoverage = false (значит бит opaque
+ * у всех true), и всем сцена подставляет свой environment. Пять программ там,
+ * где физически одна поверхность. Латунь делилась на две по той же причине: у
+ * лиц бляшек есть карта нормалей, у подложек и оковок её нет — 4 слота против 34.
+ *
+ * Лечится добавлением НЕЙТРАЛЬНЫХ карт 1×1 в пустые слоты. Это не «почти
+ * тождество», а тождество, и вот по каким строкам шейдера:
+ *  - map: `diffuseColor *= texture2D(map, vMapUv)` (map_fragment.glsl). Белый
+ *    непрозрачный тексель даёт (1,1,1,1), умножение на единицу возвращает ровно
+ *    прежние color и opacity;
+ *  - normalMap: `mapN = texel*2−1; mapN.xy *= normalScale; normal = normalize(tbn *
+ *    mapN)` (normal_fragment_maps.glsl). При mapN = (0,0,1) произведение — это
+ *    ровно третий столбец tbn, а он равен N, той самой нормали, что берётся без
+ *    карты. Вырожденной развёртки бояться не надо: getTangentFrame в r185 гасит
+ *    касательные через `det == 0.0 ? 0.0` и NaN не выдаёт;
+ *  - roughnessMap: `roughnessFactor *= texelRoughness.g`, metalnessMap:
+ *    `metalnessFactor *= texelMetalness.b`. Белое даёт ×1, числовые roughness и
+ *    metalness остаются прежними.
+ *
+ * Ни одно значение (color, roughness, metalness, normalScale, opacity, side)
+ * при этом не трогается — только добавляются слоты.
+ *
+ * Заглушки заводятся ОДИН РАЗ НА МОДУЛЬ и лениво: плитка и модалка — две разные
+ * сцены с двумя контекстами, но текстуры хотя бы не дублируются в памяти
+ * страницы. По этой же причине их НЕТ в объекте T и НЕТ в dispose() — см.
+ * комментарий там: заглушки переживают любую отдельную книгу.
+ */
+let stubWhiteTex: Texture | null = null;
+/**
+ * Белый непрозрачный пиксель. Служит СРАЗУ трём слотам: map читает всю RGBA,
+ * roughnessMap — канал G, metalnessMap — канал B, и все три берут из белого
+ * ровно 1.0. Три отдельные заглушки были бы тремя загрузками в видеопамять без
+ * единого выигрыша.
+ *
+ * Почему именно белый и почему это точно: sRGB-значение 255 переводится в
+ * линейную единицу без ошибки (pow(1.0, 2.4) = 1.0), поэтому умножение диффуза
+ * на выборку — тождество. Любой другой пиксель ломает обещание «ни на пиксель».
+ *
+ * NearestFilter и generateMipmaps = false (у DataTexture это и так дефолт,
+ * ставим явно как часть контракта) — чтобы у текстуры 1×1 не заводились уровни.
+ * На результат выборки это не влияет: у одного текселя фильтровать нечего.
+ */
+function stubWhite(): Texture {
+  if (stubWhiteTex) return stubWhiteTex;
+  const t = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, RGBAFormat);
+  t.magFilter = NearestFilter;
+  t.minFilter = NearestFilter;
+  t.generateMipmaps = false;
+  t.colorSpace = SRGBColorSpace;
+  t.needsUpdate = true;
+  stubWhiteTex = t;
+  return t;
+}
+
+let stubFlatTex: Texture | null = null;
+/**
+ * Плоская нормаль для слота normalMap.
+ *
+ * ПОЧЕМУ FLOAT, А НЕ (128, 128, 255). В восьми битах 0.5 не кодируется: нужно
+ * 127.5, а есть только 127 или 128. 128/255 = 0.501961, шейдер делает
+ * `texel*2−1`, и получается наклон 0.00392 по x и по y — примерно 0.22°. На
+ * матовой коже это почти везде уходит ниже 1/255, но это НЕ ноль, и обещание
+ * «кадр не меняется ни на пиксель» на нём формально ломается — особенно на
+ * градиентах бликов под AgX. У float-текстуры 0.5 и 1.0 представимы точно,
+ * mapN = (0,0,1) выходит ровно, и tbn·(0,0,1) — это третий столбец матрицы,
+ * то есть та же нормаль, что и без карты.
+ *
+ * RGBA32F с NearestFilter читается в WebGL2 без расширений: OES_texture_float_linear
+ * нужен только для ЛИНЕЙНОЙ фильтрации, а её здесь нет.
+ *
+ * Формат обязан остаться RGBAFormat. В ключ программы входит бит packedNormalMap
+ * = isPackedRGFormat(normalMap.format) — заглушка RG-формата не слила бы
+ * программы, а РАЗВЕЛА их: все настоящие карты нормалей сцены собраны как
+ * Texture(canvas), то есть RGBA.
+ *
+ * colorSpace НЕ задаётся намеренно (остаётся линейным) — ровно по той причине,
+ * по которой его не ставит makeNormal: в карте нормалей не цвет, а наклоны, и
+ * гамма-преобразование увело бы их не туда.
+ */
+function stubFlat(): Texture {
+  if (stubFlatTex) return stubFlatTex;
+  const t = new DataTexture(new Float32Array([0.5, 0.5, 1, 1]), 1, 1, RGBAFormat, FloatType);
+  t.magFilter = NearestFilter;
+  t.minFilter = NearestFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  stubFlatTex = t;
   return t;
 }
 
@@ -699,8 +811,20 @@ export function createBook(
   // другому, и это читалось кашей. У выведенной совпадение 0.533.
   const coverRelief = derivedCached(tex.coverFront, 768, 2.6);
 
+  // Форзац. Пустые слоты набиты нейтральными заглушками — единственная причина
+  // здесь в том, чтобы набор карт совпал с кожей торцов, обрезом, переплётом и
+  // лицом крышки: у них у всех одинаковы сторона, alphaTest, прозрачность и
+  // окружение, и разводил их РОВНО набор карт. Числа (0.95 / 0) не тронуты, а
+  // белое даёт ×1 — см. большой комментарий у stubWhite/stubFlat.
   const paper = (map: Texture): MeshStandardMaterial =>
-    new MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
+    new MeshStandardMaterial({
+      map,
+      normalMap: stubFlat(),
+      roughnessMap: stubWhite(),
+      metalnessMap: stubWhite(),
+      roughness: 0.95,
+      metalness: 0,
+    });
   // Кожа торцов крышек — с ПРОТИРАМИ: рёбра коробок светлеют к краям каждой
   // грани, пятнами, как обношенная о полку кожа. Ровный цвет читался пластиком.
   const leatherTex = (() => {
@@ -731,8 +855,17 @@ export function createBook(
     t.needsUpdate = true;
     return t;
   })();
+  // Кожа торцов. Заглушки в трёх пустых слотах — ради общей программы с форзацем,
+  // обрезом, переплётом, тиснением и лицом крышки. Отдельно: map в ветке отказа
+  // (canvas не выдал 2d-контекст) тоже белая заглушка, а не пусто — иначе на
+  // машине без контекста кожа уезжала бы в СВОЙ набор слотов и приносила лишнюю
+  // программу там, где и так плохо. Цвет 0x14130f умножается на белую единицу и
+  // остаётся собой.
   const leather = new MeshStandardMaterial({
-    map: leatherTex ?? undefined,
+    map: leatherTex ?? stubWhite(),
+    normalMap: stubFlat(),
+    roughnessMap: stubWhite(),
+    metalnessMap: stubWhite(),
     color: leatherTex ? 0xffffff : 0x14130f,
     roughness: 0.78,
     metalness: 0.05,
@@ -750,28 +883,53 @@ export function createBook(
     t.anisotropy = aniso;
     t.needsUpdate = true;
   }
+  // Карт цвета и нормалей у обреза свои, настоящие; добираются только пустые
+  // roughnessMap/metalnessMap — чтобы набор слотов сошёлся с остальным корпусом.
+  // Осветляющий множитель (1.6, 1.56, 1.44) больше единицы и не трогается: он
+  // живёт в юниформе и на программу не влияет никак.
   const edgeMat = new MeshStandardMaterial({
     map: T.foredge,
     normalMap: T.nForedge,
     normalScale: new Vector2(0.95, 0.95),
+    roughnessMap: stubWhite(),
+    metalnessMap: stubWhite(),
     color: new Color(1.6, 1.56, 1.44),
     roughness: 0.92,
     metalness: 0,
   });
   // Переплёт: сторона, где блок сшит. Тёмная, матовая, без кромок.
-  const binding = new MeshStandardMaterial({ color: 0x24211b, roughness: 0.95, metalness: 0 });
+  // Единственный участник корпуса, у которого не было НИ ОДНОЙ карты — из-за чего
+  // две его грани (по одной корешковой на половину блока) держали собственную
+  // программу. Все четыре слота — заглушки; цвет 0x24211b и матовость не тронуты.
+  const binding = new MeshStandardMaterial({
+    map: stubWhite(),
+    normalMap: stubFlat(),
+    roughnessMap: stubWhite(),
+    metalnessMap: stubWhite(),
+    color: 0x24211b,
+    roughness: 0.95,
+    metalness: 0,
+  });
   // Верх блока под страницей — ТЕКСТУРА СЛЕДУЮЩЕЙ СТРАНИЦЫ, чуть притемнённая:
   // под настоящим листом лежит такой же лист, и всё, что выглядывает в прорехи
   // рваного края, совпадает по тону по построению. Плоская светлая заливка
   // читалась чужим белым ободом вокруг страниц.
+  // Три пустых слота добираются заглушками — как у форзаца и кожи. Притемнение
+  // (0.9, 0.89, 0.87) и roughness 0.96 остаются как есть: белая выборка даёт ×1.
   const underPaperR = new MeshStandardMaterial({
     map: T.right,
+    normalMap: stubFlat(),
+    roughnessMap: stubWhite(),
+    metalnessMap: stubWhite(),
     roughness: 0.96,
     metalness: 0,
     color: new Color(0.9, 0.89, 0.87),
   });
   const underPaperL = new MeshStandardMaterial({
     map: T.left,
+    normalMap: stubFlat(),
+    roughnessMap: stubWhite(),
+    metalnessMap: stubWhite(),
     roughness: 0.96,
     metalness: 0,
     color: new Color(0.9, 0.89, 0.87),
@@ -814,11 +972,19 @@ export function createBook(
     nt.needsUpdate = true;
     return nt;
   };
+  // Слепое тиснение задника: карта нормалей своя (инвертированный рельеф
+  // обложки), остальные три слота — заглушки. До этого материал был единственным
+  // в сцене с набором {нормаль и больше ничего} и держал программу ради ОДНОЙ
+  // грани. color 0x1a1712, roughness 0.74, metalness 0.04 и normalScale 1.25 не
+  // тронуты: заглушки только добавляют слоты.
   const backTooling = coverRelief
     ? new MeshStandardMaterial({
         color: 0x1a1712,
+        map: stubWhite(),
         normalMap: recessNormal(coverRelief.normal),
         normalScale: new Vector2(1.25, 1.25),
+        roughnessMap: stubWhite(),
+        metalnessMap: stubWhite(),
         roughness: 0.74,
         metalness: 0.04,
       })
@@ -1032,8 +1198,13 @@ export function createBook(
       map: T.spine,
       normalMap: spineRelief ? spineRelief.normal : T.nCover,
       normalScale: new Vector2(0.8, 0.8),
-      metalnessMap: spineRelief ? spineRelief.metal : undefined,
-      roughnessMap: spineRelief ? spineRelief.rough : undefined,
+      // В рабочей ветке карты настоящие — их снимать нельзя, вся полировка и
+      // металличность золота живут именно в них. В ветке ОТКАЗА (derive не смог
+      // получить 2d-контекст) вместо пустоты подставляется белая заглушка: набор
+      // слотов тогда совпадает с рабочим, и на слабой машине не появляется лишняя
+      // программа. Числа 0.72 / 0.18 при этом множатся на единицу и не меняются.
+      metalnessMap: spineRelief ? spineRelief.metal : stubWhite(),
+      roughnessMap: spineRelief ? spineRelief.rough : stubWhite(),
       roughness: spineRelief ? 1 : 0.72,
       metalness: spineRelief ? 1 : 0.18,
     }),
@@ -1134,8 +1305,12 @@ export function createBook(
       // кожа остаётся матовым диэлектриком, а тиснение становится НАСТОЯЩИМ
       // металлом и ловит окружение. С одним общим числом на всю крышку золото
       // было краской: блестело ровно так же, как кожа под ним.
-      metalnessMap: coverRelief ? coverRelief.metal : undefined,
-      roughnessMap: coverRelief ? coverRelief.rough : undefined,
+      // Ветка отказа (coverRelief === null) уводила лицо крышки в набор {map, nrm}
+      // с roughness 0.62 / metalness 0.22 — то есть на машине без 2d-контекста
+      // рождалась ЕЩЁ одна программа. Белые заглушки по умолчанию возвращают её в
+      // тот же набор слотов, а 0.62 и 0.22 умножаются на единицу и остаются собой.
+      metalnessMap: coverRelief ? coverRelief.metal : stubWhite(),
+      roughnessMap: coverRelief ? coverRelief.rough : stubWhite(),
       roughness: coverRelief ? 1 : 0.62,
       metalness: coverRelief ? 1 : 0.22,
     }),
@@ -1188,7 +1363,12 @@ export function createBook(
     const brassBack = brass.clone();
     brassBack.color = new Color(0x6f5f38);
     brassBack.metalness = 0.8;
-    brassBack.normalMap = null;
+    // Вместо null — ПЛОСКАЯ заглушка. Замысел от этого не меняется, а буквально
+    // повторяется: возмущение у неё ровно ноль, подложка остаётся плоской, лицо
+    // со своей настоящей T.nPlate остаётся рельефным. Зато набор слотов сходится
+    // с лицом, и вся латунь (лица бляшек, подложки, ответные бляшки и угловые
+    // оковки — 38 слотов из 56 мешей) едет одной программой вместо двух.
+    brassBack.normalMap = stubFlat();
     // Подложки плоские: выдавленные тем же рельефом, они бы спорили с лицом.
     brassBack.displacementMap = null;
     brassBack.displacementScale = 0;
@@ -1257,6 +1437,29 @@ export function createBook(
     edgeSkin.material.map = null;
     edgeSkin.material.roughness = 1;
     edgeSkin.material.needsUpdate = true;
+    // ЗДЕСЬ НАПРАШИВАЕТСЯ, НО НЕ ДЕЛАЕТСЯ белая заглушка в map плюс alphaTest 0.5.
+    //
+    // Идея была такая: depthOfStrap — ОДИН объект на весь меш ремня, а меш собран
+    // из массива материалов; WebGLShadowMap.getDepthMaterial переписывает в него
+    // map и alphaTest от материала КАЖДОЙ группы (строки 480–482), поэтому группы
+    // 0–3 (срез, map = null) и 4–5 (лицо, map = T.strap, alphaTest 0.5) дают
+    // разные ключи. Выровнять их — и depth-программа перестанет перещёлкиваться
+    // посреди меша.
+    //
+    // Проверка по исходнику r185 показала, что перещёлкивания НЕТ и экономить
+    // нечего. WebGLRenderer.setProgram пересобирает программу только когда
+    // material.version разошлась с materialProperties.__version (строка 2390), а
+    // getDepthMaterial присваивает map и alphaTest БЕЗ бампа версии. Значит
+    // depthOfStrap компилируется ровно один раз — по состоянию той группы, что
+    // отрисовалась первой (а это группа 0, срез: без карты и без alphaTest), и
+    // дальше все шесть групп идут этой программой.
+    //
+    // Отсюда цена правки: заглушка с alphaTest 0.5 в срезе заставила бы
+    // скомпилировать программу С alphaTest, и тогда ЛИЦО ремня начало бы резать
+    // свою тень по альфе T.strap. Сегодня оно кладёт тень прямоугольником. Это
+    // изменение кадра (силуэт тени ремня), а не оптимизация, — и, возможно,
+    // исправление настоящего бага, но его надо смотреть глазами и мерить отдельно.
+    // Программ оно при этом не экономит ни одной: их и так одна.
     const strap = new Mesh(sgeo, [
       edgeSkin.material,
       edgeSkin.material,
@@ -1293,7 +1496,11 @@ export function createBook(
   catchBrass.alphaToCoverage = true;
   const catchBrassDark = catchBrass.clone();
   catchBrassDark.color = new Color(0x6f5f38);
-  catchBrassDark.normalMap = null;
+  // Плоская заглушка вместо null — по той же причине, что у brassBack: рельефа
+  // она не добавляет (возмущение ноль), но не выбивает материал в отдельную
+  // программу. metalness здесь ОСТАЁТСЯ 0.65, а не 0.8 как у brassBack, — это
+  // расхождение сохраняем как есть: оно живёт в юниформе и на программу не влияет.
+  catchBrassDark.normalMap = stubFlat();
   catchBrassDark.displacementMap = null;
   catchBrassDark.displacementScale = 0;
   // БЕЗ узкой планки и крюка поверх: бляшка + планка + клин + хвост сливались
@@ -1391,8 +1598,13 @@ export function createBook(
     return t;
   })();
   if (cornerTex) {
+    // Карты нормалей у оковок не было никогда — плоская заглушка её и не
+    // добавляет (возмущение ноль), она только достраивает набор слотов до
+    // латунного: {map, normalMap} при alphaTest > 0 и alphaToCoverage. 24 слота
+    // оковок перестают быть отдельной программой и едут вместе с бляшками.
     const cornerBrass = new MeshStandardMaterial({
       map: cornerTex,
+      normalMap: stubFlat(),
       metalness: 0.78,
       roughness: 0.38,
       alphaTest: 0.5,
@@ -1914,6 +2126,13 @@ export function createBook(
     },
     resize,
     dispose(): void {
+      // ЗАГЛУШКИ (stubWhite/stubFlat) ЗДЕСЬ НЕ ОСВОБОЖДАЮТСЯ И НЕ ДОЛЖНЫ.
+      // Они живут в области модуля и переживают любую отдельную книгу: плитка
+      // закрывается, модалка остаётся. Положить их в T или пройтись по ним этим
+      // же циклом — значит отдать второй собранной книге уже освобождённые
+      // текстуры, а на экране это чёрные грани там, где стоял белый пиксель.
+      // Материалы ниже освобождать можно спокойно: Material.dispose() текстуры не
+      // трогает, он только рассылает событие.
       cancelAnimationFrame(raf);
       glowTex.dispose();
       for (const key of Object.keys(T) as (keyof typeof T)[]) T[key].dispose();
