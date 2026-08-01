@@ -44,9 +44,12 @@ export function createBookHost(
 ): BookHost {
   const state = { open: 0, page: 3, busy: false };
   let ready = false;
+  // Запасное значение — ОКНО, а не двойка: по стартовой ширине сцена решает
+  // плотность сеток (lite < 720) раз и навсегда. Холст, не разложенный к
+  // моменту замера, отдавал бы ноль — и десктоп собирал бы половинные сетки.
   const view = (): { w: number; h: number; dpr: number } => ({
-    w: Math.max(2, canvas.clientWidth || canvas.parentElement?.clientWidth || 2),
-    h: Math.max(2, canvas.clientHeight || canvas.parentElement?.clientHeight || 2),
+    w: Math.max(2, canvas.clientWidth || canvas.parentElement?.clientWidth || window.innerWidth),
+    h: Math.max(2, canvas.clientHeight || canvas.parentElement?.clientHeight || window.innerHeight),
     dpr: window.devicePixelRatio || 1,
   });
 
@@ -106,6 +109,26 @@ export function createBookHost(
     [off],
   );
 
+  // РАЗМЕР — ПО НАБЛЮДАТЕЛЮ, а не по избранным моментам.
+  //
+  // Раньше размеры снимались руками: при создании, при открытии модалки, по
+  // window.resize. Реальный телефон это разбил: канвас переезжает между
+  // плиткой и модалкой, вьюпорт встроенного браузера дышит панелями, и замер
+  // «в момент открытия» ловил СТАРУЮ раскладку. Сцена запоминала широкий кадр
+  // на портретном холсте — и вписывание отталкивало камеру так, что разворот
+  // становился крошечным (скриншот пользователя из телеграмовского вебвью).
+  // Наблюдатель отдаёт фактический размер при КАЖДОМ изменении и переживает
+  // переезд холста между родителями. Вырожденные размеры (холст в момент
+  // переезда) отбрасываются — стреляют нулём и портили бы кадр.
+  const ro = typeof ResizeObserver !== "undefined"
+    ? new ResizeObserver((entries) => {
+        const r = entries[entries.length - 1]?.contentRect;
+        if (!r || r.width < 10 || r.height < 10) return;
+        send({ type: "resize", w: Math.round(r.width), h: Math.round(r.height), dpr: window.devicePixelRatio || 1 });
+      })
+    : null;
+  ro?.observe(canvas);
+
   // ЗАСТАВКА УШЛА, А СБОРКА ЕЩЁ ИДЁТ — воркер обязан уступить дорогу.
   //
   // Нормальный путь: заставка ждёт сигнала готовности, и темп прогрева
@@ -155,6 +178,7 @@ export function createBookHost(
     // Сцена в воркере компилируется в init-конвейере; отдельная команда не нужна.
     compile: () => whenReady,
     dispose: () => {
+      ro?.disconnect();
       send({ type: "dispose" });
       // Страховка: если воркер завис и не закрыл себя сам, добиваем снаружи.
       setTimeout(() => worker.terminate(), 1000);

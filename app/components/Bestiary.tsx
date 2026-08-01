@@ -314,6 +314,9 @@ export function Bestiary() {
     slot.appendChild(cv);
     sc.setFraming("spread");
     sc.resize();
+    // iOS доводит раскладку ПОСЛЕ вставки: немедленный замер там ловит старую
+    // геометрию. Кадром позже наблюдатель уже видит настоящую — добираем.
+    requestAnimationFrame(() => sc.resize());
     // Раскрываем НЕ сразу: книга ждёт закрытой, её можно покрутить. Открывает
     // следующий клик — иначе рассмотреть том не успеваешь.
     sc.target(phase === "open" ? 1 : 0, pageRef.current);
@@ -328,6 +331,7 @@ export function Bestiary() {
       sc.resetView();
       sc.target(0, pageRef.current);
       sc.resize();
+      requestAnimationFrame(() => sc.resize());
     };
   }, [phase === "shut", tileLive, t.hero.bestiarySpread]);
 

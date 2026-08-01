@@ -133,7 +133,9 @@ function apply(msg: HostToWorker): void {
       scene.setFraming(msg.mode);
       break;
     case "resize":
-      scene.resize(msg.w, msg.h, msg.dpr);
+      // Ноль и огрызки приходят в момент переезда холста между родителями —
+      // принять такой размер значит собрать кадр по мусору.
+      if (msg.w >= 10 && msg.h >= 10) scene.resize(msg.w, msg.h, msg.dpr);
       break;
     case "dispose":
       scene.dispose();
