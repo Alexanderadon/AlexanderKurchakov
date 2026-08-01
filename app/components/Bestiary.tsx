@@ -150,6 +150,11 @@ export function Bestiary() {
     // что рисует заставку и двигает курсор, мешать больше нечем. Сеть и декод
     // шестнадцати текстур воркер тоже берёт на себя.
     const workerPath = async (): Promise<boolean> => {
+      // ?book-main — принудительный запасной путь. Это не отладочная игрушка:
+      // запасной путь исполняется у всех, у кого нет OffscreenCanvas (старые
+      // Safari, часть вебвью), и без рычага его нельзя было бы ни прогнать в
+      // тестах, ни сверить картинку на обычном Chromium.
+      if (new URLSearchParams(location.search).has("book-main")) return false;
       if (!workerSupported()) return false;
       const cv = bornCanvas();
       if (!cv) return false;
