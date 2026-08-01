@@ -68,7 +68,23 @@ nav a:hover{color:var(--tx);background:rgba(255,255,255,.06)}
 .langs button{padding:6px 9px;border-radius:8px;font-family:var(--mono);font-size:11.5px;color:var(--mut);letter-spacing:.06em}
 .langs button[aria-pressed="true"]{color:var(--txd);background:var(--fire);font-weight:600}
 .langs button:not([aria-pressed="true"]):hover{color:var(--tx)}
-@media(max-width:760px){nav a:not(.keep){display:none}.hname{font-size:12px}}
+@media(max-width:760px){
+  nav a:not(.keep){display:none}
+  /* Шапка обязана ВЛЕЗАТЬ. Флекс-ряд с печатью, именем, переключателями рук и
+     языков на 390px не ужимался (у флекс-детей min-width:auto — текст не даёт
+     сжаться) и раздувал раскладку до ~453px. Страница получала горизонтальную
+     прокрутку, а МОДАЛКА КНИГИ, центрируясь в полной ширине раскладки,
+     оказывалась «не посередине» с отрезанным правым краем — пользователь ловил
+     это на телефоне, а стенд с широким вьюпортом не видел в упор. */
+  .hwrap{gap:8px;padding:11px 12px}
+  .hname{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .langs{margin-left:0;padding-left:8px;gap:0}
+  .langs button{padding:5px 6px;font-size:10.5px}
+}
+/* Страховка: ни один будущий распор не должен дарить странице горизонтальную
+   прокрутку и смещать фиксированные слои. clip, а не hidden — не создаёт
+   контейнер прокрутки и не ломает position:sticky шапки. */
+html,body{overflow-x:clip}
 
 /* ============ layout ============ */
 main{max-width:1440px;margin:0 auto;padding:clamp(18px,2.6vw,40px) clamp(14px,3vw,48px) 0}
