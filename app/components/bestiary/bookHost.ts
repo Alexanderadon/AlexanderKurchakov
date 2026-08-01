@@ -33,6 +33,8 @@ export function workerSupported(): boolean {
 export interface BookHost extends BookScene {
   /** Разрешается готовностью сцены; отказ — сигнал перейти на запасной путь. */
   readonly whenReady: Promise<void>;
+  /** Беда ПОСЛЕ готовности (сброс драйвера): сцена мертва, надо перестраиваться. */
+  onLost?: () => void;
 }
 
 export function createBookHost(
@@ -41,6 +43,7 @@ export function createBookHost(
   opts: { closeUp: boolean },
 ): BookHost {
   const state = { open: 0, page: 3, busy: false };
+  let ready = false;
   const view = (): { w: number; h: number; dpr: number } => ({
     w: Math.max(2, canvas.clientWidth || canvas.parentElement?.clientWidth || 2),
     h: Math.max(2, canvas.clientHeight || canvas.parentElement?.clientHeight || 2),
@@ -80,10 +83,15 @@ export function createBookHost(
       // сквозные тесты и стенд смотрят на него и не знают про воркер.
       canvas.dataset[m.key] = m.value;
     } else if (m.type === "ready") {
+      ready = true;
       readyRes();
     } else if (m.type === "error") {
       canvas.dataset.bookError = m.message;
-      readyRej(new Error(m.message));
+      // До готовности — отказ обещания (Bestiary уйдёт на запасной путь).
+      // После — отдельный канал: обещание уже съедено, но сцена мертва, и
+      // молчание оставило бы пользователя с полосатым мусором вместо книги.
+      if (ready) api.onLost?.();
+      else readyRej(new Error(m.message));
     }
   };
   worker.onerror = (e): void => {
@@ -127,7 +135,7 @@ export function createBookHost(
   // и сыпал бы в консоль, хотя сам отказ здесь штатный (уход на запасной путь).
   whenReady.then(() => mo.disconnect(), () => mo.disconnect());
 
-  return {
+  const api: BookHost = {
     whenReady,
     get state() {
       return state;
@@ -152,4 +160,5 @@ export function createBookHost(
       setTimeout(() => worker.terminate(), 1000);
     },
   };
+  return api;
 }

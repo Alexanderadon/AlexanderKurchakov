@@ -170,6 +170,19 @@ export function Bestiary() {
         return false;
       }
       if (dead) return true;
+      // Сброс драйвера ПОСЛЕ готовности (полосатый мусор вместо тома на
+      // слабых картах): молча оставить его нельзя. Сносим мёртвый воркер и
+      // перестраиваемся на главном потоке — сайт к этому моменту показан, а
+      // прогрев запасного пути дышит паузами между шагами.
+      host.onLost = () => {
+        if (dead || sceneRef.current !== host) return;
+        host.dispose();
+        sceneRef.current = null;
+        setTileLive(false);
+        canvasRef.current?.remove();
+        canvasRef.current = null;
+        void mainThreadPath();
+      };
       setTileLive(true);
       if (import.meta.env.DEV) {
         (window as unknown as { __book?: BookScene | null }).__book = host;

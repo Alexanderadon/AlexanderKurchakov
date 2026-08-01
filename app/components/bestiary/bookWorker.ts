@@ -33,6 +33,16 @@ let building = false;
 
 async function init(msg: Extract<HostToWorker, { type: "init" }>): Promise<void> {
   building = true;
+  // ПОТЕРЯ КОНТЕКСТА — не теория. На Windows драйвер, занятый дольше ~2 с,
+  // сбрасывается системой (TDR), и все GL-контексты умирают; плейсхолдер на
+  // странице в этот момент показывает полосатый мусор видеопамяти — пользователь
+  // прислал его скриншот. На слабых картах наши линковки как раз способны
+  // упереться в этот предел. Ловим и докладываем хозяину: у него есть запасной
+  // путь и живой пользователь, у нас тут — только мёртвый контекст.
+  (msg.canvas as unknown as HTMLCanvasElement).addEventListener?.("webglcontextlost", (e) => {
+    (e as Event).preventDefault();
+    post({ type: "error", message: "контекст потерян (сброс драйвера)" });
+  });
   try {
     // Параллельно: код сцены (вместе с three) и все текстуры.
     const [mod, bitmaps] = await Promise.all([
