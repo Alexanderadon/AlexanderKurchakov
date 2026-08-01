@@ -733,15 +733,6 @@ html[data-preload] .preboot-pulse{opacity:1}
 .preload{position:fixed;inset:0;z-index:9999;cursor:none;opacity:1;
   transition:opacity .6s var(--ez);color:var(--tx);-webkit-tap-highlight-color:transparent}
 .preload[data-fade]{opacity:0;pointer-events:none}
-/* Полоса живости у верхней кромки. Только transform — иначе анимация вернётся
-   на главный поток вместе с вёрсткой и замрёт вместе с ним. Ни ширины, ни
-   left/top в кадрах, ни фона под холстом. */
-.pl-live{position:absolute;top:0;left:0;right:0;height:2px;overflow:hidden;
-  pointer-events:none;background:rgba(168,147,95,.10);z-index:2}
-.pl-live b{position:absolute;top:0;bottom:0;left:0;width:28%;display:block;
-  will-change:transform;background:linear-gradient(90deg,transparent,var(--fire2),transparent);
-  animation:pl-sweep 1.5s linear infinite}
-@keyframes pl-sweep{from{transform:translateX(-110%)}to{transform:translateX(460%)}}
 .preload-gl{position:fixed;inset:0;width:100%;height:100%;display:block}
 .preload-eye{position:fixed;pointer-events:none;will-change:transform}
 
