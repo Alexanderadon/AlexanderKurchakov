@@ -23,7 +23,7 @@ const FADE_STEPS = 5;
 const CYCLES_PER_LOOP = 2;
 
 const src = (loop: string, i: number): string =>
-  `/img/chains/${loop}/f${String(i + 1).padStart(2, "0")}.webp?v=4`;
+  `/img/chains/${loop}/f${String(i + 1).padStart(2, "0")}.webp?v=5`;
 
 export function ChainedHands() {
   const wrapRef = useRef<HTMLDivElement>(null);

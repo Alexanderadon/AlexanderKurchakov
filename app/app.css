@@ -100,7 +100,7 @@ html,body{overflow-x:clip}
   transform:translate(-50%,75%);
   transition:opacity 1.1s var(--ez),transform 1.4s var(--ez);
   filter:drop-shadow(0 8px 26px rgba(0,0,0,.55))}
-.chains-stage[data-in] .chains-cv{opacity:.95;transform:translate(-50%,20%)}
+.chains-stage[data-in] .chains-cv{opacity:1;transform:translate(-50%,20%)}
 @media(prefers-reduced-motion:reduce){.chains-cv{transition:none}}
 
 /* ============ layout ============ */
