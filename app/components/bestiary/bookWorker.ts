@@ -25,6 +25,8 @@ const post = (m: WorkerToHost): void => {
 };
 
 let scene: BookScene | null = null;
+/** Темп прогрева. Живой объект: команда pace меняет его прямо во время сборки. */
+const pace = { ms: 45 };
 /** Команды, пришедшие, пока сцена ещё собиралась: проигрываются по готовности. */
 const backlog: HostToWorker[] = [];
 let building = false;
@@ -61,6 +63,7 @@ async function init(msg: Extract<HostToWorker, { type: "init" }>): Promise<void>
       closeUp: msg.closeUp,
       dormant: true,
       view: msg.view,
+      pace,
       report: (key, value) => post({ type: "flag", key, value }),
     });
     if (!scene) {
@@ -136,6 +139,12 @@ self.onmessage = (e: MessageEvent<HostToWorker>): void => {
   const msg = e.data;
   if (msg.type === "init") {
     void init(msg);
+    return;
+  }
+  // Темп обрабатывается ВНЕ очереди и до готовности сцены: команда «уступи
+  // дорогу» нужна именно во время сборки — после неё ей уже нечего менять.
+  if (msg.type === "pace") {
+    pace.ms = msg.ms;
     return;
   }
   // Сцена ещё собирается — команды не теряются, а ждут её.

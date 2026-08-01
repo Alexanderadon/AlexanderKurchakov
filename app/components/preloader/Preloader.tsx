@@ -154,7 +154,12 @@ export function Preloader() {
       bookWait = 0;
       if (!disposed) ready.mark("book");
     };
-    bookWait = window.setTimeout(bookRace, Math.round(HARD_BAIL_MS * 0.8));
+    // Отдельного порога у ожидания книги больше НЕТ: он был короче жёсткого
+    // предела, и на слабых машинах срабатывал ПЕРВЫМ — заставка уходила, а
+    // компиляция продолжалась под видимым сайтом (снято пользователем на
+    // видео). Ждём книгу до самого предела: если сборка не успела и предел
+    // сработал, хозяин книги сам переведёт прогрев на щадящий темп.
+    bookWait = window.setTimeout(bookRace, HARD_BAIL_MS);
     void whenBookReady().then(bookRace);
 
     // ── факел

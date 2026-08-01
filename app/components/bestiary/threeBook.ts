@@ -625,12 +625,20 @@ export function createBook(
      * стенд. У OffscreenCanvas dataset нет: воркер подставляет сюда postMessage.
      */
     report?: (key: string, value: string) => void;
+    /**
+     * Темп прогрева, ЖИВОЙ объект: пауза после каждой новой программы. Хозяин
+     * меняет ms на лету — если заставка ушла раньше готовности (слабая машина,
+     * страховочный порог), оставшаяся компиляция обязана уступить дорогу
+     * видимому сайту, а не душить общий GPU-процесс на прежней скорости.
+     */
+    pace?: { ms: number };
   },
 ): BookScene | null {
   // Не константы: одна и та же сцена служит и плиткой, и разворотом в модалке —
   // рамка кадра и подиум переключаются на ходу через setFraming.
   let closeUp = !!opts?.closeUp;
   const dormant = !!opts?.dormant;
+  const pace = opts?.pace ?? { ms: 45 };
   // Размер живёт в переменных, а не читается с холста: у OffscreenCanvas нет
   // clientWidth, и хозяин присылает размеры сообщениями. На главном потоке
   // стартовые значения берутся как раньше, с холста и окна.
@@ -2161,7 +2169,7 @@ export function createBook(
           const now = renderer.info.programs?.length ?? 0;
           if (now > known) {
             known = now;
-            await new Promise<void>((res) => setTimeout(res, 45));
+            await new Promise<void>((res) => setTimeout(res, pace.ms));
           } else {
             await new Promise<void>((res) => setTimeout(res, 0));
           }

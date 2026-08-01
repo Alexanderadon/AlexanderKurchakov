@@ -26,6 +26,8 @@ export type HostToWorker =
   | { type: "setActive"; on: boolean }
   | { type: "setFraming"; mode: "tile" | "spread" }
   | { type: "resize"; w: number; h: number; dpr: number }
+  /** Заставка ушла, а сборка ещё идёт: замедлить темп прогрева. */
+  | { type: "pace"; ms: number }
   | { type: "dispose" };
 
 /** Ответы сцены хозяину. */
