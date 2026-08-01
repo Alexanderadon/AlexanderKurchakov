@@ -276,7 +276,20 @@ export function Preloader() {
       removeEventListener("touchmove", onTouch);
       removeEventListener("resize", relayout);
       document.removeEventListener("visibilitychange", onHidden);
-      scene.dispose();
+      // Разбор — ПОСЛЕ готовности книги, а не в момент ухода оверлея. GPU-процесс
+      // один на страницу: пока воркер линкует шейдеры тома, каждое удаление
+      // текстуры отсюда встаёт в ту же очередь драйвера (замер: 506 мс на
+      // разбор, который в тихое время стоит десятки). Книга готова — очередь
+      // пуста, разбор проходит незаметно. Плюс страховка таймером: если сигнала
+      // книги нет (её на странице не оказалось), не держим память вечно.
+      let torn = false;
+      const tearDown = (): void => {
+        if (torn) return;
+        torn = true;
+        scene.dispose();
+      };
+      void whenBookReady().then(() => window.setTimeout(tearDown, 1200));
+      window.setTimeout(tearDown, 12000);
     };
   }, [live]);
 

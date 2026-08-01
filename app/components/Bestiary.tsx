@@ -13,29 +13,12 @@ import { prefersReducedMotion } from "~/lib/media";
 import { LEAVES, OPEN_MS, SPREAD_RATIO } from "~/lib/bestiary";
 import { bookCreak, bookRustle } from "~/lib/bookSounds";
 import { markBookReady } from "~/lib/bookReady";
-import type { BookScene } from "./bestiary/threeBook";
+import { BOOK_TEXTURE_KEYS, BOOK_TEXTURE_SRC } from "./bestiary/assets";
+import { createBookHost, workerSupported } from "./bestiary/bookHost";
+import type { BookScene, BookTextures } from "./bestiary/threeBook";
 
 /** peek — книга в модалке, но ещё закрыта: её можно рассмотреть и покрутить. */
 type Phase = "shut" | "peek" | "opening" | "open" | "closing";
-
-const ASSETS = [
-  "/img/bestiary/cover-front.webp",
-  "/img/bestiary/endpaper.webp",
-  "/img/bestiary/page-left.webp",
-  "/img/bestiary/page-right.webp",
-  "/img/bestiary/spine.webp",
-  "/img/bestiary/strap.webp",
-  "/img/bestiary/plate.webp",
-  "/img/bestiary/normal-cover.webp",
-  "/img/bestiary/normal-page.webp",
-  "/img/bestiary/normal-plate.webp",
-  "/img/bestiary/foredge.webp",
-  "/img/bestiary/foredge-normal.webp",
-  "/img/bestiary/headband.webp",
-  "/img/bestiary/strap-normal.webp",
-  "/img/bestiary/catch.webp",
-  "/img/bestiary/catch-normal.webp",
-] as const;
 
 function decode(src: string): Promise<HTMLImageElement> {
   return new Promise((ok, no) => {
@@ -47,27 +30,33 @@ function decode(src: string): Promise<HTMLImageElement> {
 }
 
 type Warm = {
-  images: HTMLImageElement[];
+  tex: BookTextures;
   make: typeof import("./bestiary/threeBook").createBook;
   relief: typeof import("./bestiary/threeBook").reliefSteps;
 };
 
 /**
- * Прогрев. Чанк three (131 КБ) и семь текстур тянутся ОДИН раз на модуль и
- * заранее — как только плитка подошла к экрану. Без этого по клику начиналась
- * загрузка с нуля, и пользователь секунд пять смотрел в пустой холст: открытие
- * книги обязано быть щелчком, другого варианта нет.
+ * Прогрев ЗАПАСНОГО пути (главный поток, для машин без OffscreenCanvas).
+ *
+ * В режиме воркера эта функция НЕ ЗОВЁТСЯ, и это условие всего переезда: здесь
+ * живёт единственный import сцены на главном потоке, и он тянет за собой чанк
+ * three — тот самый секундный разбор, ради которого сцена и уехала. Текстуры в
+ * режиме воркера тоже грузит сам воркер.
  */
 let warming: Promise<Warm> | null = null;
-// Прогрев — только СЕТЬ и декод картинок: это не дёргает главный поток и
-// спокойно идёт под прелоадером. Вся тяжёлая работа CPU (карты рельефа,
-// сборка сцен, компиляция шейдеров) — отдельным конвейером после него.
 function warm(): Promise<Warm> {
   if (!warming) {
     warming = Promise.all([
-      Promise.all(ASSETS.map(decode)),
+      Promise.all(BOOK_TEXTURE_KEYS.map(async (k) => [k, await decode(BOOK_TEXTURE_SRC[k])] as const)),
       import("./bestiary/threeBook"),
-    ]).then(([images, mod]) => ({ images, make: mod.createBook, relief: mod.reliefSteps }));
+    ]).then(([pairs, mod]) => ({
+      // По ИМЕНАМ, а не по позициям: прежняя деструктуризация из шестнадцати
+      // переменных подряд перепутала бы карты от сдвига на одну строку, не
+      // потревожив ни типы, ни тесты.
+      tex: Object.fromEntries(pairs) as unknown as BookTextures,
+      make: mod.createBook,
+      relief: mod.reliefSteps,
+    }));
   }
   return warming;
 }
@@ -116,47 +105,83 @@ export function Bestiary() {
     // из устройства шагов: derive-карты по одной в idle-окна, сцены рождаются
     // спящими, шейдеры компилируются асинхронно (compileAsync) — синхронных
     // фризов нет вовсе, пусть прелоадер работает дольше.
+    // Холст создаётся кодом (не из JSX — React рассылает события по дереву
+    // файберов, перенесённый JSX-узел уносил pointerup мимо модалки) и один
+    // ездит между плиткой и модалкой.
+    const bornCanvas = (): HTMLCanvasElement | null => {
+      if (!tileSlotRef.current) return null;
+      const cv = document.createElement("canvas");
+      cv.className = "btile";
+      cv.setAttribute("aria-hidden", "true");
+      tileSlotRef.current.appendChild(cv);
+      canvasRef.current = cv;
+      return cv;
+    };
+    // ЗАПАСНОЙ путь: сцена на главном потоке, как жила всегда. Сюда попадают
+    // машины без OffscreenCanvas (Safari до 17-й) и падение воркера на взлёте.
+    const mainThreadPath = async (): Promise<void> => {
+      const { tex, make, relief } = await warm();
+      for (const stepFn of relief(tex)) {
+        await breath();
+        if (dead) return;
+        stepFn();
+      }
+      await breath();
+      if (dead || sceneRef.current) return;
+      const cv = bornCanvas();
+      if (!cv) return;
+      // ОДНА сцена на обе роли: канвас ездит между плиткой и модалкой, рамка
+      // кадра переключается setFraming.
+      const sc = make(cv, tex, { closeUp: true, dormant: true });
+      sceneRef.current = sc;
+      if (sc) {
+        sc.target(0, pageRef.current);
+        await sc.compile();
+        if (dead) return;
+        sc.setActive(true);
+        setTileLive(true);
+        if (import.meta.env.DEV) {
+          (window as unknown as { __book?: BookScene | null }).__book = sc;
+        }
+      }
+    };
+    // ОСНОВНОЙ путь: сцена в ВОРКЕРЕ. Разбор three (~1 с), компиляция программ
+    // (~2 с ожиданий драйвера) и карты рельефа уходят со второго потока — тому,
+    // что рисует заставку и двигает курсор, мешать больше нечем. Сеть и декод
+    // шестнадцати текстур воркер тоже берёт на себя.
+    const workerPath = async (): Promise<boolean> => {
+      if (!workerSupported()) return false;
+      const cv = bornCanvas();
+      if (!cv) return false;
+      const host = createBookHost(cv, BOOK_TEXTURE_SRC, { closeUp: true });
+      sceneRef.current = host;
+      host.target(0, pageRef.current);
+      try {
+        await host.whenReady;
+      } catch {
+        // Воркер не взлетел. Холст уже необратимо передан ему — рождаем новый
+        // и уходим на главный поток, как жили до переезда.
+        if (!dead) {
+          host.dispose();
+          sceneRef.current = null;
+          canvasRef.current?.remove();
+          canvasRef.current = null;
+        }
+        return false;
+      }
+      if (dead) return true;
+      setTileLive(true);
+      if (import.meta.env.DEV) {
+        (window as unknown as { __book?: BookScene | null }).__book = host;
+      }
+      return true;
+    };
     void (async () => {
       try {
-        const { images, make, relief } = await warm();
-        const [coverFront, endpaper, pageLeft, pageRight, spine, strap, plate, nCover, nPage, nPlate,
-          foredge, nForedge, headband, nStrap, catchPlate, nCatch] = images;
-        const tex = { coverFront, endpaper, pageLeft, pageRight, spine, strap, plate,
-          nCover, nPage, nPlate, foredge, nForedge, headband, nStrap, catchPlate, nCatch };
-        for (const stepFn of relief(tex)) {
-          await breath();
-          if (dead) return;
-          stepFn();
-        }
-        await breath();
-        if (dead || !tileSlotRef.current || sceneRef.current) return;
-        const cv = document.createElement("canvas");
-        cv.className = "btile";
-        cv.setAttribute("aria-hidden", "true");
-        tileSlotRef.current.appendChild(cv);
-        canvasRef.current = cv;
-        // ОДНА сцена на обе роли. Раньше их было две — отдельная для плитки и
-        // отдельная для модалки, — и это стоило ровно вдвое: программы шейдеров
-        // живут в WebGL-контексте и между контекстами не делятся никак. Замер
-        // прод-сборки: плитка 39 программ и 3827 мс ожидания драйвера в
-        // конструкторе WebGLUniforms, модалка ещё 21 программа про запас.
-        // Теперь канвас один и переезжает из плитки в модалку и обратно, а
-        // рамка кадра переключается setFraming.
-        const sc = make(cv, tex, { closeUp: true, dormant: true });
-        sceneRef.current = sc;
-        if (sc) {
-          sc.target(0, pageRef.current);
-          await sc.compile();
-          if (dead) return;
-          sc.setActive(true);
-          setTileLive(true);
-          if (import.meta.env.DEV) {
-            (window as unknown as { __book?: BookScene | null }).__book = sc;
-          }
-        }
+        if (!(await workerPath()) && !dead) await mainThreadPath();
       } finally {
-        // Отпускаем прелоадер и при успехе, и при падении сети: без книги ему
-        // тем более незачем стоять.
+        // Отпускаем прелоадер и при успехе, и при падении: без книги ему тем
+        // более незачем стоять.
         markBookReady();
       }
     })();

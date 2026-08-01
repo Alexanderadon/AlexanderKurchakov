@@ -22,6 +22,7 @@
 // возражение против библиотеки, и оно снято технически.
 
 import { deriveMaps } from "./derive";
+import { ctx2d, scratch } from "./scratch";
 import { pageMaterial, DIP_K } from "./pageDip";
 import {
   AgXToneMapping,
@@ -123,7 +124,8 @@ export interface BookScene {
    * прогрев без фриза главного потока — прелоадер и его анимации не дёргаются.
    */
   compile(): Promise<void>;
-  resize(): void;
+  /** Без аргументов — размеры с холста (главный поток); с ними — из сообщения хозяина (воркер). */
+  resize(w?: number, h?: number, dpr?: number): void;
   dispose(): void;
 }
 
@@ -598,7 +600,7 @@ export function reliefSteps(
 }
 
 export function createBook(
-  canvas: HTMLCanvasElement,
+  canvas: HTMLCanvasElement | OffscreenCanvas,
   tex: BookTextures,
   opts?: {
     /**
@@ -611,21 +613,45 @@ export function createBook(
      *  Нужен предварительной сборке: первый же кадр компилировал бы шейдеры
      *  синхронно, а для этого есть асинхронный compile(). */
     dormant?: boolean;
+    /**
+     * Вьюпорт при сборке В ВОРКЕРЕ: там нет ни window.innerWidth для выбора
+     * плотности сеток, ни canvas.clientWidth для первого resize — хозяин
+     * передаёт размеры сам и дальше шлёт их при каждом изменении.
+     */
+    view?: { w: number; h: number; dpr: number };
+    /**
+     * Куда сообщать вехи (ready, bookState, bookError). На главном потоке по
+     * умолчанию пишутся в dataset холста — на них смотрят сквозные тесты и
+     * стенд. У OffscreenCanvas dataset нет: воркер подставляет сюда postMessage.
+     */
+    report?: (key: string, value: string) => void;
   },
 ): BookScene | null {
   // Не константы: одна и та же сцена служит и плиткой, и разворотом в модалке —
   // рамка кадра и подиум переключаются на ходу через setFraming.
   let closeUp = !!opts?.closeUp;
   const dormant = !!opts?.dormant;
+  // Размер живёт в переменных, а не читается с холста: у OffscreenCanvas нет
+  // clientWidth, и хозяин присылает размеры сообщениями. На главном потоке
+  // стартовые значения берутся как раньше, с холста и окна.
+  let viewW = opts?.view?.w ?? (typeof window !== "undefined" ? (canvas as HTMLCanvasElement).clientWidth || window.innerWidth : 2);
+  let viewH = opts?.view?.h ?? (typeof window !== "undefined" ? (canvas as HTMLCanvasElement).clientHeight || window.innerHeight : 2);
+  let viewDpr = opts?.view?.dpr ?? (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
+  const report =
+    opts?.report ??
+    ((key: string, value: string): void => {
+      const d = (canvas as HTMLCanvasElement).dataset;
+      if (d) d[key] = value;
+    });
   // Узкому экрану — половинные сетки: displacement-геометрии тяжёлые, а на
   // телефоне их разрешение всё равно не читается.
-  const lite = typeof window !== "undefined" && window.innerWidth < 720;
+  const lite = viewW < 720;
   const seg = (n: number): number => (lite ? Math.ceil(n / 2) : n);
   let renderer: WebGLRenderer;
   try {
     renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true });
   } catch {
-    canvas.dataset.bookError = "webgl недоступен";
+    report("bookError", "webgl недоступен");
     return null;
   }
   // ГЛАВНАЯ причина фризов при загрузке — вот эта строка, а не количество полигонов.
@@ -683,10 +709,8 @@ export function createBook(
   // тёмный низ. Ноль байт трафика, а материалы получают то, чего два источника
   // дать не могут — отражения комнаты. Именно от них металл читается металлом, а
   // кожа перестаёт быть плоской краской.
-  const envCv = document.createElement("canvas");
-  envCv.width = 256;
-  envCv.height = 128;
-  const eg = envCv.getContext("2d");
+  const envCv = scratch(256, 128);
+  const eg = ctx2d(envCv);
   if (eg) {
     const sky = eg.createLinearGradient(0, 0, 0, 128);
     sky.addColorStop(0, "#2b2a26");
@@ -742,10 +766,8 @@ export function createBook(
   // ── Подиум. Книга в пустоте не имеет веса: тёплое пятно света позади и
   // НАСТОЯЩАЯ тень тома на нём дают опору. Пятно — градиент кодом, тень ловит
   // отдельная плоскость с ShadowMaterial чуть ближе пятна.
-  const glowCv = document.createElement("canvas");
-  glowCv.width = 256;
-  glowCv.height = 256;
-  const gg = glowCv.getContext("2d");
+  const glowCv = scratch(256, 256);
+  const gg = ctx2d(glowCv);
   if (gg) {
     const rad = gg.createRadialGradient(128, 116, 10, 128, 128, 126);
     rad.addColorStop(0, "rgba(66,59,47,0.5)");
@@ -829,10 +851,8 @@ export function createBook(
   // грани, пятнами, как обношенная о полку кожа. Ровный цвет читался пластиком.
   const leatherTex = (() => {
     const S = 128;
-    const cv = document.createElement("canvas");
-    cv.width = S;
-    cv.height = S;
-    const g = cv.getContext("2d");
+    const cv = scratch(S, S);
+    const g = ctx2d(cv);
     if (!g) return null;
     const img = g.createImageData(S, S);
     for (let y = 0; y < S; y++) {
@@ -956,10 +976,8 @@ export function createBook(
   // выступ читается ямой) плюс отрицательный displacement: штамп давит в кожу.
   const recessNormal = (t: Texture): Texture => {
     const img = t.image as HTMLCanvasElement;
-    const cv = document.createElement("canvas");
-    cv.width = img.width;
-    cv.height = img.height;
-    const g2 = cv.getContext("2d");
+    const cv = scratch(img.width, img.height);
+    const g2 = ctx2d(cv);
     if (!g2) return t;
     g2.drawImage(img, 0, 0);
     const d = g2.getImageData(0, 0, cv.width, cv.height);
@@ -1529,10 +1547,8 @@ export function createBook(
   // у угла и две заклёпки на лапах.
   const cornerTex = (() => {
     const S = 256;
-    const cv = document.createElement("canvas");
-    cv.width = S;
-    cv.height = S;
-    const g = cv.getContext("2d");
+    const cv = scratch(S, S);
+    const g = ctx2d(cv);
     if (!g) return null;
     const shape = (): void => {
       g.beginPath();
@@ -1707,10 +1723,18 @@ export function createBook(
    */
   let narrow = false;
 
-  function resize(): void {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    w = Math.max(2, canvas.clientWidth);
-    h = Math.max(2, canvas.clientHeight);
+  function resize(nw?: number, nh?: number, ndpr?: number): void {
+    // Явные аргументы приходят из воркера (хозяин прислал размеры сообщением);
+    // без них — главный поток, размеры читаются с холста, как всегда.
+    if (nw !== undefined) viewW = nw;
+    else if (typeof window !== "undefined") viewW = (canvas as HTMLCanvasElement).clientWidth || viewW;
+    if (nh !== undefined) viewH = nh;
+    else if (typeof window !== "undefined") viewH = (canvas as HTMLCanvasElement).clientHeight || viewH;
+    if (ndpr !== undefined) viewDpr = ndpr;
+    else if (typeof window !== "undefined") viewDpr = window.devicePixelRatio || viewDpr;
+    const dpr = Math.min(2, viewDpr);
+    w = Math.max(2, viewW);
+    h = Math.max(2, viewH);
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
     narrow = w / h < 1.15;
@@ -1928,7 +1952,7 @@ export function createBook(
     leafBack.visible = leaf.visible;
 
     renderer.render(scene, camera);
-    canvas.dataset.bookState = cur.open.toFixed(3) + ':' + cur.page.toFixed(2);
+    report("bookState", cur.open.toFixed(3) + ":" + cur.page.toFixed(2));
   }
 
   resize();
@@ -2011,7 +2035,7 @@ export function createBook(
   }
   if (!dormant) raf = requestAnimationFrame(step);
   // Метка готовности: по ней и сквозной тест, и замер «клик -> первый кадр».
-  canvas.dataset.ready = "1";
+  report("ready", "1");
   // Дев-шов: стенду нужно мерить фактические высоты мешей, а не пересчитывать
   // формулы на бумаге. Пересчёт уже дважды показывал не то, что рисует шейдер.
   if (import.meta.env.DEV) {

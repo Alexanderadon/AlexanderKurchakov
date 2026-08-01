@@ -15,6 +15,7 @@
 // шипом, и поверхность выходит колючей.
 
 import { Texture } from "three";
+import { ctx2d, scratch } from "./scratch";
 
 const smoothstep = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -35,13 +36,24 @@ function heightField(
   W: number,
   H: number,
 ): { h: Float32Array; gold: Float32Array } | null {
-  const cv = document.createElement("canvas");
-  cv.width = W;
-  cv.height = H;
-  const g = cv.getContext("2d");
+  const cv = scratch(W, H);
+  const g = ctx2d(cv);
   if (!g) return null;
   g.imageSmoothingQuality = "high";
+  // ImageBitmap приходит из воркера УЖЕ перевёрнутым: WebGL игнорирует для него
+  // флаг переворота, и битмапы разворачивают на декоде — иначе обложка вставала
+  // вверх ногами. Но ЗДЕСЬ пиксели читает процессор, ему нужен исходный верх:
+  // карты рельефа строятся в координатах картинки и переворачиваются потом,
+  // при заливке холста в текстуру, как у всех. Без обратного разворота тиснение
+  // считалось из зеркала — призрак «BESTIARIUM» на коже читался задом наперёд.
+  // Главного потока это не касается: там источники — HTMLImageElement.
+  const flipped = typeof ImageBitmap !== "undefined" && src instanceof ImageBitmap;
+  if (flipped) {
+    g.translate(0, H);
+    g.scale(1, -1);
+  }
   g.drawImage(src as CanvasImageSource, 0, 0, W, H);
+  if (flipped) g.setTransform(1, 0, 0, 1, 0, 0);
   const d = g.getImageData(0, 0, W, H).data;
   const out = new Float32Array(W * H);
   const gold = new Float32Array(W * H);
@@ -117,22 +129,14 @@ export function deriveMaps(src: TexImageSource, width = 768, strength = 2.6): De
   // размытия каждая крупинка мерцает на бликах.
   const goldSoft = blur(fields.gold, W, H, 1);
 
-  const hcv = document.createElement("canvas");
-  hcv.width = W;
-  hcv.height = H;
-  const hg = hcv.getContext("2d");
-  const ncv = document.createElement("canvas");
-  ncv.width = W;
-  ncv.height = H;
-  const ng = ncv.getContext("2d");
-  const mcv = document.createElement("canvas");
-  mcv.width = W;
-  mcv.height = H;
-  const mg = mcv.getContext("2d");
-  const rcv = document.createElement("canvas");
-  rcv.width = W;
-  rcv.height = H;
-  const rg = rcv.getContext("2d");
+  const hcv = scratch(W, H);
+  const hg = ctx2d(hcv);
+  const ncv = scratch(W, H);
+  const ng = ctx2d(ncv);
+  const mcv = scratch(W, H);
+  const mg = ctx2d(mcv);
+  const rcv = scratch(W, H);
+  const rg = ctx2d(rcv);
   if (!hg || !ng || !mg || !rg) return null;
 
   const hImg = hg.createImageData(W, H);
