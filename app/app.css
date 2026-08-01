@@ -565,6 +565,14 @@ footer{border-top:1px solid var(--line);margin-top:clamp(40px,5vw,80px)}
 
 /* ============ скрытие системного курсора при активном кастомном ============ */
 .cur-on, .cur-on *{cursor:none!important}
+/* Пока стоит заставка — системная стрелка ОБЯЗАНА жить. Хук курсора вешает
+   cur-on уже при гидратации, то есть ПОД заставкой: его important прятал
+   стрелку, а собственное кольцо курсора лежит на z-index 999 — под оверлеем
+   с его 9999, — и над заставкой не оставалось вообще никакого курсора. Вместе
+   с замираниями главного потока это читалось как «сайт повис намертво, даже
+   мышь не отвечает». Специфичность 0,2,1 — перебивает .cur-on * (0,1,1) при
+   любом порядке правил. */
+.cur-on .preload, .cur-on .preload *{cursor:auto!important}
 
 
 /* ============ ink trail: кисть-след за курсором ============ */
@@ -730,7 +738,15 @@ html[data-preload] .preboot-pulse{opacity:1}
 @keyframes preboot-sweep{from{transform:translate3d(-100%,0,0)}to{transform:translate3d(300%,0,0)}}
 @keyframes preboot-breath{from{transform:scale(.9);opacity:.45}to{transform:scale(1.12);opacity:1}}
 
-.preload{position:fixed;inset:0;z-index:9999;cursor:none;opacity:1;
+/* СИСТЕМНЫЙ курсор на заставке НЕ прячется — это принципиально.
+   Раньше стояло cursor:none: факел, следующий за мышью, играл роль курсора. Но
+   факел двигает главный поток, а тот во время загрузки замирает на ожиданиях
+   драйвера и разборе чанков (замер: до 4-5 с замираний на первом заходе). В эти
+   секунды у пользователя не было НИ ОДНОГО живого пикселя — даже мышь не
+   отвечала, и сайт выглядел повисшим намертво. Системный курсор рисует
+   операционная система, он не замирает никогда: пусть факел догоняет, когда
+   поток свободен, а стрелка живёт всегда. */
+.preload{position:fixed;inset:0;z-index:9999;opacity:1;
   transition:opacity .6s var(--ez);color:var(--tx);-webkit-tap-highlight-color:transparent}
 .preload[data-fade]{opacity:0;pointer-events:none}
 .preload-gl{position:fixed;inset:0;width:100%;height:100%;display:block}
