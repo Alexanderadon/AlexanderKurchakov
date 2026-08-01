@@ -57,7 +57,25 @@ export function Header() {
           onClick={toggleHands}
           title={t.experiment.hands + ": " + (handsOn ? t.experiment.on : t.experiment.off)}
         >
-          <span aria-hidden="true">✋</span>
+          {/* Линейная ладонь вместо эмодзи: эмодзи красится системой и спорил
+              со стилем шапки, а штриховая иконка наследует цвет состояний
+              кнопки (золото включено, приглушённый выключено). */}
+          <svg
+            aria-hidden="true"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M18 11V6a2 2 0 0 0-4 0v5" />
+            <path d="M14 10V4a2 2 0 0 0-4 0v2" />
+            <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+            <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+          </svg>
           <span className="htog-t">{t.experiment.hands}</span>
         </button>
         <div className="langs" role="group" aria-label="Язык">

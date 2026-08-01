@@ -453,7 +453,12 @@ export function Bestiary() {
       if (d.mode === 0 && d.moved > 8) {
         const sc = sceneRef.current;
         const horizontal = Math.abs(e.clientX - d.sx) > Math.abs(e.clientY - d.sy) * 1.2;
-        if (phase === "open" && sc && !sc.state.busy && horizontal) {
+        // ПОКА ЛЕТИТ ЛИСТ — жесты глухие. Раньше горизонтальный драг во время
+        // полёта проваливался в ветку вращения, и камера ехала прямо посреди
+        // листания. Задумано иначе: занятой книгой не крутят.
+        if (phase === "open" && sc && sc.state.busy) {
+          d.mode = 3;
+        } else if (phase === "open" && sc && horizontal) {
           d.mode = 2;
           const r = e.currentTarget.getBoundingClientRect();
           dragTurn.current = {
@@ -466,6 +471,7 @@ export function Bestiary() {
           d.mode = 1;
         }
       }
+      if (d.mode === 3) return; // книга занята листом: ни вращения, ни листания
       if (d.mode === 2) {
         const sc = sceneRef.current;
         if (!sc) return;
@@ -503,10 +509,14 @@ export function Bestiary() {
         if (commit && !prefersReducedMotion()) bookRustle();
         return;
       }
-      if (d.moved > 6) {
+      // Инерцию отпускаем ТОЛЬКО из настоящего вращения. Раньше сюда попадал
+      // и обычный клик: у пальца и торопливой мыши дрожь в 6-8 пикселей, и
+      // каждый тап давал камере пинок инерции.
+      if (d.mode === 1 && d.moved > 6) {
         sceneRef.current?.release(d.vx, d.vy);
         return;
       }
+      if (d.mode === 3) return;
       const sc = sceneRef.current;
       if (!sc) return;
       // Клик по закрытой книге раскрывает её, по раскрытой — листает половиной,

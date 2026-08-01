@@ -163,7 +163,12 @@ export function createBookHost(
     get state() {
       return state;
     },
-    target: (open, page) => send({ type: "target", open, page }),
+    target: (open, page) => {
+      // Занятость — ОПТИМИСТИЧНО, не дожидаясь зеркала: оно едет из воркера с
+      // опозданием в кадр-два, и в эту щель пролезали жесты по занятой книге.
+      if (page !== state.page || Math.abs(open - state.open) > 1e-3) state.busy = true;
+      send({ type: "target", open, page });
+    },
     pose: (open, page) => send({ type: "pose", open, page }),
     orbit: (dx, dy) => send({ type: "orbit", dx, dy }),
     release: (vx, vy) => send({ type: "release", vx, vy }),
