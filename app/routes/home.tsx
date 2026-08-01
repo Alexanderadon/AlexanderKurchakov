@@ -15,6 +15,7 @@ import { Hero } from "~/components/Hero";
 import { Marquee } from "~/components/Marquee";
 import { Works } from "~/components/Works";
 import { About } from "~/components/About";
+import { ChainedHands } from "~/components/ChainedHands";
 import { SiteFooter } from "~/components/SiteFooter";
 import { Mascot } from "~/components/Mascot";
 import { Hands } from "~/components/Hands";
@@ -55,6 +56,7 @@ function Page() {
         <Works />
         <About />
       </main>
+      <ChainedHands />
       <SiteFooter />
       <Mascot />
       <Hands />

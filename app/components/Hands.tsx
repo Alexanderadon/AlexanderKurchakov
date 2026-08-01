@@ -127,6 +127,24 @@ function HandsLayer() {
     let lag = 0;
     let frame = 0;
 
+    // РАСХОД у подножия. Когда скованные руки поднимаются, штатные уходят за
+    // кромки — двум парам рук в одном кадре тесно. Доля видимости подножия
+    // приходит наблюдателем, а расход сглаживается в цикле кадров.
+    let fleeTarget = 0;
+    let flee = 0;
+    const stage = document.querySelector(".chains-stage");
+    let fleeIo: IntersectionObserver | null = null;
+    if (stage && "IntersectionObserver" in window) {
+      fleeIo = new IntersectionObserver(
+        (es) => {
+          const e = es[es.length - 1];
+          fleeTarget = e ? Math.min(1, e.intersectionRatio * 1.6) : 0;
+        },
+        { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] },
+      );
+      fleeIo.observe(stage);
+    }
+
     const loop = (t: number): void => {
       // карточки могли перестроиться (фильтр/шрифты) — обновляем пачкой раз в ~1с
       if (++frame % 60 === 0) refreshCards();
@@ -178,8 +196,11 @@ function HandsLayer() {
           grip[s] * (s ? -1.5 : 1.5);
         // стили пишем 30 раз/сек (дыхание ±5px этого не замечает) —
         // вдвое меньше композитинга; при скролле — каждый кадр
+        flee += (fleeTarget - flee) * 0.06;
+        const fleeX = (s ? 1 : -1) * flee * 360;
         if (frame % 2 === 0 || speed > 2) {
-          els[s].style.transform = `translate3d(${inX}px,${-lag + bob}px,0) rotate(${rot}deg)`;
+          els[s].style.transform = `translate3d(${inX + fleeX}px,${-lag + bob}px,0) rotate(${rot}deg)`;
+          els[s].style.opacity = flee > 0.01 ? String(Math.max(0, 1 - flee * 1.3)) : "";
         }
         // контактная тень — только когда палец над карточкой; позиция кончика
         // считается арифметикой из кэша (ноль чтений layout в кадре)
@@ -214,6 +235,7 @@ function HandsLayer() {
 
     return () => {
       window.clearInterval(boot);
+      fleeIo?.disconnect();
       draw.current = null;
       window.removeEventListener("resize", layout);
     };
