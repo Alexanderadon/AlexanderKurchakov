@@ -1834,7 +1834,20 @@ export function createBook(
     // К концу хода ОБА кадра смотрят в корешок — весь разворот по центру.
     // У закрытого тома в узком кадре прицел смещён на 0.56: ремешки и застёжки
     // торчат вправо, и с прицелом в 0.5 том стоял не посередине холста.
-    const lookX = (narrow ? 0.56 : PAGE_W / 2) * (1 - swing);
+    // Центровку плитки держит РАЗМЕТКА, а не прицел: холст плитки больше не
+    // растягивается на карточку, он хранит пропорцию книги и центрируется
+    // флексом (.bslot). Камере здесь ловить нечего.
+    const lookX = (narrow && !closeUp ? 0.56 : PAGE_W / 2) * (1 - swing);
+    // Сводка кадра — ПОСТОЯННЫЙ диагностический шов, а не времянка: параметры
+    // камеры дважды расходились с бумажным расчётом, и оба раза правду говорил
+    // только сам кадр. Пишется лишь при изменении — по смене размера или фазы.
+    const dbg =
+      w + "x" + h + " a" + (w / h).toFixed(2) + " n" + (narrow ? 1 : 0) +
+      " lx" + lookX.toFixed(2) + " d" + dist.toFixed(2) + " yaw" + ((yaw * 180) / Math.PI).toFixed(1);
+    if (dbg !== lastDbg) {
+      lastDbg = dbg;
+      report("frameDbg", dbg);
+    }
     camera.position.set(
       lookX + dist * Math.sin(yaw) * Math.cos(pitch),
       dist * Math.sin(pitch),
@@ -2016,6 +2029,7 @@ export function createBook(
   const state = { open: 0, page: Math.floor(LEAVES / 2), busy: false };
   let raf = 0;
   let last = 0;
+  let lastDbg = "";
 
   function step(now: number): void {
     raf = requestAnimationFrame(step);

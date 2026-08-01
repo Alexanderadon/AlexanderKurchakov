@@ -221,6 +221,10 @@ export function Bestiary() {
   const sway = useRef({ raf: 0, cx: 0, cy: 0, tx: 0, ty: 0 });
   const swayTo = useCallback((tx: number, ty: number): void => {
     if (prefersReducedMotion()) return;
+    // Тач-экран: наведения не существует, а синтетический mouseenter от тапа
+    // и прокрутки существует — и mouseleave к нему не приходит НИКОГДА. Том
+    // застревал довёрнутым и стоял в плитке боком/не по центру.
+    if (matchMedia("(hover: none)").matches) return;
     const s = sway.current;
     s.tx = tx;
     s.ty = ty;

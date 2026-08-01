@@ -166,8 +166,12 @@ h1.play-in .ch{animation:rise .8s var(--ez) both;animation-delay:calc(var(--i)*4
    обводит сам том, тень остаётся честной. */
 /* Гнездо канваса в плитке. Сам канвас создаётся кодом и переезжает в модалку,
    поэтому в разметке остаётся только пустое место под него. */
-.bslot{position:absolute;inset:0;pointer-events:none}
-.btile{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:0;
+/* Гнездо центрирует холст ФЛЕКСОМ. Холст больше не тянется на всю карточку:
+   он держит пропорцию десктопного кадра (1.3) и вписывается в карточку любой
+   формы. Широкая мобильная карточка получает поля по бокам, а не том сбоку —
+   ровно та жалоба, которую я неделю ловил камерой вместо разметки. */
+.bslot{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+.btile{display:block;aspect-ratio:1.3;max-width:100%;max-height:100%;width:auto;height:100%;opacity:0;
   pointer-events:none;
   filter:drop-shadow(0 15px 20px rgba(0,0,0,.72)) drop-shadow(0 3px 4px rgba(0,0,0,.55));
   transition:transform .55s var(--ez),filter .55s var(--ez),opacity .45s var(--ez)}
