@@ -397,12 +397,36 @@ export function createScene(canvas: HTMLCanvasElement): Scene | null {
     },
 
     dispose() {
-      for (const t of texes) gl.deleteTexture(t);
-      gl.deleteBuffer(buf);
-      gl.deleteProgram(prog);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      // РАСТЯНУТЫЙ разбор вместо залпа.
+      //
+      // Прежний dispose удалял всё одной пачкой и добивал контекст loseContext —
+      // и профиль показал за этим 392 мс ОДНОЙ задачей. Срабатывала она в
+      // cleanup эффекта, то есть ровно в тот кадр, когда оверлей размонтирован и
+      // сайт впервые виден целиком: первое, что получал пользователь, — фриз.
+      //
+      // Игра та же, что с прогревом книги: работу мало убрать с глаз, её надо
+      // раздробить. Самое ёмкое по видеопамяти — задний буфер холста — освобождаем
+      // немедленно и дёшево, сжав холст в точку. Остальное удаляем по одному
+      // объекту НА КАДР. loseContext не зовём вовсе: после удаления текстур,
+      // буфера и программы за контекстом остаётся пустой каркас, который
+      // браузер снесёт сборщиком вместе с холстом.
+      canvas.width = 1;
+      canvas.height = 1;
+      const steps: Array<() => void> = [
+        ...texes.map((t) => () => gl.deleteTexture(t)),
+        () => gl.deleteBuffer(buf),
+        () => gl.deleteProgram(prog),
+        () => gl.deleteShader(vs),
+        () => gl.deleteShader(fs),
+      ];
+      let i = 0;
+      const tick = (): void => {
+        if (i < steps.length) {
+          steps[i++]();
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
     },
   };
 }

@@ -2115,6 +2115,12 @@ export function createBook(
         const wasVisible = meshes.map((m) => m.visible);
         for (const m of meshes) m.visible = false;
         const page = Math.floor(cur.page);
+        // По три меша за кадр. Пробовал по одному — замер не улучшился: щели
+        // прогрева состоят из ожиданий драйвера по 80–250 мс НА ПРОГРАММУ
+        // (первое касание заставляет отразить её uniform-ы одним неделимым GL-
+        // вызовом), и мельче меша их не нарежешь. Зато прогрев из 56 кадров
+        // вместо 19 удлинял заставку почти на секунду. Эти щели — цена сборки
+        // на главном потоке; лечатся только переездом сцены в воркер.
         for (let i = 0; i < meshes.length; i += 3) {
           for (let k = i; k < Math.min(meshes.length, i + 3); k++) meshes[k].visible = wasVisible[k];
           render(cur.open, 0, page, LEAVES - page);
