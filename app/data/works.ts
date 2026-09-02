@@ -768,4 +768,35 @@ export const WORKS: WorkItem[] = [
     ),
     listCat: CAT_SITES,
   },
+  {
+    index: "/24",
+    cat: "sites",
+    wide: true,
+    kind: "video",
+    title: L(
+      "Иван Рейс — лендинг артиста",
+      "Иван Рейс — әртіс лендингі",
+      "Ivan Reys — artist landing",
+    ),
+    tag: L(
+      "Сайты · HTML/CSS/JS · WebAudio-плеер · 2026",
+      "Сайттар · HTML/CSS/JS · WebAudio-плеер · 2026",
+      "Sites · HTML/CSS/JS · WebAudio player · 2026",
+    ),
+    dot: "b",
+    videoSrc: "/video/ivanreys.mp4",
+    poster: "/img/works/ivanreys-poster.jpg",
+    videoAria:
+      "Промо лендинга Ивана Рейса — рабочий плеер с превью треков Apple Music и космический герой",
+    reelHref: "https://ivanreys.vercel.app",
+    reelAria: "Открыть живой сайт Ивана Рейса (ivanreys.vercel.app)",
+    badge: "demo",
+    listTitle: same("Иван Рейс"),
+    listSub: L(
+      "лендинг артиста · WebAudio-плеер с превью Apple Music · 2026",
+      "әртіс лендингі · Apple Music превьюлі WebAudio-плеер · 2026",
+      "artist landing · WebAudio player with Apple Music previews · 2026",
+    ),
+    listCat: CAT_SITES,
+  },
 ];
