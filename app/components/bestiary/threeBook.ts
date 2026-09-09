@@ -787,8 +787,14 @@ export function createBook(
   const glowTex = new Texture(glowCv);
   glowTex.colorSpace = SRGBColorSpace;
   glowTex.needsUpdate = true;
+  // Пятно ДОЛЖНО гаснуть внутри кадра. Плоскость 7×7 была куда шире поля
+  // зрения: камера видела лишь её середину, где градиент ещё α≈0.3–0.5, — и
+  // вместо мягкого пятна холст заливался ровной пеленой (+20–25 яркости у
+  // самых краёв холста по замеру на чёрном фоне), а граница холста читалась
+  // на фоне модалки прямоугольником. При 1.8 кромка прозрачности лежит внутри
+  // кадра: у краёв холста яркость равна фону, ореол у книги остаётся.
   const glow = new Mesh(
-    new PlaneGeometry(7, 7),
+    new PlaneGeometry(1.8, 1.8),
     new MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false }),
   );
   glow.position.set(0.2, -0.3, -0.06);
