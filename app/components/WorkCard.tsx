@@ -2,7 +2,7 @@
 // Видимость (is-hidden + display) и класс reveal (.in) применяются императивно
 // на один и тот же узел — поэтому корневой className статичен, а React управляет
 // только через prop `visible`. Видео: автоплей по вьюпорту, клик = звук, data-skip.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import type { WorkItem } from "~/data/works";
 import { ARROW, PLAY } from "~/lib/chars";
@@ -109,6 +109,15 @@ export function WorkCard({
   const { t, lang } = useLang();
   const cardRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Ref СТАБИЛЬНЫЙ (useCallback), а не inline-стрелка. Inline-колбэк React зовёт
+  // заново на КАЖДЫЙ рендер (новая функция = новый ref), и el.muted = true
+  // срабатывал после каждого клика по звуку: пользователь включал звук →
+  // setSnd → рендер → ref снова глушил. Отсюда «жать три раза». Глушим один
+  // раз при подключении элемента — до автоплея, как и задумано.
+  const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    if (el) el.muted = true; // см. Hero: проп muted в атрибут не попадает
+    videoRef.current = el;
+  }, []);
   const hideTimer = useRef<number>(0);
   const rafIds = useRef<number[]>([]);
   const firstVisible = useRef(true);
@@ -315,10 +324,7 @@ export function WorkCard({
         {isVideo && (
           <>
             <video
-              ref={(el) => {
-                if (el) el.muted = true; // см. Hero: проп muted в атрибут не попадает
-                videoRef.current = el;
-              }}
+              ref={setVideoRef}
               data-skip={item.dataSkip}
               src={item.videoSrc}
               poster={near ? item.poster : undefined}

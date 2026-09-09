@@ -458,7 +458,7 @@ export const WORKS: WorkItem[] = [
   {
     index: "/14",
     cat: "sites",
-    wide: false,
+    wide: true,
     kind: "video",
     title: L(
       "Воздух Алматы — мониторинг качества воздуха",
