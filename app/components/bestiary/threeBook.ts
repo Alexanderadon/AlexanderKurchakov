@@ -2037,7 +2037,10 @@ export function createBook(
   // на 60 Гц движение одинаковое.
   // Вращение мышью. Держится, а не отскакивает: смысл в том, чтобы дать
   // рассмотреть том — пружина обратно мешала бы именно этому.
-  const orb = { yaw: 0, pitch: 0, vYaw: 0, vPitch: 0 };
+  // homing — камера едет домой (в ноль) на раскрытии: раскрытый разворот обязан
+  // вставать по центру и ровно, в каком бы наклоне ни оставили закрытый том.
+  // Гасится первым же новым вращением — крутить раскрытую книгу по-прежнему можно.
+  const orb = { yaw: 0, pitch: 0, vYaw: 0, vPitch: 0, homing: false };
   // Характер текущего переворота: база и перекос веера, амплитуда изгиба.
   // hint — точка подхвата (-1 низ … +1 верх), приходит из turnFrom() перед
   // листанием; остальное разыгрывается заново на каждый лист.
@@ -2086,6 +2089,19 @@ export function createBook(
       if (Math.abs(orb.vYaw) < 0.01) orb.vYaw = 0;
       if (Math.abs(orb.vPitch) < 0.01) orb.vPitch = 0;
     }
+    // Возврат камеры домой на раскрытии: экспонента, ~94% пути за полсекунды —
+    // укладывается в анимацию раскрытия и не дёргает.
+    if (orb.homing) {
+      const k = Math.pow(0.004, dt);
+      orb.yaw *= k;
+      orb.pitch *= k;
+      moved = true;
+      if (Math.abs(orb.yaw) + Math.abs(orb.pitch) < 0.003) {
+        orb.yaw = 0;
+        orb.pitch = 0;
+        orb.homing = false;
+      }
+    }
     // Вращение почти по кругу и с заходом ПОД книгу: посмотреть низ тома было
     // нельзя — предел не пускал камеру ниже уровня стола.
     orb.yaw = Math.max(-2.6, Math.min(2.6, orb.yaw));
@@ -2130,7 +2146,13 @@ export function createBook(
         turnFx.amp = 1.5 + Math.random() * 0.28;
         turnFx.hint = 0;
       }
-      tgt.open = clamp01(open);
+      const nextOpen = clamp01(open);
+      if (nextOpen >= 1 && tgt.open < 1) {
+        orb.homing = true;
+        orb.vYaw = 0;
+        orb.vPitch = 0;
+      }
+      tgt.open = nextOpen;
       tgt.page = p;
     },
     turnFrom(fromY: number): void {
@@ -2153,6 +2175,7 @@ export function createBook(
       moved = true;
     },
     orbit(dx: number, dy: number): void {
+      orb.homing = false;
       orb.yaw -= dx * 0.006;
       orb.pitch -= dy * 0.005;
       orb.vYaw = 0;
@@ -2164,6 +2187,7 @@ export function createBook(
       orb.vPitch = -vy * 0.005;
     },
     resetView(): void {
+      orb.homing = false;
       orb.yaw = 0;
       orb.pitch = 0;
       orb.vYaw = 0;

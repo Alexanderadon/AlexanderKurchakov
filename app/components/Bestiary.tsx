@@ -415,7 +415,10 @@ export function Bestiary() {
   // протяжка ТЯНЕТ ЛИСТ — палец ведёт страницу, отпустил — долетает или
   // возвращается. Клик без сдвига действует как раньше. Порог в шесть пикселей —
   // палец на телефоне никогда не стоит идеально ровно.
-  const drag = useRef({ on: false, moved: 0, x: 0, y: 0, sx: 0, sy: 0, t: 0, vx: 0, vy: 0, mode: 0 });
+  // inStage — жест начался на книге (.bstage). Жесты слушает ВСЯ модалка:
+  // вращать том можно, зажав мышь где угодно, а не только над самой книгой.
+  // Но листать и раскрывать — только с книги; клик по фону закрывает окно.
+  const drag = useRef({ on: false, moved: 0, x: 0, y: 0, sx: 0, sy: 0, t: 0, vx: 0, vy: 0, mode: 0, inStage: false });
   const dragTurn = useRef({ base: 0, dir: 1 as 1 | -1, frac: 0 });
 
   const onDown = useCallback((e: React.PointerEvent<HTMLDivElement>): void => {
@@ -431,6 +434,7 @@ export function Bestiary() {
       vx: 0,
       vy: 0,
       mode: 0,
+      inStage: !!(e.target as Element | null)?.closest?.(".bstage"),
     };
   }, []);
 
@@ -458,9 +462,10 @@ export function Bestiary() {
         // листания. Задумано иначе: занятой книгой не крутят.
         if (phase === "open" && sc && sc.state.busy) {
           d.mode = 3;
-        } else if (phase === "open" && sc && horizontal) {
+        } else if (phase === "open" && sc && horizontal && d.inStage) {
           d.mode = 2;
-          const r = e.currentTarget.getBoundingClientRect();
+          const r = dialogRef.current?.getBoundingClientRect();
+          if (!r) return;
           dragTurn.current = {
             base: pageRef.current,
             dir: e.clientX < d.sx ? 1 : -1,
@@ -475,7 +480,8 @@ export function Bestiary() {
       if (d.mode === 2) {
         const sc = sceneRef.current;
         if (!sc) return;
-        const r = e.currentTarget.getBoundingClientRect();
+        const r = dialogRef.current?.getBoundingClientRect();
+        if (!r) return;
         const tn = dragTurn.current;
         const raw = ((tn.dir > 0 ? d.sx - e.clientX : e.clientX - d.sx) / (r.width * 0.45));
         const target = tn.base + tn.dir;
@@ -517,6 +523,14 @@ export function Bestiary() {
         return;
       }
       if (d.mode === 3) return;
+      // Клик по фону без сдвига закрывает окно; протяжка по фону — только
+      // вращение. Закрытие живёт ЗДЕСЬ, а не в onClick оболочки: указатель
+      // захвачен модалкой (setPointerCapture), и click перенацеливается на неё,
+      // минуя stopPropagation у .bstage, — клик по книге закрывал бы окно.
+      if (!d.inStage) {
+        if (d.moved <= 6) close();
+        return;
+      }
       const sc = sceneRef.current;
       if (!sc) return;
       // Клик по закрытой книге раскрывает её, по раскрытой — листает половиной,
@@ -528,7 +542,8 @@ export function Bestiary() {
         after(OPEN_MS, () => setPhase("open"));
         return;
       }
-      const r = e.currentTarget.getBoundingClientRect();
+      const r = dialogRef.current?.getBoundingClientRect();
+      if (!r) return;
       // Точка подхвата по высоте: лист закручивается сильнее с той стороны,
       // за которую его взяли.
       sc.turnFrom(1 - 2 * ((e.clientY - r.top) / r.height));
@@ -573,7 +588,20 @@ export function Bestiary() {
       {live &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className={`bmodal bmodal--${phase}`} onClick={close}>
+          <div
+            className={`bmodal bmodal--${phase}`}
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerCancel={() => {
+              const d = drag.current;
+              if (d.mode === 2) {
+                // Системный обрыв жеста: лист возвращается на место.
+                sceneRef.current?.target(1, dragTurn.current.base);
+              }
+              d.on = false;
+            }}
+          >
             <div
               ref={dialogRef}
               className="bstage"
@@ -588,21 +616,7 @@ export function Bestiary() {
                   страниц с толщиной, форзац на изнанке крышки, камера с
                   перспективой. Прежний вариант был перебросом карточки: крышка
                   уходила ребром, и в этот кадр её подменял плоский разворот. */}
-              <div
-                ref={slotRef}
-                className="bbook-host"
-                onPointerDown={onDown}
-                onPointerMove={onMove}
-                onPointerUp={onUp}
-                onPointerCancel={() => {
-                  const d = drag.current;
-                  if (d.mode === 2) {
-                    // Системный обрыв жеста: лист возвращается на место.
-                    sceneRef.current?.target(1, dragTurn.current.base);
-                  }
-                  d.on = false;
-                }}
-              />
+              <div ref={slotRef} className="bbook-host" />
 
               {phase === "peek" && <p className="bhint">{t.hero.bestiaryHint}</p>}
             </div>
