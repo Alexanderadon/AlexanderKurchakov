@@ -459,7 +459,7 @@ export const WORKS: WorkItem[] = [
     index: "/14",
     cat: "sites",
     wide: false,
-    kind: "img",
+    kind: "video",
     title: L(
       "Воздух Алматы — мониторинг качества воздуха",
       "Алматы ауасы — ауа сапасының мониторингі",
@@ -471,16 +471,13 @@ export const WORKS: WorkItem[] = [
       "Sites · Next.js · Supabase · Leaflet · PWA · 2026",
     ),
     dot: "b",
-    imgSrc: "/img/works/almaty-air-card.jpg",
-    imgAlt:
-      "Воздух Алматы — дашборд качества воздуха: карта районов города с индексами загрязнения и показателями PM2.5",
-    imgPos: "center top",
-    linkHref: "https://almaty-air-two.vercel.app",
-    linkAria: L(
-      "Открыть живой сайт «Воздух Алматы»",
-      "«Алматы ауасы» тірі сайтын ашу",
-      "Open the live Almaty Air website",
-    ),
+    videoSrc: "/video/almaty-air.mp4",
+    poster: "/img/works/almaty-air-poster.jpg",
+    videoAria:
+      "Демо «Воздух Алматы» — PWA-дашборд качества воздуха: карта районов с индексами загрязнения и PM2.5",
+    reelHref: "https://almaty-air-two.vercel.app",
+    reelAria: "Открыть живой сайт «Воздух Алматы» (almaty-air-two.vercel.app)",
+    badge: "demo",
     listTitle: L("Воздух Алматы", "Алматы ауасы", "Almaty Air"),
     listSub: L(
       "PWA-дашборд качества воздуха · карта районов · 2026",
