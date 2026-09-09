@@ -33,7 +33,7 @@ const RU = {
     roleA: "разработчик",
     roleB: "& дизайнер",
     roleSub:
-      "frontend из Алматы · React, Next.js, Web3 — плюс айдентика, игры и видео",
+      "fullstack из Алматы · React, Next.js, Web3 · UX/UI — плюс айдентика, игры и видео",
     base: "база",
     city: "Алматы",
     contacts: "контакты",
@@ -103,7 +103,7 @@ const RU = {
     on: "вкл",
     off: "выкл",
   },
-  video: { watch: "смотреть", sndOff: "звук выкл", sndOn: "звук вкл" },
+  video: { watch: "смотреть", sndOff: "звук выкл", sndOn: "звук вкл", vol: "громкость" },
 };
 
 export type Dict = typeof RU;
@@ -123,7 +123,7 @@ const KZ: Dict = {
     roleA: "әзірлеуші",
     roleB: "& дизайнер",
     roleSub:
-      "Алматыдан frontend · React, Next.js, Web3 — оған қоса айдентика, ойындар және бейне",
+      "Алматыдан fullstack · React, Next.js, Web3 · UX/UI — оған қоса айдентика, ойындар және бейне",
     base: "база",
     city: "Алматы",
     contacts: "байланыс",
@@ -193,7 +193,7 @@ const KZ: Dict = {
     on: "қосулы",
     off: "өшірулі",
   },
-  video: { watch: "қарау", sndOff: "дыбыс өшірулі", sndOn: "дыбыс қосулы" },
+  video: { watch: "қарау", sndOff: "дыбыс өшірулі", sndOn: "дыбыс қосулы", vol: "дыбыс деңгейі" },
 };
 
 const EN: Dict = {
@@ -211,7 +211,7 @@ const EN: Dict = {
     roleA: "developer",
     roleB: "& designer",
     roleSub:
-      "frontend from Almaty · React, Next.js, Web3 — plus identity, games and video",
+      "fullstack from Almaty · React, Next.js, Web3 · UX/UI — plus identity, games and video",
     base: "base",
     city: "Almaty",
     contacts: "contacts",
@@ -281,7 +281,7 @@ const EN: Dict = {
     on: "on",
     off: "off",
   },
-  video: { watch: "watch", sndOff: "sound off", sndOn: "sound on" },
+  video: { watch: "watch", sndOff: "sound off", sndOn: "sound on", vol: "volume" },
 };
 
 const DICTS: Record<Lang, Dict> = { ru: RU, kz: KZ, en: EN };

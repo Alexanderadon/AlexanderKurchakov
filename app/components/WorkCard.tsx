@@ -3,7 +3,7 @@
 // на один и тот же узел — поэтому корневой className статичен, а React управляет
 // только через prop `visible`. Видео: автоплей по вьюпорту, клик = звук, data-skip.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
+import type { CSSProperties, ChangeEvent, KeyboardEvent, MouseEvent, SyntheticEvent } from "react";
 import type { WorkItem } from "~/data/works";
 import { ARROW, PLAY } from "~/lib/chars";
 import { useLang } from "~/lib/i18n";
@@ -115,9 +115,13 @@ export function WorkCard({
   // setSnd → рендер → ref снова глушил. Отсюда «жать три раза». Глушим один
   // раз при подключении элемента — до автоплея, как и задумано.
   const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
-    if (el) el.muted = true; // см. Hero: проп muted в атрибут не попадает
+    if (el) {
+      el.muted = true; // см. Hero: проп muted в атрибут не попадает
+      el.volume = 0.5; // громкость по умолчанию — половина, не оглушать с первого клика
+    }
     videoRef.current = el;
   }, []);
+  const [vol, setVol] = useState(0.5);
   const hideTimer = useRef<number>(0);
   const rafIds = useRef<number[]>([]);
   const firstVisible = useRef(true);
@@ -270,11 +274,31 @@ export function WorkCard({
     setSnd(v.paused ? "idle" : v.muted ? "off" : "on");
   };
 
+  const onVol = (e: ChangeEvent<HTMLInputElement>): void => {
+    const val = Number(e.target.value) / 100;
+    setVol(val);
+    const v = videoRef.current;
+    if (!v) return;
+    v.volume = val;
+    // Тянуть ползунок вверх при выключенном звуке — значит хотеть его слышать.
+    if (val > 0 && v.muted && !v.paused) v.muted = false;
+    setSnd(v.paused ? "idle" : v.muted ? "off" : "on");
+  };
+  // Ползунок живёт внутри кликабельной карточки: его клики и клавиши — его.
+  const stop = (e: SyntheticEvent): void => e.stopPropagation();
+  // Space на ползунке по умолчанию листает страницу — видео уезжает из вьюпорта
+  // и наблюдатель ставит его на паузу. Гасим и всплытие, и прокрутку.
+  const stopKey = (e: KeyboardEvent<HTMLInputElement>): void => {
+    e.stopPropagation();
+    if (e.key === " ") e.preventDefault();
+  };
+
   const onCardClick = (e: MouseEvent<HTMLElement>): void => {
     if ((e.target as HTMLElement).closest("a")) return;
     toggleVid();
   };
   const onKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
+    if ((e.target as HTMLElement).tagName === "INPUT") return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       toggleVid();
@@ -336,9 +360,22 @@ export function WorkCard({
               style={MEDIA_STYLE}
             />
             <span className="tc mono">{item.badge ?? "reel"}</span>
-            <span className="snd mono" aria-hidden="true">
-              {sndText}
-            </span>
+            <div className="sndbar" onClick={stop}>
+              <input
+                className="vol"
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(vol * 100)}
+                onChange={onVol}
+                onKeyDown={stopKey}
+                aria-label={t.video.vol}
+              />
+              <span className="snd mono" aria-hidden="true">
+                {sndText}
+              </span>
+            </div>
           </>
         )}
         {isVideo ? (
