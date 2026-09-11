@@ -104,3 +104,7 @@ CLI заливает папку с диска напрямую — git-инте�
 - Реальные лого-кейсы вместо болванки «Логофолио» (карточка `/04`).
 - i18n RU/KZ/EN (переключатель языков в шапке пока меняет только состояние).
 - Свой домен вместо адреса Vercel.
+
+## License
+
+Code — MIT (see [LICENSE](LICENSE)). Media assets (images, video, hand/book artwork) © Alexander Kurchakov, all rights reserved.
