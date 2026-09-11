@@ -110,7 +110,6 @@ export const STACK: StackGroup[] = [
   {
     title: L("AI-инструменты", "AI-құралдар", "AI tools"),
     items: [
-      "Claude (Sonnet/Opus)",
       "ChatGPT",
       "GitHub Copilot",
       "Cursor",
